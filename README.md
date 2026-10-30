@@ -125,7 +125,7 @@ Add to `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: git@github.com:rguha-sbp/cartographer
-    rev: v0.3.0
+    rev: v0.3.1
     hooks:
       - id: cartographer-check
 ```
@@ -136,7 +136,7 @@ rendered from a different `.drawio`, for example after a hand edit without `cart
 ## Running the CLI directly
 
 Without the plugin, prefix each command with
-`uvx --from git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0 cartographer`:
+`uvx --from git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.1 cartographer`:
 
 | Command | What it does |
 |---|---|
