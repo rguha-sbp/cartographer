@@ -225,13 +225,14 @@ placement). Every number is a module constant
   title at its rendered left spacing), and so is every group that holds neither end of the edge (a group is an
   ancestor when its box contains an endpoint). A segment parallel to a group or frame border within LINE_GAP of it is
   closed too; that strip is the last constraint relaxed when an edge has no other route. The grid itself lives in `tf_grid.py`. Cost: length, a bend penalty,
-  a heavy flat+per-px penalty for sharing a segment with an earlier edge, and a crossing penalty (300) worth a short detour round the line.
+  a heavy flat+per-px penalty for sharing a segment with an earlier edge, and a crossing penalty (300) worth a short detour round the line, charged too on every grid segment through the
+  zone of a caption placed earlier.
   Edges go shortest first, ties by id. Each `Edge` gets `out`, `into`, `points` and `exact=True`: the renderer then
   draws the polyline as given (no `edgeStyle`), so draw.io cannot re-route it and the captions stay where they were
   measured. Hand-made models leave `exact` off and their points stay connector hints.
 - Captions (`tf_labels.py`): each caption (about 7 px per character at 12 px, 20 px tall) goes on its own route, on a horizontal
   segment long enough for it if possible, nearest the source; the first spot clear of nodes, group titles, other
-  captions, other edges and group borders wins, else the spot overlapping the fewest nodes, titles and captions, then
+  captions, other edges and group borders wins, else the spot overlapping the fewest nodes, titles, captions and lines, then
   with the fewest things in its clearance. Once every edge is routed, a caption that a later route now crowds is placed
   again. Stored as `Edge.at` (relative position along the polyline) plus `Edge.shift`
   (draw.io `offset` point, emitted only when non-zero). `--edge-labels off` blanks the captions; routing still runs.

@@ -3,7 +3,7 @@
 Nodes (with their labels, kept NODE_CLEAR away) and group titles are walls, and so is every group the edge does not
 start or end in. A segment never runs within LINE_GAP of a parallel segment of another edge; only an edge with no
 such route is drawn with the clearance broken (counted by `tf_check`). Cost is length plus a penalty per bend, and a
-dearer one, above a bend, for crossing an earlier edge. Edges are routed shortest first, ties by id, so the result is
+dearer one for crossing an earlier edge or the zone of a placed caption. Edges are routed shortest first, ties by id, so the result is
 deterministic. Every route starts and ends with the straight stub out of its port, kept as explicit points.
 """
 
@@ -78,9 +78,8 @@ def _route(diagram: Diagram, ends: list[Pair]) -> Diagram:
         sa, sb = _stub(a), _stub(b)
         outside = [frames.index(g) for g in foreign(frames, nodes[edges[i].src], nodes[edges[i].dst])]
         path = None
-        for with_captions, hard, beside in ((True, True, True), (False, True, True), (False, False, True),
-                                            (False, False, False)):
-            path = grid.route(sa, SIDE_DIR[a.side], sb, grid.blocked(outside, with_captions, beside), i, hard)
+        for hard, beside in ((True, True), (False, True), (False, False)):
+            path = grid.route(sa, SIDE_DIR[a.side], sb, grid.blocked(outside, beside), i, hard)
             if path:
                 break
         if path:

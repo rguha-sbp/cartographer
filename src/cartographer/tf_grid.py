@@ -1,7 +1,8 @@
 """The routing grid: candidate lines, the walls on them, and the least-cost search over them.
 
 A grid segment within LINE_GAP of a parallel segment another edge already uses is closed to later edges (`hard`),
-or only dear when no clean route exists. A segment within LINE_GAP of a parallel group border is closed too: lines
+or only dear when no clean route exists. A segment through a placed caption's zone is dear like a crossing, so a
+route goes round a caption when the detour is short and through it (to be placed again) when it is not. A segment within LINE_GAP of a parallel group border is closed too: lines
 cross a frame at a right angle and run along it only when nothing else is left.
 """
 
@@ -101,16 +102,13 @@ class Grid:
         return [bytearray((int.from_bytes(a) | int.from_bytes(b)).to_bytes(len(a))) for a, b in zip(into, extra)]
 
     def add_caption(self, zone: Rect) -> None:
-        """Wall off the space a placed caption needs, for the edges routed after it."""
+        """Make the space a placed caption needs dear, for the edges routed after it."""
         self.captions = self._merge(self.captions, self._mask([zone]))
 
-    def blocked(self, groups: list[int], captions: bool = True, beside: bool = True) -> Mask:
-        """The leaf walls, the caption zones, the strips along frame borders and the walls of the chosen groups
-        (indexes into the `groups` given)."""
-        out = [bytearray(m) for m in self.walls]
-        for extra, wanted in ((self.captions, captions), (self.beside, beside)):
-            if wanted:
-                out = self._merge(out, extra)
+    def blocked(self, groups: list[int], beside: bool = True) -> Mask:
+        """The leaf walls, the strips along frame borders and the walls of the chosen groups (indexes into the
+        `groups` given)."""
+        out = self._merge(self.walls, self.beside) if beside else [bytearray(m) for m in self.walls]
         for g in groups:
             out = self._merge(out, self.group_masks[g])
         return out
@@ -152,7 +150,7 @@ class Grid:
                 taken = self.owner[axis][k] not in (0, edge + 1)
                 if taken and hard:
                     continue
-                cost = step + (step * OVERLAP + SHARED) * taken
+                cost = step + (step * OVERLAP + SHARED) * taken + CROSS * self.captions[axis][k]
                 if d != heading:
                     cost += BEND
                 elif self.through[1 - axis][ix * ny + iy]:

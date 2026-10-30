@@ -144,3 +144,11 @@ def test_a_caption_sits_beside_lines_rather_than_on_one() -> None:
     box = captions.taken[len(lines)]
     assert not any(crosses(s, box) for ss in lines for s in ss)
 
+
+def test_a_route_goes_round_a_caption_when_the_detour_is_short() -> None:
+    grid = Grid([(0, 0, 10, 10)], [], [], [(100, 200), (300, 200), (200, 100)])
+    zone = (180, 190, 220, 210)
+    grid.add_caption(zone)
+    path = grid.route((100, 200), 0, (300, 200), grid.blocked([]), 0)
+    points = [(grid.xs[x], grid.ys[y]) for x, y in path]
+    assert not any(crosses(s, zone) for s in segments(points))
