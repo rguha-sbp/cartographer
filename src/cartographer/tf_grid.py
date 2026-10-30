@@ -15,7 +15,7 @@ from cartographer.tf_geom import LINE_GAP, Rect
 OUTER = 40  # free lines kept round the whole drawing
 CLEAR = 4  # closest two candidate lines may be
 MAX_TRACKS = 14  # most tracks laid in one gap
-BEND, OVERLAP, SHARED, CROSS = 40, 40, 400, 150
+BEND, OVERLAP, SHARED, CROSS = 40, 40, 400, 300
 DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1))  # east, west, south, north
 REVERSE = (1, 0, 3, 2)
 MIXED = -1  # owner of a segment that two edges close

@@ -205,7 +205,7 @@ placement). Every number is a module constant
   full placement, so the objective sees the real grid. The "AWS managed services" block has an open column, so it
   lands by its callers.
 - Straight lines only approximate the routes, so for the chosen `GRID_COLS` the placement is made once per length
-  weight in `tf_layout.SPREADS` (none, and 500 px per crossing), each is routed and fitted, and the one with the fewest
+  weight in `tf_layout.SPREADS` (none, and 1000, 500 and 250 px per crossing), each is routed and fitted, and the one with the fewest
   crossings plus checker violations wins, then fewest bends.
 - Externals sit outside the frames in two lanes: an external's `lane` (set by placement) decides; without one, those
   that are only ever an edge `src` go left and all others (including edgeless ones) go right. An external with an `icon` takes a 150x150 icon cell (shape plus label below),
@@ -225,7 +225,7 @@ placement). Every number is a module constant
   title at its rendered left spacing), and so is every group that holds neither end of the edge (a group is an
   ancestor when its box contains an endpoint). A segment parallel to a group or frame border within LINE_GAP of it is
   closed too; that strip is the last constraint relaxed when an edge has no other route. The grid itself lives in `tf_grid.py`. Cost: length, a bend penalty,
-  a heavy flat+per-px penalty for sharing a segment with an earlier edge, and a crossing penalty above the bend one.
+  a heavy flat+per-px penalty for sharing a segment with an earlier edge, and a crossing penalty (300) worth a short detour round the line.
   Edges go shortest first, ties by id. Each `Edge` gets `out`, `into`, `points` and `exact=True`: the renderer then
   draws the polyline as given (no `edgeStyle`), so draw.io cannot re-route it and the captions stay where they were
   measured. Hand-made models leave `exact` off and their points stay connector hints.

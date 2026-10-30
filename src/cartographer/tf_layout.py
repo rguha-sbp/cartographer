@@ -32,7 +32,7 @@ ORIGIN = (40, 100)
 LEGEND_W, LEGEND_LINE = 440, 18
 GRID_CHOICES = (2, 3, 4)
 A4_RATIO = math.sqrt(2)
-SPREADS = (math.inf, 500)  # pixels of straight line that weigh as much as one crossing in placement
+SPREADS = (math.inf, 1000, 500, 250)  # pixels of straight line that weigh as much as one crossing in placement
 Curated = dict[str, Any]
 
 

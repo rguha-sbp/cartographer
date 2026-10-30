@@ -4,6 +4,7 @@ from cartographer import gen_drawio, tf_layout
 from cartographer.diagram_model import Diagram, Edge, Group, Icon, Legend, Title
 from cartographer.tf_check import measure
 from cartographer.tf_geom import GLYPH_W, ICON_LINE_H, crosses, groups, leaves, polyline, segments, title_rect
+from cartographer.tf_grid import Grid
 from cartographer.tf_labels import Captions
 from cartographer.tf_read import read
 from cartographer.tf_route import route
@@ -126,3 +127,10 @@ def test_caption_crossed_by_a_later_route_is_placed_again_off_it() -> None:
     assert not captions.clear(0)
     captions.place(0, poly, "a caption")
     assert captions.clear(0)
+
+
+def test_a_short_detour_round_an_earlier_line_beats_crossing_it() -> None:
+    grid = Grid([(0, 0, 10, 10)], [], [], [(200, 120), (200, 250), (100, 200), (300, 200), (200, 100)])
+    grid.commit(grid.route((200, 120), 2, (200, 250), grid.blocked([]), 0), 0)
+    path = grid.route((100, 200), 0, (300, 200), grid.blocked([]), 1)
+    assert not any(grid.xs[x] == 200 and 120 < grid.ys[y] < 250 for x, y in path)
