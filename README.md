@@ -77,8 +77,7 @@ Then, in the repo you want to document, start a prompt with `/cartographer:carto
 
 ### Update
 
-Claude Code does not auto-update plugins from third-party marketplaces unless you turn it on (`/plugin` >
-Marketplaces > Enable auto-update). To update by hand:
+To update to the latest release:
 
 ```
 claude plugin update cartographer@cartographer
