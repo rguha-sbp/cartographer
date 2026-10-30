@@ -28,7 +28,8 @@ def test_skill_calls_the_tool_through_uvx_and_cartographer_from() -> None:
 
 
 def test_user_facing_text_has_no_dashes_or_smart_quotes() -> None:
-    for path in (SKILL, ROOT / "README.md", ROOT / "src" / "cartographer" / "curate_prompt.md"):
+    package = ROOT / "src" / "cartographer"
+    for path in (SKILL, ROOT / "README.md", *(package / n for n in ("curate_prompt.md", "describe_prompt.md", "INTERVIEW.md"))):
         assert not [c for c in path.read_text() if c in BANNED], path
 
 
