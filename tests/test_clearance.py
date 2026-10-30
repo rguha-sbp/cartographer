@@ -12,7 +12,7 @@ from cartographer.tf_route import route
 
 HARD = ("lines_too_close", "ports_too_close", "line_near_node", "caption_far", "angled_segments",
         "caption_overlaps", "edge_through_node", "edge_through_group", "edge_through_title", "line_on_frame",
-        "caption_on_node")
+        "caption_on_node", "caption_on_line", "caption_crowding")
 
 
 def _scene(nodes: tuple, edges: tuple) -> Diagram:
