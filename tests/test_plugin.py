@@ -1,5 +1,6 @@
 import json
 import re
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -36,7 +37,9 @@ def test_every_plugin_invocation_goes_through_the_launcher() -> None:
 def test_launcher_is_posix_sh_and_executable() -> None:
     launcher = ROOT / "scripts" / "cartographer"
     assert launcher.read_text().startswith("#!/bin/sh\n")
-    assert launcher.stat().st_mode & 0o111
+    staged = subprocess.run(["git", "ls-files", "--stage", "scripts/cartographer"], cwd=ROOT,
+                            capture_output=True, text=True, check=True).stdout
+    assert staged.startswith("100755 "), "the launcher must be committed executable: it ships with that mode"
     assert "[[" not in launcher.read_text()
 
 
