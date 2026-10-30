@@ -9,6 +9,8 @@ from cartographer.diagram_model import AWS_ICONS, BRAND_ICONS, GENERIC_ICONS
 HERE = Path(__file__).parent
 SCHEMA = HERE / "curated.schema.json"
 PROMPT = HERE / "curate_prompt.md"
+DESCRIBE_PROMPT = HERE / "describe_prompt.md"
+VIEW_NAMES = {"l7": "Layer 7"}
 
 
 def schema_text() -> str:
@@ -37,9 +39,21 @@ def render_prompt(facts_path: Path, repo_root: Path, schema_path: Path, output_p
     return text
 
 
+def render_describe_prompt(schema_path: Path, output_path: Path, interview_path: Path) -> str:
+    fills = {"schema_path": schema_path, "output_path": output_path, "interview_path": interview_path}
+    text = DESCRIBE_PROMPT.read_text()
+    for name, value in fills.items():
+        text = text.replace("{" + name + "}", str(value))
+    return text
+
+
 def inputs_sha256(facts_path: Path) -> str:
     """Key of a curation: facts bytes, prompt template and schema; never a path or a model."""
     h = hashlib.sha256(facts_path.read_bytes())
     for part in (PROMPT.read_text(), schema_text()):
         h.update(b"\0" + part.encode())
     return h.hexdigest()
+
+
+def diagram_title(curated: dict) -> str:
+    return f"{VIEW_NAMES[curated['view']]} diagram for {curated['system']}"

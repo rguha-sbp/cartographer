@@ -17,6 +17,7 @@ def _node(node_id: str, tf: str) -> dict:
 
 def _curated() -> dict:
     return {
+        "source": "terraform",
         "title": "t",
         "groups": [],
         "nodes": [

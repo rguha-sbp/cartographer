@@ -1,87 +1,138 @@
 # cartographer
 
-cartographer turns a Terraform folder into an AWS architecture diagram as draw.io XML (`.drawio`) and a `.drawio.svg`
-that GitHub renders and draw.io can still edit. The Terraform is parsed, not planned, so no cloud credentials are
-needed. The AI step runs in your own Claude Code session, driven by the plugin skill: it decides what is worth drawing
-and how to group it, and every claim it makes is checked against the Terraform and the code before it is drawn. The
-Python tool never calls a model.
+cartographer draws Layer 7 AWS architecture diagrams as draw.io files, either from the Terraform in your repo or from
+a solution you describe to Claude. Claude does the curation and, in describe mode, an interview. The tool does layout,
+routing and verification and never calls a model. A diagram is only called ready after a visual review loop in which
+Claude looks at the rendered image, fixes what is wrong and looks again.
 
-## Pipeline
+## What you need
 
-| Stage | Module | Uses AI |
-|---|---|---|
-| 1 extract | `tf_extract.py`, `tf_policies.py` | no |
-| 2 curate | your Claude session, following `cartographer prompt` (`curate_prompt.md`) | yes |
-| 3 verify | `tf_verify.py`, `secret_patterns.py` | no |
-| 4 layout | `tf_layout.py`, `tf_blocks.py`, `tf_lanes.py`, `tf_order.py` | no |
-| 5 render | `gen_drawio.py`, `svg_export.py` | no |
+- Claude Code.
+- `uv` (`uvx --version` should work).
+- SSH access to `github.com/rguha-sbp/cartographer`.
+- Google Chrome, used headless for images and screenshots.
+- A local draw.io at `http://localhost:8080`. Start it once with the official image:
 
-The curation is committed as `docs/architecture/<stack>.curated.json` with an `inputs_sha256` key (hash of the facts,
-the prompt and the schema). `build` refuses with exit 3 when the Terraform changed since the curation, so a stale
-curation is never drawn. Every node and edge must cite evidence that the verify stage can find; anything unproven, and
-anything that looks like a secret, is dropped and reported, and `build` then exits 1.
+  ```
+  docker run -d --name drawio -p 8080:8080 jgraph/drawio
+  ```
 
-## Use in a repo
+  After a reboot, `docker start drawio`. Diagrams are rendered only by this local instance and are never sent to a
+  public draw.io host.
 
-Needs `uv`, Chrome or Chromium, and the local draw.io on `http://localhost:8080`.
+## Install the plugin
+
+In Claude Code:
 
 ```
 /plugin marketplace add git@github.com:rguha-sbp/cartographer.git
 /plugin install cartographer@cartographer
-/cartographer
 ```
 
-The skill asks for the stack name and the Terraform folder, extracts, curates when needed, builds, reviews the
-rendered diagram and tells you which three files to commit: `docs/architecture/<stack>.drawio`, `<stack>.drawio.svg`
-and `<stack>.curated.json`. It never commits or pushes.
+Then run `/cartographer` in the repo you want to document.
 
-The commands it runs, all through `uvx --from git+ssh://git@github.com/rguha-sbp/cartographer@v0.1.0 cartographer`:
+## First run
+
+### Terraform mode
+
+Say: "Draw the architecture of the Terraform in `infra/`." Claude then:
+
+1. Asks for a diagram name (`<system>-<view>`, for example `shop-l7`) and the Terraform folder.
+2. Extracts the facts (the Terraform is parsed, not planned, so no cloud credentials are needed).
+3. Curates: decides what is worth drawing, grouping and flows, reading the application code for evidence.
+4. Builds: unproven claims and anything that looks like a secret are dropped and reported.
+5. Reviews: takes screenshots of the result, checks them against a checklist, fixes the curation and rebuilds, at most
+   three rounds.
+
+### Describe mode
+
+Say: "Help me design a diagram for a new solution." Use it when there is no Terraform yet. Claude then:
+
+1. Interviews you, one question per message, until the gaps (entry points, data stores, integrations, who calls whom)
+   are closed.
+2. Draws an early rough version, opens it in your local draw.io and alternates questions and redraws.
+3. Runs the same review loop as Terraform mode.
+4. Ends by listing every assumption it made in chat so you can correct them. Assumptions are never shown on the
+   diagram.
+
+## Where files land
+
+Everything goes to `docs/architecture/diagrams/` in your repo:
+
+| File | What it is |
+|---|---|
+| `<name>.drawio` | the diagram, the source of truth |
+| `<name>.svg` | image rendered from exactly that `.drawio`, for GitHub |
+| `<name>.curated.json` | the curation: what was drawn and the evidence for it |
+| `README.md` | generated index of the diagrams in the folder |
+
+Commit all four. Intermediates (facts, schema, screenshots) live in `~/.cache/cartographer/<name>/` and are not
+committed. Claude never commits or pushes for you.
+
+## Editing a diagram by hand
+
+1. Open the `.drawio` in the local draw.io (File > Open from > Device).
+2. Edit, then save it back over the file (or export as `.drawio` and overwrite it).
+3. Regenerate the image: `cartographer image docs/architecture/diagrams/<name>.drawio`.
+
+The next time the skill runs it notices the hand edit and asks you whether to keep it, replace it with a fresh
+generation, or write a side file to compare. These map to doing nothing, `build --replace` and `build --side-file`
+(which writes `<name>.generated.drawio` and its image, not to be committed).
+
+## Pre-commit hook
+
+Add to `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: git@github.com:rguha-sbp/cartographer
+    rev: v0.2.0
+    hooks:
+      - id: cartographer-check
+```
+
+It runs offline on `docs/architecture/diagrams/` and blocks the commit when a `.drawio` has no image or its image was
+rendered from a different `.drawio`, for example after a hand edit without `cartographer image`.
+
+## Running the CLI directly
+
+Without the plugin, prefix each command with
+`uvx --from git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0 cartographer`:
 
 | Command | What it does |
 |---|---|
-| `extract INFRA_DIR --stack NAME [--repo .]` | caches the facts in `~/.cache/cartographer/NAME/` and prints the inputs key |
-| `prompt --stack NAME [--repo .]` | writes the schema to the cache and prints the curation prompt |
-| `build --stack NAME [--repo .] [--out docs/architecture] [--curated PATH]` | verify, then write `.drawio` and `.drawio.svg` (exit 1 on drops, 3 on a stale curation) |
-| `snapshot FILE -o DIR` | PNG and tiles from the local draw.io, for the visual review |
-| `view FILE` | opens a `.drawio` or `.drawio.svg` in the local draw.io |
-| `docs review\|rules` | prints the path of the packaged review checklist or drawing rules |
+| `extract INFRA_DIR --name NAME` | cache the Terraform facts and print the inputs key |
+| `prompt --name NAME [--describe]` | print the curation prompt, or the describe prompt for a new solution |
+| `build --name NAME [--replace \| --side-file]` | verify, then write `.drawio`, `.svg` and the folder index |
+| `image FILE.drawio` | regenerate the `.svg` next to a `.drawio` |
+| `check FOLDER` | offline: fail when a `.drawio` has no image or a stale one |
+| `snapshot FILE.drawio -o DIR` | PNG and tiles from the local draw.io, for the visual review |
+| `view FILE.drawio` | open in the local draw.io |
+| `docs interview\|review\|rules` | print the path of a packaged document |
 
-If the local draw.io is down, `build` still writes the `.drawio`, prints why the svg was skipped and exits 0.
+## Troubleshooting
 
-## Viewing
+`build` exit codes:
 
-- GitHub renders `<stack>.drawio.svg` in the repo.
-- draw.io at `http://localhost:8080`, the draw.io desktop app and the VS Code draw.io extension open both the
-  `.drawio.svg` and the `.drawio`.
-- Lucid: File > Import > draw.io.
+| Exit | Meaning | What to do |
+|---|---|---|
+| 1 | verify dropped something or left a node without a line | read the report, fix the curated file, rebuild |
+| 2 | no facts for a Terraform diagram | run `extract` first |
+| 3 | stale or missing curated file: Terraform changed since curation | curate again |
+| 4 | the `.drawio` was edited by hand, nothing written | keep it, or rerun with `--replace` or `--side-file` |
+| 5 | local draw.io is down or the render failed, nothing written | start draw.io on `localhost:8080`, rerun |
+
+`check` exits 1 when a `.drawio` has no image or a stale one: run `cartographer image <file.drawio>`.
 
 ## Developing
 
 ```
-uv run pytest -q && uv run ruff check
-CARTOGRAPHER_FROM=/path/to/checkout   # the skill then runs your working tree instead of the pinned tag
+uv sync
+uv run --locked ruff check
+uv run --locked pytest -q
 ```
 
-Bump the version in `pyproject.toml`, `.claude-plugin/plugin.json` and the `@vX.Y.Z` pin in
-`skills/cartographer/SKILL.md` together; a test checks that they agree.
-
-## Security
-
-- No containers, no network calls except the local draw.io on localhost and `uvx` fetching the tool.
-- The tool only reads Terraform and repo files and needs no cloud credentials.
-- Evidence snippets, labels and captions that match a secret pattern are dropped and never echoed in the report.
-- The diagram never leaves the machine: only the local draw.io is used, never a public draw.io host.
-
-## Repo layout
-
-```
-.claude-plugin/     plugin.json, marketplace.json
-skills/cartographer the skill
-src/cartographer/   pipeline stages, cli, schema, prompt, REVIEW.md, RULES.md, icon tables
-tests/              format, extractor, layout, cli and plugin tests
-.github/workflows/  ci.yml
-DESIGN.md           deep reference
-```
-
-See [DESIGN.md](DESIGN.md) for the data formats, verification rules and layout algorithm, and
-[src/cartographer/RULES.md](src/cartographer/RULES.md) for the drawing rules and where each one is enforced.
+Set `CARTOGRAPHER_FROM=/path/to/checkout` to make the skill run your working tree instead of the pinned tag. Bump the
+version in `pyproject.toml`, `.claude-plugin/plugin.json` and the `@vX.Y.Z` pin in `skills/cartographer/SKILL.md`
+together; a test checks that they agree. Design docs: [DESIGN.md](DESIGN.md), `docs/superpowers/specs/`, and
+[src/cartographer/RULES.md](src/cartographer/RULES.md) for the drawing rules.

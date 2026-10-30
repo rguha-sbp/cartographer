@@ -42,6 +42,7 @@ def _node(node_id: str, tf: str, label: str) -> dict:
 
 def _curated(node_label: str = "fn", edge_label: str = "reads, SQL", contains: str = "x = 1") -> dict:
     return {
+        "source": "terraform",
         "title": "t",
         "groups": [],
         "nodes": [
