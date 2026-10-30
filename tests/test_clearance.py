@@ -128,3 +128,10 @@ def test_ports_on_a_side_are_ordered_by_the_way_their_routes_turn() -> None:
              Edge("deploy", "cdn", "invalidate cache"))
     xml = gen_drawio.render(route(_scene(frames + nodes, edges)), page_id="t", page_name="t")
     assert _hard(xml) == dict.fromkeys(HARD, 0)
+
+
+def test_ports_keep_off_a_side_whose_stub_would_run_into_a_group_title() -> None:
+    nodes = (Group("g", "Triggers and schedules\nmachine invokes", 100, 400, 500, 300),
+             Icon("bus", "Bus", "s3", 215, 450, "g"), Icon("a", "A", "s3", 215, 0), Icon("b", "B", "s3", 215, 200))
+    routed = route(_scene(nodes, (Edge("a", "bus", "run now"), Edge("b", "bus", "trigger event"))))
+    assert {side_of(e.into) for e in routed.edges}.isdisjoint("T")

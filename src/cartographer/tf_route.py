@@ -52,9 +52,10 @@ def route(diagram: Diagram) -> Diagram:
     which way each route leaves its port; the ports on every side are reordered to match and the diagram routed
     again, and the one with fewer `defects` is kept."""
     nodes = leaves(diagram)
-    ends = anchors(diagram.edges, nodes)
+    titles = [title_rect(g) for g in groups(diagram)]
+    ends = anchors(diagram.edges, nodes, titles)
     first = _route(diagram, ends)
-    again = _route(diagram, untangle(diagram.edges, nodes, ends, [polyline(e, nodes) for e in first.edges]))
+    again = _route(diagram, untangle(diagram.edges, nodes, ends, [polyline(e, nodes) for e in first.edges], titles))
     return min((first, again), key=defects)
 
 

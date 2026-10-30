@@ -1,28 +1,32 @@
 """Ports: which side of its node each edge end uses, and where along that side.
 
-An end prefers the side that faces the other end. A side that is full (`capacity`) or crowded gives way to a
-neighbouring side, an end prefers a side that already carries its flow colour, and on each side ports are ordered so
-that one colour sits together. An icon and its label are one unit: its bottom ports sit under the label.
+An end prefers the side that faces the other end. A side that is full (`capacity`), crowded, or whose stubs would
+run into a group title gives way to a neighbouring side, an end prefers a side that already carries its flow colour,
+and on each side ports are ordered so that one colour sits together. An icon and its label are one unit: its bottom ports sit under the label.
 """
 
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
 from itertools import pairwise
-from math import hypot
+from math import hypot, inf
 from statistics import mean
 
 from cartographer.diagram_model import Edge, Icon, Point, Port
 from cartographer.tf_geom import (
+    LINE_GAP,
     PORT_EDGE,
     PORT_GAP,
     SIDES,
     Leaf,
+    Rect,
     body,
     capacity,
     caption_size,
     label_size,
+    overlap,
     port_xy,
+    rects,
     side_size,
 )
 
@@ -82,13 +86,22 @@ def _along(end: _End, axis: int) -> float:
     return _centre(end.other)[axis]
 
 
-def _assign(ends: list[_End], nodes: dict[str, Leaf]) -> dict[tuple[int, int], str]:
+def _boxed_in(node: Leaf, side: str, titles: list[Rect]) -> bool:
+    """Whether the strip a side's stubs need, STUB out and LINE_GAP beyond for the route to turn, meets a title."""
+    x0, y0, x1, y1 = rects(node)[-1] if side == "B" else body(node)
+    reach = STUB + LINE_GAP
+    strip = {"L": (x0 - reach, y0, x0, y1), "R": (x1, y0, x1 + reach, y1), "T": (x0, y0 - reach, x1, y0),
+             "B": (x0, y1, x1, y1 + reach)}[side]
+    return any(overlap(strip, t) > 0 for t in titles)
+
+
+def _assign(ends: list[_End], nodes: dict[str, Leaf], titles: list[Rect]) -> dict[tuple[int, int], str]:
     load: dict[tuple[str, str], int] = defaultdict(int)
     flows: dict[tuple[str, str], set[str]] = defaultdict(set)
     chosen: dict[tuple[int, int], str] = {}
     for end in sorted(ends, key=lambda e: (min(_penalty(e, nodes[e.node], s) for s in SIDES), e.edge, e.end)):
         node = nodes[end.node]
-        fill = {s: load[end.node, s] / capacity(node, s) for s in SIDES}
+        fill = {s: inf if _boxed_in(node, s, titles) else load[end.node, s] / capacity(node, s) for s in SIDES}
         room = [s for s in SIDES if fill[s] < 1] or [s for s in SIDES if fill[s] == min(fill.values())]
 
         side = min(room, key=partial(_cost, end, node, load, flows))
@@ -122,13 +135,14 @@ def _by_colour(keys: dict[tuple[int, int], tuple], colour: dict[tuple[int, int],
 Pair = tuple[Anchor, Anchor]
 
 
-def anchors(edges: tuple[Edge, ...], nodes: dict[str, Leaf]) -> list[Pair]:
-    """One (source, target) anchor pair per edge; on each side ordered by where the other end sits."""
+def anchors(edges: tuple[Edge, ...], nodes: dict[str, Leaf], titles: list[Rect]) -> list[Pair]:
+    """One (source, target) anchor pair per edge, off the sides boxed in by a group title; on each side ordered by
+    where the other end sits."""
     ends: list[_End] = []
     for i, e in enumerate(edges):
         hs, hd = _headings(nodes[e.src], nodes[e.dst], caption_size(e.label)[0])
         ends += [_End(i, 0, e.src, nodes[e.dst], e.color, hs), _End(i, 1, e.dst, nodes[e.src], e.color, hd)]
-    chosen = _assign(ends, nodes)
+    chosen = _assign(ends, nodes, titles)
     users: dict[tuple[str, str], list[_End]] = defaultdict(list)
     for end in ends:
         users[end.node, chosen[end.edge, end.end]].append(end)
@@ -153,13 +167,32 @@ def _turn(anchor: Anchor, outward: list[Point]) -> tuple[int, int]:
     return 0, 0
 
 
-def untangle(edges: tuple[Edge, ...], nodes: dict[str, Leaf], pairs: list[Pair], polys: list[list[Point]]) -> list[Pair]:
-    """The same sides with the ports on each reordered the way the routes leave them, so that routes bending the
-    same way do not cross or run over each other's stubs next to the node."""
-    keys: dict[tuple[str, str], dict[tuple[int, int], tuple]] = defaultdict(dict)
+def _approach(node: Leaf, outward: list[Point]) -> tuple[float, float]:
+    """Unit vector from a node's centre to where its route first stands clear of it, STUB and LINE_GAP out."""
+    boxes = rects(node, STUB + LINE_GAP)
+    clear = next((p for p in outward if not any(b[0] < p[0] < b[2] and b[1] < p[1] < b[3] for b in boxes)), outward[-1])
+    (cx, cy) = _centre(node)
+    n = hypot(clear[0] - cx, clear[1] - cy) or 1
+    return (clear[0] - cx) / n, (clear[1] - cy) / n
+
+
+def untangle(edges: tuple[Edge, ...], nodes: dict[str, Leaf], pairs: list[Pair], polys: list[list[Point]],
+             titles: list[Rect]) -> list[Pair]:
+    """Ports placed again from the routes: each end on the side facing where its route comes from, and the ports on
+    each side ordered the way the routes leave them, so that routes bending the same way do not cross or run over
+    each other's stubs next to the node, and no route wraps round its node to reach a port on the far side."""
+    ends, turns = [], {}
     for i, (pair, poly) in enumerate(zip(pairs, polys)):
         for end, (anchor, outward) in enumerate(((pair[0], poly), (pair[1], poly[::-1]))):
-            keys[anchor.node, anchor.side][i, end] = (*_turn(anchor, outward[1:]), pairs[i][end].off)
+            node = nodes[anchor.node]
+            ends.append(_End(i, end, anchor.node, nodes[pair[1 - end].node], edges[i].color, _approach(node, outward)))
+            turns[i, end] = anchor.side, (*_turn(anchor, outward[1:]), anchor.off)
+    chosen = _assign(ends, nodes, titles)
+    keys: dict[tuple[str, str], dict[tuple[int, int], tuple]] = defaultdict(dict)
+    for e in ends:
+        side = chosen[e.edge, e.end]
+        was, turn = turns[e.edge, e.end]
+        keys[e.node, side][e.edge, e.end] = turn if side == was else (0, 0, (0, 0))
     placed: dict[tuple[int, int], Anchor] = {}
     for (node, side), group in keys.items():
         placed |= _spread(nodes[node], side, _by_colour(group, {e: edges[e[0]].color for e in group}))
