@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+import os
 import shutil
 import subprocess
 import sys
@@ -21,7 +22,13 @@ TILE_OVERLAP = 0.10
 DRAWIO_TIMEOUT_S = 3
 VIRTUAL_TIME_MS = 15000
 CHROME_MAC = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-CHROME_HINT = "install Google Chrome or Chromium, or put google-chrome / chromium on PATH"
+CHROME_WINDOWS = Path("Google") / "Chrome" / "Application" / "chrome.exe"
+CHROME_WINDOWS_ROOTS = ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA")
+CHROME_PATH_NAMES = ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "chrome")
+CHROME_HINT = (
+    "install Google Chrome or Chromium (macOS app bundle, or the Windows per-machine or per-user install), "
+    "or put google-chrome / chromium on PATH"
+)
 DRAWIO_DOWN = "no draw.io answers at the given --drawio-url: start it, or omit the flag to use the bundled one"
 OFFLINE_RULES = "MAP * ~NOTFOUND , EXCLUDE 127.0.0.1 , EXCLUDE localhost"
 
@@ -99,10 +106,16 @@ def tile_rects(width: int, height: int, rows: int, cols: int) -> list[Tile]:
     ]
 
 
+def chrome_candidates() -> list[Path]:
+    roots = [os.environ[var] for var in CHROME_WINDOWS_ROOTS if os.environ.get(var)]
+    return [Path(CHROME_MAC), *(Path(root) / CHROME_WINDOWS for root in roots)]
+
+
 def find_chrome() -> str:
-    if Path(CHROME_MAC).exists():
-        return CHROME_MAC
-    for name in ("google-chrome", "chromium"):
+    for path in chrome_candidates():
+        if path.exists():
+            return str(path)
+    for name in CHROME_PATH_NAMES:
         if found := shutil.which(name):
             return found
     raise SnapshotError(f"Chrome not found: {CHROME_HINT}")
