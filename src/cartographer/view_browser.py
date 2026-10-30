@@ -9,6 +9,7 @@ from typing import NamedTuple
 
 from cartographer import snapshot
 
+CHROME_EXIT_TIMEOUT_SECONDS = 5
 NO_CHROME = "No Chrome found: opened your default browser."
 
 
@@ -39,5 +40,15 @@ def launch(url: str) -> Launch:
 def cleanup(opened: Launch) -> None:
     if opened.process is not None and opened.process.poll() is None:
         opened.process.terminate()
+        _wait_for_exit(opened.process)
     if opened.profile is not None:
         shutil.rmtree(opened.profile, ignore_errors=True)
+
+
+def _wait_for_exit(process: subprocess.Popen) -> None:
+    """Chrome rewrites Local State while quitting, so the profile can only go once it has exited."""
+    try:
+        process.wait(timeout=CHROME_EXIT_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=CHROME_EXIT_TIMEOUT_SECONDS)

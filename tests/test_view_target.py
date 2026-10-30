@@ -1,4 +1,5 @@
 import argparse
+import subprocess
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -105,3 +106,49 @@ def test_launch_without_chrome_falls_back_to_the_default_browser(monkeypatch) ->
     assert opened == ["http://x/"]
     assert result.process is None and result.profile is None
     assert "default browser" in result.note
+
+
+class _SlowChrome:
+    """Writes into its profile while shutting down, like Chrome writing Local State."""
+
+    def __init__(self, profile: Path, *, exits_after_terminate: bool = True) -> None:
+        self.profile = profile
+        self.exits_after_terminate = exits_after_terminate
+        self.calls: list[str] = []
+        self.running = True
+
+    def poll(self) -> int | None:
+        return None if self.running else 0
+
+    def terminate(self) -> None:
+        self.calls.append("terminate")
+
+    def kill(self) -> None:
+        self.calls.append("kill")
+        self.exits_after_terminate = True
+
+    def wait(self, timeout: float | None = None) -> int:
+        self.calls.append("wait")
+        if not self.exits_after_terminate:
+            raise subprocess.TimeoutExpired("chrome", timeout)
+        (self.profile / "Local State").write_text("{}")
+        self.running = False
+        return 0
+
+
+def test_cleanup_waits_for_chrome_to_exit_before_removing_the_profile(tmp_path: Path) -> None:
+    profile = tmp_path / "cartographer-chrome-x"
+    profile.mkdir()
+    chrome = _SlowChrome(profile)
+    view_browser.cleanup(view_browser.Launch(chrome, profile, ""))
+    assert chrome.calls == ["terminate", "wait"]
+    assert not profile.exists()
+
+
+def test_cleanup_kills_chrome_that_ignores_terminate(tmp_path: Path) -> None:
+    profile = tmp_path / "cartographer-chrome-x"
+    profile.mkdir()
+    chrome = _SlowChrome(profile, exits_after_terminate=False)
+    view_browser.cleanup(view_browser.Launch(chrome, profile, ""))
+    assert chrome.calls == ["terminate", "wait", "kill", "wait"]
+    assert not profile.exists()
