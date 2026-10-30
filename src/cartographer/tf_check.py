@@ -181,5 +181,12 @@ def stats(diagram: Diagram) -> RouteStats:
         angled_segments=sum(abs(b[0] - a[0]) > 0.5 and abs(b[1] - a[1]) > 0.5 for p in polys for a, b in pairwise(p)))
 
 
+def defects(diagram: Diagram) -> tuple[int, int]:
+    """How flawed a routed diagram looks: crossings plus checker violations (each one flaw a reader sees), then
+    bends."""
+    routed = stats(diagram)
+    return routed.crossings + routed.violations, routed.bends
+
+
 def measure(drawio: str) -> RouteStats:
     return stats(read(drawio))

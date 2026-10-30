@@ -5,12 +5,14 @@ from typing import Any
 
 from cartographer.diagram_model import BOX_H, BOX_W, ICON, Box, Group, Icon, has_icon
 from cartographer.tf_colors import FRAMES, Colours
-from cartographer.tf_geom import NODE_CLEAR, label_size
+from cartographer.tf_geom import GROUP_CLEAR, LINE_GAP, NODE_CLEAR, label_size
 
 CELL_W = CELL_H = 150  # icon pitch: ICON plus a label below, with air
 GROUP_PAD_X, GROUP_PAD_TOP = 30, 50
 FRAME_PAD_X, FRAME_PAD_TOP = 20, 40
 GAP = 40
+CHANNEL_TRACKS = 6  # lines that fit between two blocks side by side, each keeping GROUP_CLEAR from both
+BLOCK_GAP = 2 * GROUP_CLEAR + (CHANNEL_TRACKS - 1) * LINE_GAP
 LABEL_CHAR_W, LABEL_PAD = 7, 40
 Curated = dict[str, Any]
 Size = tuple[int, int]
@@ -111,10 +113,10 @@ class Blocks:
             w = max(self.measure(b)[0] for b in members)
             cy = y
             for b in members:
-                cy += self.place(b, cx, cy, w) + GAP
-            col_h.append(cy - GAP - y)
-            cx += w + GAP
-        used_w, used_h = max(cx - GAP - x, 0), max(col_h, default=0)
+                cy += self.place(b, cx, cy, w) + BLOCK_GAP
+            col_h.append(cy - BLOCK_GAP - y)
+            cx += w + BLOCK_GAP
+        used_w, used_h = max(cx - BLOCK_GAP - x, 0), max(col_h, default=0)
         if loose:
             row_cols = max(used_w // _cell_w(loose), 1)
             self.place_leaves(loose, x, y + used_h + (GAP if used_h else 0), parent, row_cols)

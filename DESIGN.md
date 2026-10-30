@@ -183,7 +183,9 @@ Any other `Icon.service` renders as a plain box.
 Pure Python, no external process, five modules: `tf_layout.py` (orchestration, edges, legend), `tf_blocks.py` (frames
 and block grids), `tf_lanes.py` (externals), `tf_order.py` (barycentric ordering), `tf_place.py` (crossing-aware
 placement). Every number is a module constant
-(icon pitch 150x150, group padding 30 sides and 50 top, frame padding 20 sides and 40 top, gap 40).
+(icon pitch 150x150, group padding 30 sides and 50 top, frame padding 20 sides and 40 top, gap 40). Blocks side by side or stacked in a
+  frame are BLOCK_GAP apart: a channel of CHANNEL_TRACKS (6) lines at LINE_GAP, each GROUP_CLEAR from both blocks, so
+  routes between distant blocks run through the gaps instead of round the whole drawing.
 
 - Frames are groups of kind cloud, region or account. Every other group (kind null or vpc) is a block. A block with no
   nodes and no non-empty child block is dropped (`tf_blocks.empty_blocks`; verify reports it as a warning).
@@ -205,7 +207,7 @@ placement). Every number is a module constant
   full placement, so the objective sees the real grid. The "AWS managed services" block has an open column, so it
   lands by its callers.
 - Straight lines only approximate the routes, so for the chosen `GRID_COLS` the placement is made once per length
-  weight in `tf_layout.SPREADS` (none, and 500 px per crossing), each is routed and fitted, and the one with the fewest
+  weight in `tf_layout.SPREADS` (none, and 1000, 500 and 250 px per crossing), each is routed and fitted, and the one with the fewest
   crossings plus checker violations wins, then fewest bends.
 - Externals sit outside the frames in two lanes: an external's `lane` (set by placement) decides; without one, those
   that are only ever an edge `src` go left and all others (including edgeless ones) go right. An external with an `icon` takes a 150x150 icon cell (shape plus label below),
@@ -215,19 +217,26 @@ placement). Every number is a module constant
   generated legend listing only the flows used under everything, title from curated.json.
 - Routing (`tf_route.py`, after the arrangement is chosen): `tf_ports.py` picks a side per edge end (sideways when the
   other end is 90 px or more away horizontally and the gap fits the caption, else top/bottom; an icon's bottom holds its
-  caption so it uses a flank) and spreads the edges on one side evenly, ordered by the other end's position. The router is
+  caption so it uses a flank) and spreads the edges on one side evenly, ordered by the other end's position. That
+  routing shows where each route comes from and which way it turns off its stub; every end then takes the side facing
+  where its route comes from and the ports on every side are reordered so no two routes cross beside the node
+  (`tf_ports.untangle`), the diagram is routed again and the one with fewer defects is kept. A side whose stubs would
+  run into a group title is never chosen, so lines converging on a node under a title do not wrap round it.
+  The stub out of a port is closed to every other edge, and so is the line across its end, LINE_GAP either side, so
+  no route boxes a stub in or jogs beside it. The router is
   an orthogonal A* over a sparse grid (obstacle borders, ports, evenly spaced tracks in each gap); every leaf plus the
   caption under an icon is a wall (`tf_geom.py`), so is every group title band (`title_rect`: every line of the
   title at its rendered left spacing), and so is every group that holds neither end of the edge (a group is an
   ancestor when its box contains an endpoint). A segment parallel to a group or frame border within LINE_GAP of it is
   closed too; that strip is the last constraint relaxed when an edge has no other route. The grid itself lives in `tf_grid.py`. Cost: length, a bend penalty,
-  a heavy flat+per-px penalty for sharing a segment with an earlier edge, and a crossing penalty above the bend one.
+  a heavy flat+per-px penalty for sharing a segment with an earlier edge, and a crossing penalty (300) worth a short detour round the line, charged too on every grid segment through the
+  zone of a caption placed earlier.
   Edges go shortest first, ties by id. Each `Edge` gets `out`, `into`, `points` and `exact=True`: the renderer then
   draws the polyline as given (no `edgeStyle`), so draw.io cannot re-route it and the captions stay where they were
   measured. Hand-made models leave `exact` off and their points stay connector hints.
 - Captions (`tf_labels.py`): each caption (about 7 px per character at 12 px, 20 px tall) goes on its own route, on a horizontal
   segment long enough for it if possible, nearest the source; the first spot clear of nodes, group titles, other
-  captions, other edges and group borders wins, else the spot overlapping the fewest nodes, titles and captions, then
+  captions, other edges and group borders wins, else the spot overlapping the fewest nodes, titles, captions and lines, then
   with the fewest things in its clearance. Once every edge is routed, a caption that a later route now crowds is placed
   again. Stored as `Edge.at` (relative position along the polyline) plus `Edge.shift`
   (draw.io `offset` point, emitted only when non-zero). `--edge-labels off` blanks the captions; routing still runs.

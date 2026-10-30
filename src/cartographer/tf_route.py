@@ -3,13 +3,14 @@
 Nodes (with their labels, kept NODE_CLEAR away) and group titles are walls, and so is every group the edge does not
 start or end in. A segment never runs within LINE_GAP of a parallel segment of another edge; only an edge with no
 such route is drawn with the clearance broken (counted by `tf_check`). Cost is length plus a penalty per bend, and a
-dearer one, above a bend, for crossing an earlier edge. Edges are routed shortest first, ties by id, so the result is
+dearer one for crossing an earlier edge or the zone of a placed caption. Edges are routed shortest first, ties by id, so the result is
 deterministic. Every route starts and ends with the straight stub out of its port, kept as explicit points.
 """
 
 from dataclasses import replace
 
 from cartographer.diagram_model import Diagram, Point
+from cartographer.tf_check import defects
 from cartographer.tf_geom import (
     GROUP_CLEAR,
     NODE_CLEAR,
@@ -24,7 +25,7 @@ from cartographer.tf_geom import (
 )
 from cartographer.tf_grid import DIRS, Grid
 from cartographer.tf_labels import Captions
-from cartographer.tf_ports import STUB, Anchor, anchors
+from cartographer.tf_ports import STUB, Anchor, Pair, anchors, untangle
 
 SIDE_DIR = {"R": 0, "L": 1, "B": 2, "T": 3}
 
@@ -47,10 +48,20 @@ def _stub(a: Anchor) -> Point:
 
 
 def route(diagram: Diagram) -> Diagram:
-    """The diagram with every edge's ports, bend points and caption position filled in."""
+    """The diagram with every edge's ports, bend points and caption position filled in. The first routing shows
+    which way each route leaves its port; the ports on every side are reordered to match and the diagram routed
+    again, and the one with fewer `defects` is kept."""
+    nodes = leaves(diagram)
+    titles = [title_rect(g) for g in groups(diagram)]
+    ends = anchors(diagram.edges, nodes, titles)
+    first = _route(diagram, ends)
+    again = _route(diagram, untangle(diagram.edges, nodes, ends, [polyline(e, nodes) for e in first.edges], titles))
+    return min((first, again), key=defects)
+
+
+def _route(diagram: Diagram, ends: list[Pair]) -> Diagram:
     nodes = leaves(diagram)
     edges = diagram.edges
-    ends = anchors(edges, nodes)
     frames = groups(diagram)
     stubs = [p for pair in ends for a in pair for p in ((a.x, a.y), _stub(a))]
     grid = Grid(obstacles(nodes, NODE_CLEAR) + [title_rect(g) for g in frames],
@@ -68,9 +79,8 @@ def route(diagram: Diagram) -> Diagram:
         sa, sb = _stub(a), _stub(b)
         outside = [frames.index(g) for g in foreign(frames, nodes[edges[i].src], nodes[edges[i].dst])]
         path = None
-        for with_captions, hard, beside in ((True, True, True), (False, True, True), (False, False, True),
-                                            (False, False, False)):
-            path = grid.route(sa, SIDE_DIR[a.side], sb, grid.blocked(outside, with_captions, beside), i, hard)
+        for hard, beside in ((True, True), (False, True), (False, False)):
+            path = grid.route(sa, SIDE_DIR[a.side], sb, grid.blocked(outside, beside), i, hard)
             if path:
                 break
         if path:

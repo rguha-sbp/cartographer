@@ -4,6 +4,7 @@ from cartographer import gen_drawio, tf_layout
 from cartographer.diagram_model import Diagram, Edge, Group, Icon, Legend, Title
 from cartographer.tf_check import measure
 from cartographer.tf_geom import GLYPH_W, ICON_LINE_H, crosses, groups, leaves, polyline, segments, title_rect
+from cartographer.tf_grid import MIXED, Grid
 from cartographer.tf_labels import Captions
 from cartographer.tf_read import read
 from cartographer.tf_route import route
@@ -126,3 +127,36 @@ def test_caption_crossed_by_a_later_route_is_placed_again_off_it() -> None:
     assert not captions.clear(0)
     captions.place(0, poly, "a caption")
     assert captions.clear(0)
+
+
+def test_a_short_detour_round_an_earlier_line_beats_crossing_it() -> None:
+    grid = Grid([(0, 0, 10, 10)], [], [], [(200, 120), (200, 250), (100, 200), (300, 200), (200, 100)])
+    grid.commit(grid.route((200, 120), 2, (200, 250), grid.blocked([]), 0), 0)
+    path = grid.route((100, 200), 0, (300, 200), grid.blocked([]), 1)
+    assert not any(grid.xs[x] == 200 and 120 < grid.ys[y] < 250 for x, y in path)
+
+
+def test_a_caption_sits_beside_lines_rather_than_on_one() -> None:
+    lines = [[((x, 0), (x, 200))] for x in (100, 140, 180, 220)]
+    captions = Captions({}, [], lines)
+    poly = [(80, 100), (240, 100)]
+    captions.place(len(lines), poly, "abcd")
+    box = captions.taken[len(lines)]
+    assert not any(crosses(s, box) for ss in lines for s in ss)
+
+
+def test_a_route_goes_round_a_caption_when_the_detour_is_short() -> None:
+    grid = Grid([(0, 0, 10, 10)], [], [], [(100, 200), (300, 200), (200, 100)])
+    zone = (180, 190, 220, 210)
+    grid.add_caption(zone)
+    path = grid.route((100, 200), 0, (300, 200), grid.blocked([]), 0)
+    points = [(grid.xs[x], grid.ys[y]) for x, y in path]
+    assert not any(crosses(s, zone) for s in segments(points))
+
+
+def test_every_segment_reaching_into_a_stub_ends_line_gap_is_closed() -> None:
+    port, stub_end = (458, 498), (458, 484)
+    grid = Grid([(445, 498, 471, 558)], [], [], [port, stub_end])
+    grid.reserve(port, stub_end, 0)
+    row = grid.yi[484] * len(grid.xs)
+    assert all(grid.owner[0][row + k] == MIXED for k in (grid.xi[445], grid.xi[458]))

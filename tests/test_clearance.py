@@ -12,7 +12,7 @@ from cartographer.tf_route import route
 
 HARD = ("lines_too_close", "ports_too_close", "line_near_node", "caption_far", "angled_segments",
         "caption_overlaps", "edge_through_node", "edge_through_group", "edge_through_title", "line_on_frame",
-        "caption_on_node")
+        "caption_on_node", "caption_on_line", "caption_crowding")
 
 
 def _scene(nodes: tuple, edges: tuple) -> Diagram:
@@ -116,3 +116,22 @@ def test_line_keeps_line_gap_from_frame_borders_it_runs_beside() -> None:
         nodes = (Group("g", "G", 100, 100, 300, 300), Icon("o", "O", "s3", ox, -40), Icon("i", "I", "s3", ix, 300, "g"))
         xml = gen_drawio.render(route(_scene(nodes, (Edge("o", "i"),))), page_id="t", page_name="t")
         assert (measure(xml).line_on_frame, _hard(xml)) == (0, dict.fromkeys(HARD, 0))
+
+
+def test_ports_on_a_side_are_ordered_by_the_way_their_routes_turn() -> None:
+    frames = (Group("data", "Storage\nSPA and access logs", 1296, 220, 421, 246),
+              Group("platform", "Platform\ndeploy, maps, monitoring", 1811, 220, 540, 402))
+    nodes = tuple(Icon(i, f"{i}\nsecond line", "s3", x, 286) for i, x in (
+        ("proxy", 1064), ("cdn", 870), ("deploy", 2171), ("bucket", 1381), ("tiles", 1931), ("logs", 1571)))
+    edges = (Edge("cdn", "proxy", "/als/map origin"), Edge("cdn", "bucket", "SPA origin"),
+             Edge("cdn", "tiles", "map tiles"), Edge("cdn", "logs", "access logs"),
+             Edge("deploy", "cdn", "invalidate cache"))
+    xml = gen_drawio.render(route(_scene(frames + nodes, edges)), page_id="t", page_name="t")
+    assert _hard(xml) == dict.fromkeys(HARD, 0)
+
+
+def test_ports_keep_off_a_side_whose_stub_would_run_into_a_group_title() -> None:
+    nodes = (Group("g", "Triggers and schedules\nmachine invokes", 100, 400, 500, 300),
+             Icon("bus", "Bus", "s3", 215, 450, "g"), Icon("a", "A", "s3", 215, 0), Icon("b", "B", "s3", 215, 200))
+    routed = route(_scene(nodes, (Edge("a", "bus", "run now"), Edge("b", "bus", "trigger event"))))
+    assert {side_of(e.into) for e in routed.edges}.isdisjoint("T")

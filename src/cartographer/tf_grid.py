@@ -1,7 +1,8 @@
 """The routing grid: candidate lines, the walls on them, and the least-cost search over them.
 
 A grid segment within LINE_GAP of a parallel segment another edge already uses is closed to later edges (`hard`),
-or only dear when no clean route exists. A segment within LINE_GAP of a parallel group border is closed too: lines
+or only dear when no clean route exists. A segment through a placed caption's zone is dear like a crossing, so a
+route goes round a caption when the detour is short and through it (to be placed again) when it is not. A segment within LINE_GAP of a parallel group border is closed too: lines
 cross a frame at a right angle and run along it only when nothing else is left.
 """
 
@@ -15,7 +16,7 @@ from cartographer.tf_geom import LINE_GAP, Rect
 OUTER = 40  # free lines kept round the whole drawing
 CLEAR = 4  # closest two candidate lines may be
 MAX_TRACKS = 14  # most tracks laid in one gap
-BEND, OVERLAP, SHARED, CROSS = 40, 40, 400, 150
+BEND, OVERLAP, SHARED, CROSS = 40, 40, 400, 300
 DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1))  # east, west, south, north
 REVERSE = (1, 0, 3, 2)
 MIXED = -1  # owner of a segment that two edges close
@@ -101,16 +102,13 @@ class Grid:
         return [bytearray((int.from_bytes(a) | int.from_bytes(b)).to_bytes(len(a))) for a, b in zip(into, extra)]
 
     def add_caption(self, zone: Rect) -> None:
-        """Wall off the space a placed caption needs, for the edges routed after it."""
+        """Make the space a placed caption needs dear, for the edges routed after it."""
         self.captions = self._merge(self.captions, self._mask([zone]))
 
-    def blocked(self, groups: list[int], captions: bool = True, beside: bool = True) -> Mask:
-        """The leaf walls, the caption zones, the strips along frame borders and the walls of the chosen groups
-        (indexes into the `groups` given)."""
-        out = [bytearray(m) for m in self.walls]
-        for extra, wanted in ((self.captions, captions), (self.beside, beside)):
-            if wanted:
-                out = self._merge(out, extra)
+    def blocked(self, groups: list[int], beside: bool = True) -> Mask:
+        """The leaf walls, the strips along frame borders and the walls of the chosen groups (indexes into the
+        `groups` given)."""
+        out = self._merge(self.walls, self.beside) if beside else [bytearray(m) for m in self.walls]
         for g in groups:
             out = self._merge(out, self.group_masks[g])
         return out
@@ -152,7 +150,7 @@ class Grid:
                 taken = self.owner[axis][k] not in (0, edge + 1)
                 if taken and hard:
                     continue
-                cost = step + (step * OVERLAP + SHARED) * taken
+                cost = step + (step * OVERLAP + SHARED) * taken + CROSS * self.captions[axis][k]
                 if d != heading:
                     cost += BEND
                 elif self.through[1 - axis][ix * ny + iy]:
@@ -172,7 +170,15 @@ class Grid:
                 self.owner[axis][k] = edge + 1 if self.owner[axis][k] in (0, edge + 1) else MIXED
 
     def reserve(self, a: Point, b: Point, edge: int) -> None:
-        """Close the grid segments between a port and its stub to every other edge."""
+        """Close the grid segments between a port and its stub end `b` to every other edge, and the line across the
+        stub end, LINE_GAP either side of it, to every edge: a route leaves its stub straight on, and no route runs
+        over a stub end, where it would box that stub in or jog beside it."""
+        across = 1 if a[1] == b[1] else 0  # axis of the segments that cross the stub's line
+        lines, at = (self.ys, b[1]) if across else (self.xs, b[0])
+        line = self.xi[b[0]] if across else self.yi[b[1]]
+        size = len(self.ys) if across else len(self.xs)
+        for k in range(max(bisect_right(lines, at - LINE_GAP) - 1, 0), bisect_left(lines, at + LINE_GAP)):
+            self.owner[across][line * size + k] = MIXED
         (x0, y0), (x1, y1) = sorted((a, b))
         if y0 == y1:
             first, last = bisect_left(self.xs, x0), bisect_right(self.xs, x1) - 1
