@@ -73,12 +73,11 @@ In Claude Code:
 /plugin install cartographer@cartographer
 ```
 
-Then run `/cartographer` in the repo you want to document.
+Then, in the repo you want to document, start a prompt with `/cartographer:cartographer` (see First run).
 
 ### Update
 
-Claude Code does not auto-update plugins from third-party marketplaces unless you turn it on (`/plugin` >
-Marketplaces > Enable auto-update). To update by hand:
+To update to the latest release:
 
 ```
 claude plugin update cartographer@cartographer
@@ -91,7 +90,13 @@ again unless its pin changed.
 
 ### Terraform mode
 
-Say: "Draw the architecture of the Terraform in `infra/`." Claude then:
+In the repo root:
+
+```
+/cartographer:cartographer draw the architecture diagram of the Terraform in infra/
+```
+
+Claude then:
 
 1. Asks for a diagram name (`<system>-<view>`, for example `shop-l7`) and the Terraform folder.
 2. Extracts the facts (the Terraform is parsed, not planned, so no cloud credentials are needed).
@@ -102,7 +107,13 @@ Say: "Draw the architecture of the Terraform in `infra/`." Claude then:
 
 ### Describe mode
 
-Say: "Help me design a diagram for a new solution." Use it when there is no Terraform yet. Claude then:
+Use it when there is no Terraform yet:
+
+```
+/cartographer:cartographer help me design an architecture diagram for a new solution
+```
+
+Claude then:
 
 1. Interviews you, one question per message, until the gaps (entry points, data stores, integrations, who calls whom)
    are closed.
@@ -155,7 +166,7 @@ Add to `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/rguha-sbp/cartographer
-    rev: v0.3.1
+    rev: v0.3.2
     hooks:
       - id: cartographer-check
 ```
@@ -166,7 +177,7 @@ rendered from a different `.drawio`, for example after a hand edit without `cart
 ## Running the CLI directly
 
 Without the plugin, prefix each command with
-`uvx --from git+https://github.com/rguha-sbp/cartographer@v0.3.1 cartographer`:
+`uvx --from git+https://github.com/rguha-sbp/cartographer@v0.3.2 cartographer`:
 
 | Command | What it does |
 |---|---|
