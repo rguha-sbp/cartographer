@@ -1,5 +1,6 @@
+from cartographer import tf_space
 from cartographer.diagram_model import Box, Diagram, Edge, Legend, Title
-from cartographer.tf_space import widenings
+from cartographer.tf_space import Widening, fit, widenings
 
 
 def _diagram(nodes: tuple[Box, ...], edges: tuple[Edge, ...]) -> Diagram:
@@ -25,3 +26,12 @@ def test_a_caption_beside_another_gets_room_along_its_run_for_both() -> None:
     cuts = widenings(_diagram(nodes, edges))
     assert any(c.axis == 0 and c.extra > 0 for c in cuts)
 
+
+def test_fit_keeps_the_round_with_the_fewest_defects(monkeypatch) -> None:
+    good, bad = (_diagram((Box(n, "", 0, 0),), ()) for n in ("good", "bad"))
+    routed = iter([good, bad, bad, bad])
+    monkeypatch.setattr(tf_space, "route", lambda d: next(routed))
+    monkeypatch.setattr(tf_space, "widenings", lambda d: [Widening(0, 1, 1, (0, 2))])
+    monkeypatch.setattr(tf_space, "stats", lambda d: type("S", (), {"violations": 1})())
+    monkeypatch.setattr(tf_space, "defects", lambda d: (0, 0) if d is good else (1, 0))
+    assert fit(good)[0] is good

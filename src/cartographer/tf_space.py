@@ -3,13 +3,15 @@
 Demand is measured on a routed diagram: in each channel (the free stretch between the obstacles either side of a
 segment) the most segments that run side by side need LINE_GAP apiece plus NODE_CLEAR at both walls. A short channel
 is widened by cutting the drawing across it and moving everything beyond the cut; the diagram is then routed again.
+A crowded caption asks for room the same way: along its run as long as its text, across it as wide. Each round
+reroutes everything, so the round with the fewest defects is kept.
 """
 
 from dataclasses import dataclass, replace
 from itertools import pairwise
 
 from cartographer.diagram_model import Box, Diagram, Group, Icon
-from cartographer.tf_check import crowded_captions, stats
+from cartographer.tf_check import crowded_captions, defects, stats
 from cartographer.tf_geom import (
     CAPTION_CLEAR,
     CAPTION_LINE_H,
@@ -184,13 +186,13 @@ def stretch(diagram: Diagram, cuts: list[Widening]) -> Diagram:
 
 
 def fit(diagram: Diagram) -> tuple[Diagram, list[Widening]]:
-    """Route the diagram, widening short gaps and routing again (at most ROUNDS times) until nothing is violated."""
-    done: list[Widening] = []
-    routed = route(diagram)
+    """Route the diagram, widening short gaps and routing again (at most ROUNDS times) until nothing is violated; the
+    round with the fewest `defects` wins, the earliest on a tie."""
+    rounds: list[tuple[Diagram, list[Widening]]] = [(route(diagram), [])]
     for _ in range(ROUNDS):
+        routed, done = rounds[-1]
         cuts = widenings(routed) if stats(routed).violations else []
         if not cuts:
             break
-        routed = route(stretch(routed, cuts))
-        done += cuts
-    return routed, done
+        rounds.append((route(stretch(routed, cuts)), done + cuts))
+    return min(rounds, key=lambda r: defects(r[0]))
