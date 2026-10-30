@@ -2,10 +2,9 @@
 
 import argparse
 import sys
-import webbrowser
 from pathlib import Path
 
-from cartographer import build, drift, files, index, snapshot, svg_export, tf_extract, tfdiagram
+from cartographer import build, drawio_app, drift, snapshot, svg_export, tf_extract, tfdiagram, view
 from cartographer.workdir import cache_dir, write_json
 
 HERE = Path(__file__).parent
@@ -40,27 +39,13 @@ def _prompt(args: argparse.Namespace) -> int:
     return 0
 
 
-def _view(args: argparse.Namespace) -> int:
-    if args.file.suffix != ".drawio":
-        print("view takes a .drawio file", file=sys.stderr)
-        return 2
-    url = args.drawio_url.rstrip("/")
-    if not snapshot.drawio_up(url):
-        print(snapshot.DRAWIO_DOWN, file=sys.stderr)
-        return 2
-    webbrowser.open(snapshot.viewer_url(url, args.file.read_text()))
-    return 0
-
-
 def _image(args: argparse.Namespace) -> int:
     try:
-        svg = svg_export.export_svg(args.file.read_bytes().decode(), args.drawio_url.rstrip("/"))
-    except (svg_export.SvgError, snapshot.SnapshotError) as err:
+        with drawio_app.drawio_at(args.drawio_url) as url:
+            print(svg_export.write_image(args.file, url, args.file.read_bytes().decode()))
+    except (svg_export.SvgError, snapshot.SnapshotError, drawio_app.DrawioError) as err:
         print(err, file=sys.stderr)
         return build.EXIT_NO_RENDERER
-    files.image_path(args.file).write_text(svg)
-    index.write_index(args.file.parent)
-    print(files.image_path(args.file))
     return 0
 
 
@@ -86,14 +71,14 @@ def _parser() -> argparse.ArgumentParser:
     p = command("prompt", _prompt, "print the curation prompt for the cached facts, or the describe prompt")
     p.add_argument("--describe", action="store_true", help="describe a new solution: no facts needed")
     build.add_arguments(command("build", build.run, "verify the curated file and write the diagram"))
-    p = command("snapshot", snapshot.run, "screenshot a .drawio file in the local draw.io", named=False)
+    p = command("snapshot", snapshot.run, "screenshot a .drawio file in the bundled draw.io", named=False)
     snapshot.add_arguments(p)
-    p = command("view", _view, "open a .drawio in the local draw.io", named=False)
-    p.add_argument("file", type=Path)
-    p.add_argument("--drawio-url", default=snapshot.DRAWIO_URL, help="local draw.io; never a public host")
+    p = command("view", view.run, "edit a .drawio in the bundled draw.io until the tab is closed", named=False)
+    p.add_argument("file", nargs="?", default=None, help="a .drawio path or a diagram name (default: the only one)")
+    p.add_argument("--drawio-url", default=None, help="read-only fallback when the bundled draw.io cannot be fetched")
     p = command("image", _image, "regenerate the .svg image next to a .drawio", named=False)
     p.add_argument("file", type=Path, help="the .drawio file")
-    p.add_argument("--drawio-url", default=snapshot.DRAWIO_URL, help="local draw.io; never a public host")
+    p.add_argument("--drawio-url", default=None, help="your own local draw.io (never a public host)")
     p = command("check", drift.run, "fail when a .drawio has no image or a stale one (offline)", named=False)
     p.add_argument("folder", type=Path, help="diagrams folder, searched recursively")
     p = command("docs", _docs, "print the path of a packaged document (review, rules, interview)", named=False)

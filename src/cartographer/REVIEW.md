@@ -18,3 +18,7 @@ Drawing rules the tool already enforces are in `RULES.md` (`cartographer docs ru
 8. [tool] Nothing is clipped at the page edge; no line, label or icon is cut off.
 9. [tool] The legend matches what is drawn: colour meaning and solid versus dashed (RULES.md: line style is explained in words).
 10. [tool] No arrow passes through an icon, caption, box or a group it does not start or end in (RULES.md routing rules).
+11. [curation] Every VPC-attached node (load balancer, compute, database, endpoint) sits in a subnet frame inside its VPC; regional services (S3, DynamoDB, SQS) sit outside the VPC. Fix: add the `subnet` group and move the node.
+12. [curation] Workloads are visually separate: each application or service boundary has its own frame, and unrelated services do not share one. Fix: split or merge role groups.
+13. [curation] No frame holds a single node only because nesting allows it. Fix: drop the frame and put the node in its parent.
+14. [curation] No Availability Zone is drawn on L7: one icon per service, never one per AZ or subnet.

@@ -28,14 +28,15 @@ Ask the user, or derive from the repo, the diagram name (lowercase kebab-case `<
 ## 2. Prerequisites
 
 - `uv` is installed (`uvx --version`).
-- The local draw.io runs on `http://localhost:8080` (`curl -sI http://localhost:8080`). If not, tell the user and stop.
-  Never use a public draw.io host: the diagram must not leave the machine.
+- Nothing else runs: cartographer serves its own pinned draw.io on 127.0.0.1 while a command needs it. The first
+  command downloads it once (about 49 MB, checked against a pinned sha256). If that download is blocked, tell the
+  user and stop. Never use a public draw.io host: the diagram must not leave the machine.
 - Chrome or Chromium is installed.
 
 ## 3. Extract
 
 ```
-uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0}" cartographer extract INFRA_DIR --name NAME
+uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer extract INFRA_DIR --name NAME
 ```
 
 It prints the facts path (in the cache folder, nothing is written into the repo) and the `inputs key`.
@@ -46,7 +47,7 @@ If `docs/architecture/diagrams/<name>.curated.json` exists and its `inputs_sha25
 Otherwise:
 
 ```
-uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0}" cartographer prompt --name NAME
+uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer prompt --name NAME
 ```
 
 Follow the printed prompt: read the facts and the application code, then write
@@ -57,7 +58,7 @@ evidence.
 ## 5. Build
 
 ```
-uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0}" cartographer build --name NAME
+uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer build --name NAME
 ```
 
 - Exit 0: `docs/architecture/diagrams/<name>.drawio` and `<name>.svg` are written, the `drawio_sha256` of the new
@@ -70,22 +71,22 @@ uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer
   regeneration), replace it (rerun build with `--replace`), or write a side file to compare (rerun build with
   `--side-file`, which writes `<name>.generated.drawio` and `<name>.generated.svg`, not to be committed). Never choose
   for the user.
-- Exit 5: the local draw.io is down or the render failed, and nothing was written. Tell the user to start the local
-  draw.io (localhost:8080) and rerun.
+- Exit 5: the bundled draw.io could not be downloaded or the render failed, and nothing was written. Show the user
+  the message (download blocked, sha256 mismatch or Chrome missing) and stop.
 
 If the user kept a hand-edited .drawio, regenerate its image with
-`uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0}" cartographer image docs/architecture/diagrams/<name>.drawio`
-(exit 5 means the local draw.io is down).
+`uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer image docs/architecture/diagrams/<name>.drawio`
+(exit 5 means the bundled draw.io or Chrome is unavailable).
 
 ## Describe flow (instead of steps 3 to 5)
 
-1. Get the prompt: `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0}" cartographer prompt --name NAME --describe`. It writes the schema to the cache folder and prints the
+1. Get the prompt: `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer prompt --name NAME --describe`. It writes the schema to the cache folder and prints the
    describe prompt: schema path, output path `docs/architecture/diagrams/<name>.curated.json`, the evidence rules for
    described diagrams and the path of the interview playbook.
-2. Get the playbook path with `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0}" cartographer docs interview`, Read that file and follow it: the opening, one question per
+2. Get the playbook path with `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer docs interview`, Read that file and follow it: the opening, one question per
    message, the gap checklist, no visible assumptions.
 3. Write each draft straight to the curated path, with `"source": "description"`. Every draft must pass `build`.
-4. Build (step 5, no extract and no facts), then open it: `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0}" cartographer view docs/architecture/diagrams/<name>.drawio`.
+4. Build (step 5, no extract and no facts), then open it in the background (`view` blocks until the editor tab is closed): `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer view docs/architecture/diagrams/<name>.drawio`.
 5. Alternate questions and redraws as the playbook says, then run the review loop (step 6). Fix [curation] findings
    from the engineer's answers or by asking them; never invent evidence.
 6. At the end, list every entry of `assumptions` in chat so the engineer can correct them. Never mark an assumption on
@@ -93,22 +94,22 @@ If the user kept a hand-edited .drawio, regenerate its image with
 
 ## 6. Review loop (at most 3 rounds)
 
-1. Snapshot: `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0}" cartographer snapshot docs/architecture/diagrams/<name>.drawio -o SNAP_DIR`, with `SNAP_DIR` under `${XDG_CACHE_HOME:-$HOME/.cache}/cartographer/<name>/snap`. It prints the full PNG and four tiles, one path per line. Exit 2 means the local draw.io is down.
+1. Snapshot: `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer snapshot docs/architecture/diagrams/<name>.drawio -o SNAP_DIR`, with `SNAP_DIR` under `${XDG_CACHE_HOME:-$HOME/.cache}/cartographer/<name>/snap`. It prints the full PNG and four tiles, one path per line. Exit 2 means the bundled draw.io could not be downloaded or Chrome is missing.
 2. Look: Read the full PNG, then every tile. Do not skip tiles: small defects show only there.
-3. Get the checklist path with `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0}" cartographer docs review`, Read that file, and list findings against it. Each finding names the rule, the tile (for example `r0c1`) and the element (node, caption or line). `cartographer docs rules` prints the drawing rules the tool already enforces.
+3. Get the checklist path with `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer docs review`, Read that file, and list findings against it. Each finding names the rule, the tile (for example `r0c1`) and the element (node, caption or line). `cartographer docs rules` prints the drawing rules the tool already enforces.
 4. Fix every [curation] finding in `docs/architecture/diagrams/<name>.curated.json`. The evidence rules in the `prompt` output still apply: add an edge or change an icon only when the Terraform or code supports it. If a fix needs evidence you cannot find, leave the finding open and report it.
 5. Rebuild (step 5) and snapshot again. Review the new images from scratch.
 
 ## 7. Show it
 
-Run `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0}" cartographer view docs/architecture/diagrams/<name>.drawio` to open the result in the local draw.io.
+Run `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer view docs/architecture/diagrams/<name>.drawio` in the background (it blocks until the editor tab is closed) to open the result in the bundled draw.io editor. Saving in the editor writes the file and its image. Then tell the user: "To reopen later: /cartographer:view NAME in Claude Code, or `cartographer view NAME` from the repo root."
 
 ## Stopping
 
 - Stop when a round has zero findings, or after 3 rounds.
 - Never say the diagram is ready while a finding remains.
 - Do not patch [tool] findings by hand and do not edit the .drawio or the .svg by hand. Report each one to the user as a tool defect, with the rule, the tile it appears in and the element.
-- Before finishing, run `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0}" cartographer check docs/architecture/diagrams`. It is offline and must print nothing and exit 0: every .drawio has an image rendered from exactly that .drawio.
+- Before finishing, run `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer check docs/architecture/diagrams`. It is offline and must print nothing and exit 0: every .drawio has an image rendered from exactly that .drawio.
 - Never commit or push. Tell the user exactly which files to review and commit:
   `docs/architecture/diagrams/<name>.drawio`, `docs/architecture/diagrams/<name>.svg`,
   `docs/architecture/diagrams/<name>.curated.json` and the regenerated `docs/architecture/diagrams/README.md`.

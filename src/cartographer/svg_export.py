@@ -6,9 +6,10 @@ import re
 import subprocess
 import urllib.request
 from collections.abc import Callable
+from pathlib import Path
 from xml.etree import ElementTree
 
-from cartographer import files, snapshot
+from cartographer import files, index, snapshot
 
 SVG_NS = "http://www.w3.org/2000/svg"
 XLINK_NS = "http://www.w3.org/1999/xlink"
@@ -112,3 +113,11 @@ def export_svg(mxfile: str, drawio_url: str, fetch: Fetch = fetch_url) -> str:
     if proc.returncode != 0:
         raise SvgError(f"Chrome failed: {proc.stderr.strip()[-300:]}")
     return svg_from_dom(proc.stdout, files.sha256_text(mxfile), size, drawio_url, fetch)
+
+
+def write_image(drawio: Path, drawio_url: str, mxfile: str) -> Path:
+    """Render `mxfile` (the content of `drawio`) to the svg next to it and refresh the folder index."""
+    image = files.image_path(drawio)
+    image.write_text(export_svg(mxfile, drawio_url))
+    index.write_index(drawio.parent)
+    return image

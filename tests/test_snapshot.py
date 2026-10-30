@@ -58,11 +58,11 @@ def test_drawio_not_running_exits_2(tmp_path, monkeypatch, capsys):
     d.write_text(XML)
     monkeypatch.setattr(snapshot, "drawio_up", lambda url: False)
     monkeypatch.setattr(snapshot.subprocess, "run", lambda *a, **k: pytest.fail("chrome must not run"))
-    assert snapshot.main([str(d), "-o", str(tmp_path / "out")]) == 2
-    assert "start the local draw.io (localhost:8080) first" in capsys.readouterr().err
+    assert snapshot.main([str(d), "-o", str(tmp_path / "out"), "--drawio-url", "http://localhost:8080"]) == 2
+    assert "no draw.io answers" in capsys.readouterr().err
 
 
-def test_main_writes_full_and_tiles(tmp_path, monkeypatch, capsys):
+def test_main_writes_full_and_tiles(tmp_path, monkeypatch, capsys, bundled_app):
     d = tmp_path / "a.drawio"
     d.write_text(XML)
     out = tmp_path / "out"
@@ -85,6 +85,8 @@ def test_main_writes_full_and_tiles(tmp_path, monkeypatch, capsys):
     assert len(calls) == 5
     assert "--window-size=640,540" in calls[0]
     assert "--force-device-scale-factor=2" in calls[0]
+    assert f"--host-resolver-rules={snapshot.OFFLINE_RULES}" in calls[0]
+    assert calls[0][-1].startswith(bundled_app)
 
 
 def test_find_chrome_missing(monkeypatch):

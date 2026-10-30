@@ -1,0 +1,50 @@
+name: Bump draw.io
+
+on:
+  schedule:
+    - cron: '0 6 1,15 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Look for a newer draw.io release
+        run: uv run python scripts/bump_drawio.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Open a PR and run CI on it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- src/cartographer/drawio_pin.json; then
+            exit 0
+          fi
+          version=$(jq -r .version src/cartographer/drawio_pin.json)
+          sha256=$(jq -r .sha256 src/cartographer/drawio_pin.json)
+          branch="chore/drawio-${version}"
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "branch $branch already exists, skipping"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add src/cartographer/drawio_pin.json
+          git commit -m "chore: bump draw.io to ${version}"
+          git push origin "$branch"
+          gh pr create --base "${{ github.event.repository.default_branch }}" --head "$branch" \
+            --title "chore: bump draw.io to ${version}" \
+            --body "Bumps the pinned draw.io web app to ${version}.
+
+          Release: https://github.com/jgraph/drawio/releases/tag/v${version}
+          sha256: \`${sha256}\`"
+          # A PR opened with GITHUB_TOKEN does not trigger CI, so run it on the branch head by hand.
+          gh workflow run ci.yml --ref "$branch"

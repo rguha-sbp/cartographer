@@ -11,7 +11,7 @@ BANNED = "—–‘’“”"
 def test_versions_agree() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
     plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
-    pins = set(re.findall(r"cartographer@v(\d+\.\d+\.\d+)", SKILL.read_text()))
+    pins = set(re.findall(r"cartographer@v(\d+\.\d+\.\d+)", SKILL.read_text() + (ROOT / "commands" / "view.md").read_text()))
     assert pins == {pyproject} == {plugin["version"]}
 
 

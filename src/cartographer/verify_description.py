@@ -7,6 +7,7 @@ from cartographer.secret_patterns import contains_secret
 from cartographer.verify_shared import (
     SECRET_REASON,
     check_assumptions,
+    check_claims,
     claim_id,
     code_hit,
     edge_name,
@@ -92,6 +93,7 @@ def verify(curated: dict, repo_root: Path) -> tuple[dict, str]:
 
     notes: list[str] = []
     fix_groups(out, notes)
+    check_claims(out, notes, lambda group, evidence: _supported(evidence, repo_root))
     out["assumptions"], bad_assumptions = check_assumptions(curated, ends, kept_edges)
     isolated = [f"{i}: no edge connects it" for i in isolated_ids(out)]
     total = sum(map(len, dropped.values())) + len(bad_assumptions)

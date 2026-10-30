@@ -5,20 +5,34 @@ a solution you describe to Claude. Claude does the curation and, in describe mod
 routing and verification and never calls a model. A diagram is only called ready after a visual review loop in which
 Claude looks at the rendered image, fixes what is wrong and looks again.
 
+## View and edit a diagram
+
+- In Claude Code: `/cartographer:view` (the only diagram) or `/cartographer:view shop-l7`.
+- From the repo root: `cartographer view` or `cartographer view shop-l7` (a path to a .drawio works too).
+
+This serves a pinned draw.io on `127.0.0.1` only while the window is open. Save writes the .drawio and regenerates the
+image. Closing the window stops the server.
+
 ## What you need
 
 - Claude Code.
 - `uv` (`uvx --version` should work).
 - SSH access to `github.com/rguha-sbp/cartographer`.
 - Google Chrome, used headless for images and screenshots.
-- A local draw.io at `http://localhost:8080`. Start it once with the official image:
+- Nothing else. cartographer downloads a pinned draw.io web app once (about 49 MB, into
+  `${XDG_CACHE_HOME:-~/.cache}/cartographer/drawio/<version>/`, checked against a sha256) and serves it on
+  `127.0.0.1` only while a command runs. Diagrams are rendered and edited by that local copy, run with `offline=1`
+  and with Chrome limited to `127.0.0.1`, so they are never sent to a public draw.io host. No Docker.
 
-  ```
-  docker run -d --name drawio -p 8080:8080 jgraph/drawio
-  ```
+## Bundled component (SBOM)
 
-  After a reboot, `docker start drawio`. Diagrams are rendered only by this local instance and are never sent to a
-  public draw.io host.
+| Component | Version | Licence | URL | sha256 |
+|---|---|---|---|---|
+| draw.io web app (`draw.war`) | 32.5.5 | Apache-2.0 | https://github.com/jgraph/drawio/releases/download/v32.5.5/draw.war | `cde0ebd72da197da37d100353e226d5344b08f0fcf7e1b18d1e000a77f9c5f52` |
+
+The pin lives only in `src/cartographer/drawio_pin.json`; update this table to match when it changes. The release must be
+at least 7 days old (the age gate). The `drawio-bump` workflow checks for a newer release on the 1st and 15th of each month
+and opens a PR (`scripts/bump_drawio.py`, or run it by hand with `--dry-run` to preview).
 
 ## Install the plugin
 
@@ -50,7 +64,7 @@ Say: "Help me design a diagram for a new solution." Use it when there is no Terr
 
 1. Interviews you, one question per message, until the gaps (entry points, data stores, integrations, who calls whom)
    are closed.
-2. Draws an early rough version, opens it in your local draw.io and alternates questions and redraws.
+2. Draws an early rough version, opens it in the bundled draw.io editor and alternates questions and redraws.
 3. Runs the same review loop as Terraform mode.
 4. Ends by listing every assumption it made in chat so you can correct them. Assumptions are never shown on the
    diagram.
@@ -69,11 +83,36 @@ Everything goes to `docs/architecture/diagrams/` in your repo:
 Commit all four. Intermediates (facts, schema, screenshots) live in `~/.cache/cartographer/<name>/` and are not
 committed. Claude never commits or pushes for you.
 
+## Nesting on the diagram
+
+An L7 diagram nests AWS Cloud, region, account, VPC, subnet tier and workload:
+
+- A VPC frame carries its address ranges in the title, for example `shop-vpc (10.0.0.0/16)`, but only when the
+  Terraform or you gave them. A CIDR is never guessed.
+- Subnet frames group the services of one tier: public, private or isolated. Availability Zones are not drawn.
+- Workload frames hold the services of one application, so separate workloads read as separate, inside a subnet frame
+  or directly under the account for regional services such as S3.
+
+`cartographer view` opens the diagram in the bundled draw.io editor. To change a diagram, edit it there as below.
+
+## Nesting on the diagram
+
+An L7 diagram nests AWS Cloud, region, account, VPC, subnet tier and workload:
+
+- A VPC frame carries its address ranges in the title, for example `shop-vpc (10.0.0.0/16)`, but only when the
+  Terraform or you gave them. A CIDR is never guessed.
+- Subnet frames group the services of one tier: public, private or isolated. Availability Zones are not drawn.
+- Workload frames hold the services of one application, so separate workloads read as separate, inside a subnet frame
+  or directly under the account for regional services such as S3.
+
+`cartographer view` opens the diagram in the bundled draw.io editor. To change a diagram, edit it there as below.
+
 ## Editing a diagram by hand
 
-1. Open the `.drawio` in the local draw.io (File > Open from > Device).
-2. Edit, then save it back over the file (or export as `.drawio` and overwrite it).
-3. Regenerate the image: `cartographer image docs/architecture/diagrams/<name>.drawio`.
+1. `cartographer view docs/architecture/diagrams/<name>.drawio` opens the editor in your browser. It keeps running
+   until you close the tab (or press Ctrl-C).
+2. Edit, then Save. Save writes the `.drawio` and regenerates its image next to it, so `cartographer check` stays
+   green.
 
 The next time the skill runs it notices the hand edit and asks you whether to keep it, replace it with a fresh
 generation, or write a side file to compare. These map to doing nothing, `build --replace` and `build --side-file`
@@ -86,7 +125,7 @@ Add to `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: git@github.com:rguha-sbp/cartographer
-    rev: v0.2.0
+    rev: v0.3.0
     hooks:
       - id: cartographer-check
 ```
@@ -97,7 +136,7 @@ rendered from a different `.drawio`, for example after a hand edit without `cart
 ## Running the CLI directly
 
 Without the plugin, prefix each command with
-`uvx --from git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0 cartographer`:
+`uvx --from git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0 cartographer`:
 
 | Command | What it does |
 |---|---|
@@ -106,8 +145,8 @@ Without the plugin, prefix each command with
 | `build --name NAME [--replace \| --side-file]` | verify, then write `.drawio`, `.svg` and the folder index |
 | `image FILE.drawio` | regenerate the `.svg` next to a `.drawio` |
 | `check FOLDER` | offline: fail when a `.drawio` has no image or a stale one |
-| `snapshot FILE.drawio -o DIR` | PNG and tiles from the local draw.io, for the visual review |
-| `view FILE.drawio` | open in the local draw.io |
+| `snapshot FILE.drawio -o DIR` | PNG and tiles from the bundled draw.io, for the visual review |
+| `view FILE.drawio` | edit in the bundled draw.io until the tab is closed |
 | `docs interview\|review\|rules` | print the path of a packaged document |
 
 ## Troubleshooting
@@ -120,7 +159,9 @@ Without the plugin, prefix each command with
 | 2 | no facts for a Terraform diagram | run `extract` first |
 | 3 | stale or missing curated file: Terraform changed since curation | curate again |
 | 4 | the `.drawio` was edited by hand, nothing written | keep it, or rerun with `--replace` or `--side-file` |
-| 5 | local draw.io is down or the render failed, nothing written | start draw.io on `localhost:8080`, rerun |
+| 5 | the bundled draw.io could not be downloaded or the render failed, nothing written | read the message (download blocked, sha256 mismatch, Chrome missing), fix it, rerun |
+
+`build`, `image` and `snapshot` accept `--drawio-url` to use your own local draw.io instead.
 
 `check` exits 1 when a `.drawio` has no image or a stale one: run `cartographer image <file.drawio>`.
 
