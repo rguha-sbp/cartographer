@@ -73,15 +73,15 @@ class Captions:
         self.lines += [(i, s) for s in segments(poly)]
 
     def _scorer(self, i: int, near: Rect) -> Callable[[Rect], tuple[int, int, int]]:
-        """Cost of a box inside `near` for edge i's caption: (nodes, titles and other captions it overlaps, things in
-        its clearance, its overlap area with nodes and titles)."""
+        """Cost of a box inside `near` for edge i's caption: (nodes, titles, other captions and lines it overlaps,
+        things in its clearance, its overlap area with nodes and titles)."""
         walls = [r for r in self.walls if overlap(near, r) > 0]
         solid = [*walls, *(r for j, r in self.taken.items() if j != i and overlap(near, r) > 0)]
         lines = [s for j, s in self.lines if j != i and crosses(s, near)]
 
         def cost(box: Rect) -> tuple[int, int, int]:
             zone = inflate(box, CAPTION_CLEAR + SLACK)
-            return (sum(overlap(box, r) > 0 for r in solid),
+            return (sum(overlap(box, r) > 0 for r in solid) + sum(crosses(s, box) for s in lines),
                     sum(overlap(zone, r) > 0 for r in solid) + sum(crosses(s, zone) for s in lines),
                     sum(overlap(box, r) for r in walls))
         return cost

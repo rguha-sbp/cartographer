@@ -134,3 +134,13 @@ def test_a_short_detour_round_an_earlier_line_beats_crossing_it() -> None:
     grid.commit(grid.route((200, 120), 2, (200, 250), grid.blocked([]), 0), 0)
     path = grid.route((100, 200), 0, (300, 200), grid.blocked([]), 1)
     assert not any(grid.xs[x] == 200 and 120 < grid.ys[y] < 250 for x, y in path)
+
+
+def test_a_caption_sits_beside_lines_rather_than_on_one() -> None:
+    lines = [[((x, 0), (x, 200))] for x in (100, 140, 180, 220)]
+    captions = Captions({}, [], lines)
+    poly = [(80, 100), (240, 100)]
+    captions.place(len(lines), poly, "abcd")
+    box = captions.taken[len(lines)]
+    assert not any(crosses(s, box) for ss in lines for s in ss)
+
