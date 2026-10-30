@@ -12,6 +12,7 @@ from cartographer.diagram_model import Box, Diagram, Group, Icon
 from cartographer.tf_check import crowded_captions, stats
 from cartographer.tf_geom import (
     CAPTION_CLEAR,
+    CAPTION_LINE_H,
     GROUP_CLEAR,
     LINE_GAP,
     Rect,
@@ -19,12 +20,13 @@ from cartographer.tf_geom import (
     foreign,
     group_rect,
     groups,
+    inflate,
     leaves,
     polyline,
     rects,
     segments,
 )
-from cartographer.tf_labels import SLACK, STEP
+from cartographer.tf_labels import SLACK, STEP, caption_rect
 from cartographer.tf_route import route
 
 ROUNDS = 3
@@ -94,11 +96,17 @@ Wall = tuple[int, int, int, int]  # (owner edge or -1, position, start, end)
 
 
 def _walls(diagram: Diagram) -> tuple[list[Wall], list[Wall]]:
-    """(vertical, horizontal) walls that cut a line: group borders, node shapes and labels, every edge's segments."""
+    """(vertical, horizontal) walls that cut a line: group borders, node shapes and labels, every edge's segments,
+    and every caption, grown by the room a caption beside it needs."""
     nodes = leaves(diagram)
     fixed = [group_rect(g) for g in groups(diagram)] + [r for n in nodes.values() for r in rects(n)]
     vertical = [(-1, x, r[1], r[3]) for r in fixed for x in (r[0], r[2])]
     horizontal = [(-1, y, r[0], r[2]) for r in fixed for y in (r[1], r[3])]
+    for i, e in enumerate(diagram.edges):
+        if e.label:
+            x0, y0, x1, y1 = inflate(caption_rect(e, nodes), CAPTION_CLEAR + CAPTION_LINE_H // 2)
+            vertical += [(i, x0, y0, y1), (i, x1, y0, y1)]
+            horizontal += [(i, y0, x0, x1), (i, y1, x0, x1)]
     for i, e in enumerate(diagram.edges):
         for (ax, ay), (bx, by) in segments(polyline(e, nodes)):
             if ax == bx:
@@ -108,26 +116,45 @@ def _walls(diagram: Diagram) -> tuple[list[Wall], list[Wall]]:
     return vertical, horizontal
 
 
+def _room(walls: list[Wall], i: int, line: int, lo: int, hi: int) -> list[tuple[int, int]]:
+    """The free runs along a line between lo and hi: cut by every wall but edge i's that crosses it there."""
+    stops = sorted({lo, hi, *(p for o, p, a, b in walls if o != i and a < line < b and lo < p < hi)})
+    return list(pairwise(stops))
+
+
+def _across(walls: list[Wall], i: int, line: int, lo: int, hi: int) -> tuple[int, int] | None:
+    """The nearest walls but edge i's either side of a line, parallel to it along some of lo..hi."""
+    beside = [p for o, p, a, b in walls if o != i and p != line and a < hi and b > lo]
+    before = max((p for p in beside if p < line), default=None)
+    after = min((p for p in beside if p > line), default=None)
+    return None if before is None or after is None else (before, after)
+
+
 def _caption_widenings(diagram: Diagram, crowded: list[int]) -> list[Widening]:
-    """For each crowded caption, widen the longest free run along one of its segments to the caption's length."""
+    """For each crowded caption, the cheapest of its segments to make room on: the free run along it as long as the
+    caption, and the gap across it as wide."""
     nodes = leaves(diagram)
     vertical, horizontal = _walls(diagram)
+    margin = 2 * (CAPTION_CLEAR + SLACK + STEP)
     out: list[Widening] = []
     for i in crowded:
         w, h = caption_size(diagram.edges[i].label)
-        best: Widening | None = None
+        best: list[Widening] | None = None
         route_segs = segments(polyline(diagram.edges[i], nodes))
         for (ax, ay), (bx, by) in route_segs[1:-1] or route_segs:
             along = ay == by
             line, lo, hi = (ay, min(ax, bx), max(ax, bx)) if along else (ax, min(ay, by), max(ay, by))
-            stops = sorted({lo, hi, *(p for o, p, a, b in (vertical if along else horizontal)
-                                      if o != i and a < line < b and lo < p < hi)})
-            need = (w if along else h) + 2 * (CAPTION_CLEAR + SLACK + STEP)
-            for a, b in pairwise(stops):
-                if best is None or need - (b - a) < best.extra:
-                    best = Widening(0 if along else 1, (a + b) // 2, need - (b - a), (a, b))
-        if best:
-            out.append(best)
+            cuts, across = (vertical, horizontal) if along else (horizontal, vertical)
+            a, b = max(_room(cuts, i, line, lo, hi), key=lambda r: r[1] - r[0])
+            need = [Widening(0 if along else 1, (a + b) // 2, (w if along else h) + margin - (b - a), (a, b))]
+            gap = _across(across, i, line, lo, hi)
+            if gap:
+                need.append(Widening(1 if along else 0, sum(gap) // 2, (h if along else w) + margin - (gap[1] - gap[0]),
+                                     gap))
+            need = [c for c in need if c.extra > 0]
+            if best is None or sum(c.extra for c in need) < sum(c.extra for c in best):
+                best = need
+        out += best or []
     return out
 
 
