@@ -35,12 +35,52 @@
             "contains"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "stated": {
+              "description": "A short paraphrase of what the engineer said. Only for source description.",
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "stated"
+          ],
+          "type": "object"
         }
       ]
     }
   },
   "additionalProperties": false,
   "properties": {
+    "assumptions": {
+      "description": "Best guesses for what the engineer did not say. Never drawn. about is a node or external id, or an edge written as src->dst with the ids of its two ends, for example fn->psp.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "about": {
+            "type": "string"
+          },
+          "guess": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "about",
+          "guess"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "drawio_sha256": {
+      "description": "Written by cartographer build; keep it unchanged.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
     "edges": {
       "items": {
         "additionalProperties": false,
@@ -166,7 +206,7 @@
       "type": "array"
     },
     "inputs_sha256": {
-      "description": "The inputs key printed by cartographer extract and prompt, copied exactly.",
+      "description": "Source terraform only: the inputs key printed by cartographer extract and prompt, copied exactly.",
       "pattern": "^[0-9a-f]{64}$",
       "type": "string"
     },
@@ -198,10 +238,10 @@
             "type": "string"
           },
           "tf": {
+            "description": "Terraform resource addresses. At least one for source terraform, empty for source description.",
             "items": {
               "type": "string"
             },
-            "minItems": 1,
             "type": "array"
           }
         },
@@ -218,6 +258,7 @@
       "type": "array"
     },
     "omitted": {
+      "description": "Source terraform only: hints that are not drawn. Leave out for source description.",
       "items": {
         "additionalProperties": false,
         "properties": {
@@ -238,18 +279,32 @@
       },
       "type": "array"
     },
-    "title": {
+    "source": {
+      "description": "terraform: drawn from Terraform facts and code. description: drawn from what an engineer described, no facts file.",
+      "enum": [
+        "terraform",
+        "description"
+      ]
+    },
+    "system": {
+      "description": "Display name of the system, for example GIP. The diagram title is derived from it.",
+      "minLength": 1,
       "type": "string"
+    },
+    "view": {
+      "enum": [
+        "l7"
+      ]
     }
   },
   "required": [
     "edges",
     "externals",
     "groups",
-    "inputs_sha256",
     "nodes",
-    "omitted",
-    "title"
+    "source",
+    "system",
+    "view"
   ],
   "title": "tfdiagram curated architecture",
   "type": "object"

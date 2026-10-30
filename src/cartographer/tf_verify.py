@@ -6,24 +6,20 @@ import sys
 from pathlib import Path
 
 from cartographer.secret_patterns import contains_secret
-from cartographer.tf_blocks import empty_blocks
 from cartographer.tf_hint_check import unaccounted
+from cartographer.verify_shared import (
+    SECRET_REASON,
+    check_assumptions,
+    claim_id,
+    code_hit,
+    fix_groups,
+    isolated_ids,
+    needs_attention,
+    render_report,
+    shape_warnings,
+)
 
-CODE_WINDOW = 3
 HINT_KINDS = ("iam", "trigger", "route")
-SECRET_REASON = "looks like a secret"
-
-
-def _code_hit(repo_root: Path, ev: dict) -> str | None:
-    """None when the citation checks out, else the reason it does not."""
-    path = repo_root / ev["file"]
-    if not path.is_file():
-        return f"file not found: {ev['file']}"
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    lo, hi = max(ev["line"] - 1 - CODE_WINDOW, 0), ev["line"] + CODE_WINDOW
-    if any(ev["contains"] in line for line in lines[lo:hi]):
-        return None
-    return f"{ev['file']}:{ev['line']} does not contain {ev['contains']!r}"
 
 
 def _fact_hit(fact: dict | None, fact_id: str, src_tf: set[str], dst_tf: set[str]) -> str | None:
@@ -42,29 +38,17 @@ def _check_evidence(
 ) -> tuple[list[dict], list[str]]:
     good, why = [], []
     for ev in evidence:
-        reason = (
-            _fact_hit(facts_by_id.get(ev["fact"]), ev["fact"], src_tf, dst_tf)
-            if "fact" in ev
-            else _code_hit(repo_root, ev)
-        )
+        if "fact" in ev:
+            reason = _fact_hit(facts_by_id.get(ev["fact"]), ev["fact"], src_tf, dst_tf)
+        elif "stated" in ev:
+            reason = "stated evidence is for described diagrams"
+        else:
+            reason = code_hit(repo_root, ev)
         if reason is None:
             good.append(ev)
         else:
             why.append(reason)
     return good, why
-
-
-def _fix_groups(curated: dict, notes: list[str]) -> None:
-    ids = {g["id"] for g in curated["groups"]}
-    for g in curated["groups"]:
-        if g["parent"] is not None and g["parent"] not in ids:
-            notes.append(f"group {g['id']}: unknown parent {g['parent']}, moved to top level")
-            g["parent"] = None
-    for item in curated["nodes"]:
-        if item["group"] is not None and item["group"] not in ids:
-            notes.append(f"{item['id']}: unknown group {item['group']}, ungrouped")
-            item["group"] = None
-    notes += [f"group {gid}: no nodes, the layout drops it" for gid in empty_blocks(curated)]
 
 
 def _unshown(
@@ -77,11 +61,6 @@ def _unshown(
         if (kinds is None or f["kind"] in kinds) and a and b and a != b and frozenset((a, b)) not in covered:
             seen.setdefault((a, b, f["kind"]), set()).add(f"{f['id']} {f.get('detail', '')}".strip())
     return [f"{a} -> {b} [{k}] {'; '.join(sorted(d))}" for (a, b, k), d in sorted(seen.items())]
-
-
-def _isolated_ids(diagram: dict) -> list[str]:
-    linked = {end for e in diagram["edges"] for end in (e["src"], e["dst"])}
-    return sorted(i["id"] for i in (*diagram["nodes"], *diagram["externals"]) if i["id"] not in linked)
 
 
 def _isolated_report(ids: list[str], unshown: list[str]) -> list[str]:
@@ -106,27 +85,27 @@ def _mismatches(edges: list[dict], facts_by_id: dict) -> list[str]:
 
 
 def verify(facts: dict, curated: dict, repo_root: Path) -> tuple[dict, str]:
-    from cartographer.diagram_model import AWS_ICONS, BRAND_ICONS, GENERIC_ICONS
-
     addresses = {r["address"] for r in facts["resources"]}
     facts_by_id = {f["id"]: f for f in facts["edges"]}
     out = json.loads(json.dumps(curated))
     notes: list[str] = []
     warnings: list[str] = []
+    seen: set[str] = set()
 
     dropped_nodes, kept_nodes = [], []
     for n in out["nodes"]:
         missing = sorted(set(n["tf"]) - addresses)
         if contains_secret(n):
             dropped_nodes.append(f"{n['id']}: {SECRET_REASON}")
+        elif not n["tf"]:
+            dropped_nodes.append(f"{n['id']}: needs at least one tf address")
         elif missing:
             dropped_nodes.append(f"{n['id']}: unknown tf address {', '.join(missing)}")
+        elif reason := claim_id(seen, n["id"]):
+            dropped_nodes.append(f"{n['id']}: {reason}")
         else:
             kept_nodes.append(n)
-            if n["service"] not in AWS_ICONS and n["service"] != "other":
-                warnings.append(f"{n['id']}: service {n['service']!r} is not a draw.io AWS icon, renders as a box")
-            if n.get("icon", "none") not in (*GENERIC_ICONS, *BRAND_ICONS, "none"):
-                warnings.append(f"{n['id']}: icon {n['icon']!r} is not a draw.io generic or brand shape, renders as a box")
+            warnings += shape_warnings(n)
     out["nodes"] = kept_nodes
 
     dropped_externals, kept_externals = [], []
@@ -134,10 +113,11 @@ def verify(facts: dict, curated: dict, repo_root: Path) -> tuple[dict, str]:
         if contains_secret(x):
             dropped_externals.append(f"{x['id']}: {SECRET_REASON}")
             continue
-        if x.get("icon", "none") not in (*GENERIC_ICONS, *BRAND_ICONS, "none"):
-            warnings.append(f"{x['id']}: icon {x['icon']!r} is not a draw.io generic or brand shape, renders as a box")
+        warnings += shape_warnings(x)
         good, why = _check_evidence(x["evidence"], facts_by_id, repo_root, set(), set())
-        if good:
+        if reason := claim_id(seen, x["id"]):
+            dropped_externals.append(f"{x['id']}: {reason}")
+        elif good:
             kept_externals.append({**x, "evidence": good})
         else:
             dropped_externals.append(f"{x['id']}: " + "; ".join(why or ["no evidence"]))
@@ -161,13 +141,14 @@ def verify(facts: dict, curated: dict, repo_root: Path) -> tuple[dict, str]:
             dropped_edges.append(f"{name}: " + "; ".join(why or ["no evidence"]))
     out["edges"] = kept_edges
 
-    _fix_groups(out, notes)
+    fix_groups(out, notes)
+    out["assumptions"], bad_assumptions = check_assumptions(curated, set(tf_of), kept_edges)
     covered = {frozenset((e["src"], e["dst"])) for e in kept_edges}
     unshown = _unshown(facts, kept_nodes, covered)
-    isolated = _isolated_report(_isolated_ids(out), _unshown(facts, kept_nodes, covered, kinds=None))
+    isolated = _isolated_report(isolated_ids(out), _unshown(facts, kept_nodes, covered, kinds=None))
     mism = _mismatches(kept_edges, facts_by_id)
     ignored = unaccounted(facts.get("hints", []), kept_externals, curated.get("omitted", []))
-    dropped = len(dropped_nodes) + len(dropped_externals) + len(dropped_edges)
+    dropped = len(dropped_nodes) + len(dropped_externals) + len(dropped_edges) + len(bad_assumptions)
     summary = (
         f"verify: nodes {len(kept_nodes)}/{len(curated['nodes'])}, externals {len(kept_externals)}/"
         f"{len(curated['externals'])}, edges {len(kept_edges)}/{len(curated['edges'])}, dropped {dropped}, "
@@ -177,22 +158,14 @@ def verify(facts: dict, curated: dict, repo_root: Path) -> tuple[dict, str]:
         ("Dropped nodes", dropped_nodes),
         ("Dropped externals", dropped_externals),
         ("Dropped edges", dropped_edges),
+        ("Dropped assumptions", bad_assumptions),
         ("Unshown facts (recall hints)", unshown),
         ("Isolated nodes", isolated),
         ("Unaccounted integration hints", ignored),
         ("Code vs IAM mismatches", mism),
         ("Warnings", warnings + notes),
     ]
-    lines = [summary]
-    for title, items in sections:
-        lines += ["", f"{title} ({len(items)})"] + [f"  {i}" for i in sorted(items)]
-    return out, "\n".join(lines) + "\n"
-
-
-def needs_attention(curated: dict, verified: dict) -> bool:
-    """True when verify dropped a node, external or edge, or left a node without a line."""
-    dropped = sum(len(curated[k]) - len(verified[k]) for k in ("nodes", "externals", "edges"))
-    return bool(dropped or _isolated_ids(verified))
+    return out, render_report(summary, sections)
 
 
 def main() -> int:

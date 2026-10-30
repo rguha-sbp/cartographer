@@ -3,16 +3,18 @@
 Python package in `src/cartographer/` (the stage files below live there). Subcommands of `cartographer`:
 
 ```
-cartographer extract INFRA_DIR --stack NAME      facts to $XDG_CACHE_HOME/cartographer/NAME/facts.json
-cartographer prompt --stack NAME                 schema to the cache folder, curation prompt on stdout
-cartographer build --stack NAME                  verify, then docs/architecture/NAME.drawio and .drawio.svg
+cartographer extract INFRA_DIR --name NAME       facts to $XDG_CACHE_HOME/cartographer/NAME/facts.json
+cartographer prompt --name NAME [--describe]     schema to the cache folder, curation or describe prompt on stdout
+cartographer build --name NAME                   verify, then docs/architecture/diagrams/NAME.drawio and .svg
+cartographer image FILE.drawio                   regenerate the .svg next to a .drawio
+cartographer check FOLDER                        fail when a .drawio has no image or a stale one (offline)
 cartographer snapshot FILE -o DIR                PNG and tiles from the local draw.io
 cartographer view FILE                           open in the local draw.io
-cartographer docs review|rules                   path of a packaged document
+cartographer docs interview|review|rules         path of a packaged document
 ```
 
 The curation (stage 2) runs in the user's own Claude session, driven by the plugin skill; the tool never calls a model.
-The committed files are `<stack>.curated.json`, `<stack>.drawio` and `<stack>.drawio.svg`; facts and verify output stay
+The committed files are `<name>.curated.json`, `<name>.drawio`, `<name>.svg` and the folder `README.md` index; facts and verify output stay
 in the cache folder. `build` writes the svg by rendering the diagram in the local draw.io with headless Chrome
 (`svg_export.py`), inlining local images as data URIs and embedding the mxfile in the `content` attribute.
 Output is XML (draw.io), never an image. Coordinates come from a deterministic column grid (pure Python).
@@ -41,7 +43,7 @@ a byte-identical .drawio.
 checks the file format (no `version` attribute, id first and `as` last, 2-space indent, `&#39;`, ports and points on
 every edge, unique vertex ids).
 `gen_drawio.render(diagram)` takes the draw.io page `id` and `name` as required keyword arguments: `build.py`
-passes `<stack>-architecture` and the curated title, `tf_layout.__main__` derives the stack from the input file name.
+passes `<name>-architecture` and the curated title, `tf_layout.__main__` derives the name from the input file name.
 Nothing in the generic modules is specific to one stack.
 
 ## Icons (`aws_icons.json`)

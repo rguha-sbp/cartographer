@@ -1,4 +1,4 @@
-"""Write a .drawio.svg without the draw.io desktop app: render in the local draw.io, keep the diagram svg."""
+"""Render a .drawio to an svg image in the local draw.io, stamped with the sha256 of the .drawio it came from."""
 
 import base64
 import html
@@ -6,14 +6,14 @@ import re
 import subprocess
 import urllib.request
 from collections.abc import Callable
-from pathlib import Path
 from xml.etree import ElementTree
 
-from cartographer import snapshot
+from cartographer import files, snapshot
 
 SVG_NS = "http://www.w3.org/2000/svg"
 XLINK_NS = "http://www.w3.org/1999/xlink"
 XHTML_NS = "http://www.w3.org/1999/xhtml"
+SOURCE_SHA_ATTR = "data-cartographer-source-sha256"
 BACKGROUND = "#ffffff"
 FETCH_TIMEOUT_S = 10
 
@@ -88,12 +88,12 @@ def _px(attrs: str, prop: str) -> int:
     return int(hit[1]) if hit else 0
 
 
-def svg_from_dom(dom: str, mxfile: str, size: tuple[int, int], drawio_url: str, fetch: Fetch) -> str:
+def svg_from_dom(dom: str, source_sha256: str, size: tuple[int, int], drawio_url: str, fetch: Fetch) -> str:
     attrs, inner = _viewer_svg(dom)
     width, height = max(size[0], _px(attrs, "min-width")), max(size[1], _px(attrs, "min-height"))
     root = (
         f'<svg xmlns="{SVG_NS}" xmlns:xlink="{XLINK_NS}" width="{width}px" height="{height}px" '
-        f'viewBox="0 0 {width} {height}" style="background: {BACKGROUND};" content="{html.escape(mxfile)}">'
+        f'viewBox="0 0 {width} {height}" style="background: {BACKGROUND};" {SOURCE_SHA_ATTR}="{source_sha256}">'
     )
     svg = _xml_safe(_inline_images(light_theme(root + inner + "</svg>"), drawio_url, fetch))
     try:
@@ -103,11 +103,12 @@ def svg_from_dom(dom: str, mxfile: str, size: tuple[int, int], drawio_url: str, 
     return svg
 
 
-def export_svg(drawio: Path, drawio_url: str, fetch: Fetch = fetch_url) -> str:
-    mxfile = drawio.read_text()
+def export_svg(mxfile: str, drawio_url: str, fetch: Fetch = fetch_url) -> str:
+    if not snapshot.drawio_up(drawio_url):
+        raise SvgError(snapshot.DRAWIO_DOWN)
     size = snapshot.window_size(mxfile)
     cmd = snapshot.headless_cmd(snapshot.find_chrome(), size, "--dump-dom", snapshot.viewer_url(drawio_url, mxfile))
     proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if proc.returncode != 0:
         raise SvgError(f"Chrome failed: {proc.stderr.strip()[-300:]}")
-    return svg_from_dom(proc.stdout, mxfile, size, drawio_url, fetch)
+    return svg_from_dom(proc.stdout, files.sha256_text(mxfile), size, drawio_url, fetch)

@@ -11,7 +11,7 @@ def _hints() -> dict[tuple[str, str], dict]:
 
 
 def _curated(externals: list[dict], omitted: list[dict]) -> dict:
-    return {"title": "t", "groups": [], "nodes": [], "externals": externals, "edges": [], "omitted": omitted}
+    return {"source": "terraform", "title": "t", "groups": [], "nodes": [], "externals": externals, "edges": [], "omitted": omitted}
 
 
 def _unaccounted(curated: dict) -> str:
