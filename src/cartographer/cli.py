@@ -9,7 +9,7 @@ from cartographer import build, drift, files, index, snapshot, svg_export, tf_ex
 from cartographer.workdir import cache_dir, write_json
 
 HERE = Path(__file__).parent
-DOCS = {"review": HERE / "REVIEW.md", "rules": HERE / "RULES.md"}
+DOCS = {"review": HERE / "REVIEW.md", "rules": HERE / "RULES.md", "interview": HERE / "INTERVIEW.md"}
 EXIT_NO_FACTS = 2
 
 
@@ -24,14 +24,18 @@ def _extract(args: argparse.Namespace) -> int:
 
 def _prompt(args: argparse.Namespace) -> int:
     cache = cache_dir(args.name)
+    repo = args.repo.resolve()
+    output = repo / "docs" / "architecture" / "diagrams" / f"{args.name}.curated.json"
+    schema_path = cache / "curated.schema.json"
+    if args.describe:
+        schema_path.write_text(tfdiagram.schema_text())
+        print(tfdiagram.render_describe_prompt(schema_path, output, DOCS["interview"]))
+        return 0
     facts_path = cache / "facts.json"
     if not facts_path.is_file():
         print(f"no facts for diagram {args.name}: run `cartographer extract` first", file=sys.stderr)
         return EXIT_NO_FACTS
-    repo = args.repo.resolve()
-    schema_path = cache / "curated.schema.json"
     schema_path.write_text(tfdiagram.schema_text())
-    output = repo / "docs" / "architecture" / "diagrams" / f"{args.name}.curated.json"
     print(tfdiagram.render_prompt(facts_path, repo, schema_path, output, tfdiagram.inputs_sha256(facts_path)))
     return 0
 
@@ -79,7 +83,8 @@ def _parser() -> argparse.ArgumentParser:
 
     p = command("extract", _extract, "read the Terraform and cache its facts")
     p.add_argument("infra_dir", type=Path, help="Terraform folder, relative to --repo")
-    command("prompt", _prompt, "print the curation prompt for the cached facts")
+    p = command("prompt", _prompt, "print the curation prompt for the cached facts, or the describe prompt")
+    p.add_argument("--describe", action="store_true", help="describe a new solution: no facts needed")
     build.add_arguments(command("build", build.run, "verify the curated file and write the diagram"))
     p = command("snapshot", snapshot.run, "screenshot a .drawio file in the local draw.io", named=False)
     snapshot.add_arguments(p)
@@ -91,7 +96,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--drawio-url", default=snapshot.DRAWIO_URL, help="local draw.io; never a public host")
     p = command("check", drift.run, "fail when a .drawio has no image or a stale one (offline)", named=False)
     p.add_argument("folder", type=Path, help="diagrams folder, searched recursively")
-    p = command("docs", _docs, "print the path of a packaged document", named=False)
+    p = command("docs", _docs, "print the path of a packaged document (review, rules, interview)", named=False)
     p.add_argument("name", choices=sorted(DOCS))
     return ap
 

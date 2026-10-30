@@ -25,6 +25,7 @@ def _curated(facts: dict, key: str) -> dict:
     fact = next(e["id"] for e in facts["edges"] if e["kind"] == "iam")
     node = {"group": None, "service": "other", "multi": False}
     return {
+        "source": "terraform",
         "inputs_sha256": key,
         "system": "Mini",
         "view": "l7",
