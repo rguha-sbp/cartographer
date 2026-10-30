@@ -132,3 +132,13 @@ def test_palette_goes_to_outermost_workloads_only() -> None:
 def test_vpc_and_subnet_frames_use_the_aws_colour_not_a_palette_stroke() -> None:
     diagram = tf_layout.layout(_shop())
     assert all(g.stroke == GREY for g in diagram.nodes if getattr(g, "kind", None) in ("vpc", "subnet"))
+
+
+def test_a_workload_split_across_frames_shares_one_colour() -> None:
+    curated = _shop()
+    curated["groups"].append(_group("orders-s3", "Orders", None, "acct", column=2))
+    curated["nodes"].append(_node("archive", "Archive bucket", "s3", "orders-s3"))
+    colours = Colours(curated)
+    assert colours.group("orders-s3") == colours.group("orders")
+    assert colours.node("archive") == colours.node("db")
+    assert len({colours.group(g) for g in ("store", "orders", "media")}) == 3

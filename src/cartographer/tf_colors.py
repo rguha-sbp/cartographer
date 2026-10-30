@@ -16,10 +16,11 @@ class Colours:
 
     def __init__(self, curated: dict[str, Any]) -> None:
         groups = {g["id"]: g for g in curated["groups"]}
-        order = sorted((g for g in groups.values() if g["kind"] is None
+        outer = sorted((g for g in groups.values() if g["kind"] is None
                         and (g["parent"] is None or groups[g["parent"]]["kind"] in CONTAINERS)),
                        key=lambda g: g["column"])
-        self._group = {g["id"]: PALETTE[i % len(PALETTE)] for i, g in enumerate(order)}
+        order = list(dict.fromkeys(g["label"] for g in outer))
+        self._group = {g["id"]: PALETTE[order.index(g["label"]) % len(PALETTE)] for g in outer}
         for gid, g in groups.items():
             if g["kind"] is None and gid not in self._group:
                 self._group[gid] = self._group[self._top(groups, gid)]
