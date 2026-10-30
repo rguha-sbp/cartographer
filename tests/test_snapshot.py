@@ -136,6 +136,7 @@ def test_find_chrome_path_names(monkeypatch, name):
 
 def test_find_chrome_prefers_install_path_over_path(monkeypatch):
     _no_chrome_anywhere(monkeypatch)
-    monkeypatch.setattr(snapshot.Path, "exists", lambda self: str(self) == snapshot.CHROME_MAC)
+    mac = Path(snapshot.CHROME_MAC)
+    monkeypatch.setattr(snapshot.Path, "exists", lambda self: self == mac)
     monkeypatch.setattr(snapshot.shutil, "which", lambda n: "/usr/bin/chromium")
-    assert snapshot.find_chrome() == snapshot.CHROME_MAC
+    assert snapshot.find_chrome() == str(mac)
