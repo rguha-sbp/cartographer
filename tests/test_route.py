@@ -4,7 +4,7 @@ from cartographer import gen_drawio, tf_layout
 from cartographer.diagram_model import Diagram, Edge, Group, Icon, Legend, Title
 from cartographer.tf_check import measure
 from cartographer.tf_geom import GLYPH_W, ICON_LINE_H, crosses, groups, leaves, polyline, segments, title_rect
-from cartographer.tf_grid import Grid
+from cartographer.tf_grid import MIXED, Grid
 from cartographer.tf_labels import Captions
 from cartographer.tf_read import read
 from cartographer.tf_route import route
@@ -152,3 +152,11 @@ def test_a_route_goes_round_a_caption_when_the_detour_is_short() -> None:
     path = grid.route((100, 200), 0, (300, 200), grid.blocked([]), 0)
     points = [(grid.xs[x], grid.ys[y]) for x, y in path]
     assert not any(crosses(s, zone) for s in segments(points))
+
+
+def test_every_segment_reaching_into_a_stub_ends_line_gap_is_closed() -> None:
+    port, stub_end = (458, 498), (458, 484)
+    grid = Grid([(445, 498, 471, 558)], [], [], [port, stub_end])
+    grid.reserve(port, stub_end, 0)
+    row = grid.yi[484] * len(grid.xs)
+    assert all(grid.owner[0][row + k] == MIXED for k in (grid.xi[445], grid.xi[458]))

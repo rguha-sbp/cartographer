@@ -177,7 +177,7 @@ class Grid:
         lines, at = (self.ys, b[1]) if across else (self.xs, b[0])
         line = self.xi[b[0]] if across else self.yi[b[1]]
         size = len(self.ys) if across else len(self.xs)
-        for k in range(bisect_left(lines, at - LINE_GAP), bisect_right(lines, at + LINE_GAP) - 1):
+        for k in range(max(bisect_right(lines, at - LINE_GAP) - 1, 0), bisect_left(lines, at + LINE_GAP)):
             self.owner[across][line * size + k] = MIXED
         (x0, y0), (x1, y1) = sorted((a, b))
         if y0 == y1:
