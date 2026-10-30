@@ -198,7 +198,7 @@ def test_build_defaults_curated_to_the_out_folder(tmp_path: Path, capsys, render
     assert cli.main(["build", "--name", "mini", "--repo", str(FIXTURES), "--out", str(out)]) == 0
 
 
-def test_view_opens_the_local_viewer(tmp_path: Path, monkeypatch) -> None:
+def test_view_opens_the_local_viewer(tmp_path: Path, monkeypatch, capsys) -> None:
     opened = []
     monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
     monkeypatch.setattr(cli.webbrowser, "open", opened.append)
@@ -206,6 +206,9 @@ def test_view_opens_the_local_viewer(tmp_path: Path, monkeypatch) -> None:
     drawio.write_text("<mxfile/>")
     assert cli.main(["view", str(drawio)]) == 0
     assert opened[0].startswith("http://localhost:8080/?") and "#R" in opened[0]
+    assert capsys.readouterr().out.strip() == cli.VIEW_NOTE
+    assert cli.VIEW_NOTE == ("Read-only view. To edit, open the .drawio in your local draw.io (never a public host) "
+                             "and run `cartographer image` after.")
 
 
 def test_view_refuses_anything_but_a_drawio(tmp_path: Path, capsys) -> None:

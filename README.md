@@ -69,6 +69,32 @@ Everything goes to `docs/architecture/diagrams/` in your repo:
 Commit all four. Intermediates (facts, schema, screenshots) live in `~/.cache/cartographer/<name>/` and are not
 committed. Claude never commits or pushes for you.
 
+## Nesting on the diagram
+
+An L7 diagram nests AWS Cloud, region, account, VPC, subnet tier and workload:
+
+- A VPC frame carries its address ranges in the title, for example `shop-vpc (10.0.0.0/16)`, but only when the
+  Terraform or you gave them. A CIDR is never guessed.
+- Subnet frames group the services of one tier: public, private or isolated. Availability Zones are not drawn.
+- Workload frames hold the services of one application, so separate workloads read as separate, inside a subnet frame
+  or directly under the account for regional services such as S3.
+
+`cartographer view` is read-only: it opens the diagram in the local draw.io for looking. To change a diagram, edit
+the `.drawio` as below and run `cartographer image` after.
+
+## Nesting on the diagram
+
+An L7 diagram nests AWS Cloud, region, account, VPC, subnet tier and workload:
+
+- A VPC frame carries its address ranges in the title, for example `shop-vpc (10.0.0.0/16)`, but only when the
+  Terraform or you gave them. A CIDR is never guessed.
+- Subnet frames group the services of one tier: public, private or isolated. Availability Zones are not drawn.
+- Workload frames hold the services of one application, so separate workloads read as separate, inside a subnet frame
+  or directly under the account for regional services such as S3.
+
+`cartographer view` is read-only: it opens the diagram in the local draw.io for looking. To change a diagram, edit
+the `.drawio` as below and run `cartographer image` after.
+
 ## Editing a diagram by hand
 
 1. Open the `.drawio` in the local draw.io (File > Open from > Device).
@@ -86,7 +112,7 @@ Add to `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: git@github.com:rguha-sbp/cartographer
-    rev: v0.2.0
+    rev: v0.3.0
     hooks:
       - id: cartographer-check
 ```
@@ -97,7 +123,7 @@ rendered from a different `.drawio`, for example after a hand edit without `cart
 ## Running the CLI directly
 
 Without the plugin, prefix each command with
-`uvx --from git+ssh://git@github.com/rguha-sbp/cartographer@v0.2.0 cartographer`:
+`uvx --from git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0 cartographer`:
 
 | Command | What it does |
 |---|---|
@@ -107,7 +133,7 @@ Without the plugin, prefix each command with
 | `image FILE.drawio` | regenerate the `.svg` next to a `.drawio` |
 | `check FOLDER` | offline: fail when a `.drawio` has no image or a stale one |
 | `snapshot FILE.drawio -o DIR` | PNG and tiles from the local draw.io, for the visual review |
-| `view FILE.drawio` | open in the local draw.io |
+| `view FILE.drawio` | open read-only in the local draw.io |
 | `docs interview\|review\|rules` | print the path of a packaged document |
 
 ## Troubleshooting

@@ -15,9 +15,21 @@ Fields for a described diagram
 - Every node has `"tf": []`. A node is an AWS service the engineer named or that the described flow clearly needs;
   `service` is its draw.io AWS icon name. A named non-AWS system is an external with an `icon`.
 - Groups: always nest the AWS nodes in frames, one group of kind `cloud` (AWS Cloud), inside it `region`, inside it
-  `account`, plus a `vpc` group for what runs in a VPC. Role groups (for example "Edge", "Data stores") have `parent`
-  set to the account or the VPC. If the engineer did not name the region or account, label them with your best guess
-  and record it in `assumptions`. Users and third-party systems are externals and sit outside the frames.
+  `account`. Users and third-party systems are externals and sit outside the frames. If the engineer did not name the
+  region or account, label them with your best guess and record it in `assumptions`.
+- VPC and subnets: a `vpc` group (parent the account) holds what runs in a VPC. Inside it, one `subnet` group per
+  tier that holds a node, with `tier` `public`, `private` or `isolated` and the label "Public subnets", "Private
+  subnets" or "Isolated subnets". Never draw Availability Zones. Only VPC-attached services go in a subnet group;
+  regional services (S3, DynamoDB, Bedrock, SQS) sit under the account.
+- Tier: from what the engineer said. When they did not say: load balancers public, compute and data private. Record
+  each such default in `assumptions`; the tier is never marked on the diagram. A subnet group's `evidence` is a
+  `stated` item when the engineer named the tier.
+- CIDR: set `cidrs` on the `vpc` group only when the engineer stated the address range, with a `stated` or `file`
+  item in the group's `evidence`. Never guess or invent an address range; leave `cidrs` out instead.
+- Workloads: role groups (`kind` null, for example "Storefront" or "Orders") are the application or service
+  boundaries the engineer named. Each has `parent` set to the subnet group where its VPC-attached services run, or to
+  the account for its regional services. A workload that has both gets one frame in each place, with the same label.
+  Without a workload split, use plain role groups ("Edge", "Data stores") under the same parents.
 - Label: short name, a newline, then a 2 to 4 word role. Plain ASCII, no em dashes, en dashes or smart quotes.
 
 Evidence
@@ -39,5 +51,6 @@ Best guesses
   chat at the end so they can correct them.
 - A guess still needs evidence on its edge: a `stated` item for the nearest thing the engineer did say.
 
-Every node and external needs at least one edge, and every group must hold a node. Before each write, re-check: ids
+Every node and external needs at least one edge, and every group must hold a node. Do not nest a frame around a
+single node just because the model allows it. Before each write, re-check: ids
 are unique, every edge endpoint exists, and no text looks like a secret.

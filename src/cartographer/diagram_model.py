@@ -39,7 +39,7 @@ L, R, T, B = (0, 0.5), (1, 0.5), (0.5, 0), (0.5, 1)
 
 Port = tuple[float, float]
 Point = tuple[int, int]
-Kind = Literal["cloud", "region", "account", "vpc"]
+Kind = Literal["cloud", "region", "account", "vpc", "subnet"]
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,7 @@ class Group:
     h: int
     parent: str | None = None
     kind: Kind | None = None
+    tier: str | None = None
     fill: str = "none"
     stroke: str = GREY
 

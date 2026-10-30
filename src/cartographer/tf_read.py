@@ -8,7 +8,7 @@ from cartographer.diagram_model import Box, Diagram, Edge, Group, Icon, Legend, 
 from cartographer.gen_drawio import GROUP_STYLES
 
 SKIP = {"title", "legend"}
-KINDS = {f"mxgraph.aws4.{style.split(';')[0]}": kind for kind, style in GROUP_STYLES.items()}
+KINDS = {f"mxgraph.aws4.{style.split(';')[0]}": key.split("-")[0] for key, style in GROUP_STYLES.items()}
 
 
 def _text(value: str) -> str:

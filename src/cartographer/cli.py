@@ -11,6 +11,8 @@ from cartographer.workdir import cache_dir, write_json
 HERE = Path(__file__).parent
 DOCS = {"review": HERE / "REVIEW.md", "rules": HERE / "RULES.md", "interview": HERE / "INTERVIEW.md"}
 EXIT_NO_FACTS = 2
+VIEW_NOTE = ("Read-only view. To edit, open the .drawio in your local draw.io (never a public host) "
+             "and run `cartographer image` after.")
 
 
 def _extract(args: argparse.Namespace) -> int:
@@ -49,6 +51,7 @@ def _view(args: argparse.Namespace) -> int:
         print(snapshot.DRAWIO_DOWN, file=sys.stderr)
         return 2
     webbrowser.open(snapshot.viewer_url(url, args.file.read_text()))
+    print(VIEW_NOTE)
     return 0
 
 

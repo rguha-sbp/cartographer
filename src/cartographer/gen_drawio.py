@@ -27,6 +27,9 @@ GROUP_STYLES = {
     "region": "group_region;strokeColor=#00A4A6;fillColor=none;fontColor=#147EBA;dashed=1",
     "account": "group_account;strokeColor=#CD2264;fillColor=none;fontColor=#CD2264;dashed=0",
     "vpc": "group_vpc2;strokeColor=#8C4FFF;fillColor=none;fontColor=#AAB7B8;dashed=0",
+    "subnet-public": "group_security_group;strokeColor=#7AA116;fillColor=none;fontColor=#248814;dashed=0",
+    "subnet-private": "group_security_group;strokeColor=#00A4A6;fillColor=none;fontColor=#147EBA;dashed=0",
+    "subnet-isolated": "group_security_group;strokeColor=#00A4A6;fillColor=none;fontColor=#147EBA;dashed=1",
 }
 
 TITLE_STYLE = "text;html=1;align=left;verticalAlign=top;fontSize=18;fontStyle=1;fontColor=#232F3E;whiteSpace=wrap;"
@@ -55,10 +58,11 @@ def _port(kind: str, p: Port | None, off: Point, exact: bool) -> str:
 
 def _group_style(g: Group) -> str:
     if g.kind:
+        key = f"subnet-{g.tier}" if g.kind == "subnet" else g.kind
         return (f"points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],"
                 f"[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;"
                 f"fontSize=12;fontStyle=1;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;"
-                f"shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.{GROUP_STYLES[g.kind]};verticalAlign=top;align=left;"
+                f"shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.{GROUP_STYLES[key]};verticalAlign=top;align=left;"
                 f"spacingLeft={FRAME_TITLE_LEFT};")
     return (f"rounded=0;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;fillColor={g.fill};"
             f"strokeColor={g.stroke};dashed=1;verticalAlign=top;align=left;spacingLeft={GROUP_TITLE_LEFT};fontSize=12;fontStyle=1;"

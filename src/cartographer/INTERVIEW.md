@@ -37,6 +37,11 @@ current diagram against it:
   matters.
 - Entry points: who or what calls into the system, and through what.
 - Where data lives: every store and what it holds.
+- Workloads: how the solution splits into applications or services (one targeted question, with your recommended
+  split). Each workload becomes its own frame, so separate workloads read as separate.
+- Network placement: which services run in a VPC and in which subnet tier (public, private, isolated). When the
+  engineer does not say, default to load balancers public, compute and data private, and record each default in
+  `assumptions`. Ask for a CIDR only if the engineer brings one up; draw a CIDR only when stated, never guess one.
 - Outside AWS: third-party and on-premises systems, and the account and VPC boundaries.
 - Identity and auth: how callers and services prove who they are.
 

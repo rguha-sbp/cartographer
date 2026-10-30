@@ -3,7 +3,7 @@
 import math
 from typing import Any
 
-from cartographer.diagram_model import BOX_H, BOX_W, ICON, Box, Group, Icon, has_icon
+from cartographer.diagram_model import BOX_H, BOX_W, GREY, ICON, Box, Group, Icon, has_icon
 from cartographer.tf_colors import FRAMES, Colours
 from cartographer.tf_geom import GROUP_CLEAR, LINE_GAP, NODE_CLEAR, label_size
 
@@ -51,6 +51,11 @@ def _grid(nodes: list[dict[str, Any]], cols: int) -> Size:
     return min(len(nodes), cols) * _cell_w(nodes), math.ceil(len(nodes) / cols) * CELL_H
 
 
+def group_label(g: dict[str, Any]) -> str:
+    """A group's title: a VPC also names its address ranges."""
+    return f"{g['label']} ({', '.join(g['cidrs'])})" if g.get("cidrs") else g["label"]
+
+
 def _label(n: dict[str, Any]) -> str:
     return n["label"] + (" (x N)" if n.get("multi") else "")
 
@@ -78,7 +83,7 @@ class Blocks:
         own = self.nodes.get(bid, [])
         grid_w, grid_h = _grid(own, self.cols) if own else (0, 0)
         stacked = [h for _, h in kids] + ([grid_h] if own else [])
-        label_w = LABEL_CHAR_W * len(self.groups[bid]["label"]) + LABEL_PAD
+        label_w = LABEL_CHAR_W * len(group_label(self.groups[bid])) + LABEL_PAD
         return (max(max([grid_w, *(w for w, _ in kids)]) + 2 * GROUP_PAD_X, label_w),
                 GROUP_PAD_TOP + sum(stacked) + GAP * (len(stacked) - 1) + GROUP_PAD_X)
 
@@ -96,7 +101,8 @@ class Blocks:
         """Place a block at (x, y) with width w; return its height."""
         g = self.groups[bid]
         _, h = self.measure(bid)
-        self.out_groups.append(Group(bid, g["label"], x, y, w, h, g["parent"], g["kind"], stroke=self.colours.group(bid)))
+        self.out_groups.append(Group(bid, group_label(g), x, y, w, h, g["parent"], g["kind"], g.get("tier"),
+                                     stroke=self.colours.group(bid) or GREY))
         top = y + GROUP_PAD_TOP
         for c in self.children[bid]:
             top += self.place(c, x + GROUP_PAD_X, top, self.measure(c)[0]) + GAP
