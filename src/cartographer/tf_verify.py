@@ -7,6 +7,7 @@ from pathlib import Path
 
 from cartographer.secret_patterns import contains_secret
 from cartographer.tf_hint_check import unaccounted
+from cartographer.tf_network_check import check_network
 from cartographer.verify_shared import (
     SECRET_REASON,
     check_assumptions,
@@ -25,6 +26,8 @@ HINT_KINDS = ("iam", "trigger", "route")
 def _fact_hit(fact: dict | None, fact_id: str, src_tf: set[str], dst_tf: set[str]) -> str | None:
     if fact is None:
         return f"unknown fact {fact_id}"
+    if "src" not in fact:
+        return f"fact {fact_id} is not an edge fact"
     ends = {fact["src"], fact["dst"]}
     if src_tf and dst_tf:
         ok = (fact["src"] in src_tf and fact["dst"] in dst_tf) or (fact["src"] in dst_tf and fact["dst"] in src_tf)
@@ -86,7 +89,7 @@ def _mismatches(edges: list[dict], facts_by_id: dict) -> list[str]:
 
 def verify(facts: dict, curated: dict, repo_root: Path) -> tuple[dict, str]:
     addresses = {r["address"] for r in facts["resources"]}
-    facts_by_id = {f["id"]: f for f in facts["edges"]}
+    facts_by_id = {f["id"]: f for key in ("edges", "vpcs", "placements") for f in facts.get(key, [])}
     out = json.loads(json.dumps(curated))
     notes: list[str] = []
     warnings: list[str] = []
@@ -142,6 +145,7 @@ def verify(facts: dict, curated: dict, repo_root: Path) -> tuple[dict, str]:
     out["edges"] = kept_edges
 
     fix_groups(out, notes)
+    check_network(out, facts, facts_by_id, repo_root, notes)
     out["assumptions"], bad_assumptions = check_assumptions(curated, set(tf_of), kept_edges)
     covered = {frozenset((e["src"], e["dst"])) for e in kept_edges}
     unshown = _unshown(facts, kept_nodes, covered)

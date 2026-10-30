@@ -51,13 +51,24 @@ Step 3: produce the curated JSON
 - Groups: organise by architectural role, for example edge, identity, APIs, triggers, data, AI services, VPC.
   Nest them inside frames: one group of kind `cloud` (AWS Cloud), inside it `region`, inside it
   `account`; the role groups have `parent` set to the account (or to a `vpc` group when they sit in the VPC).
-  Use kind `vpc` for the VPC frame. Role groups use kind null. Every group id is unique; parents must exist.
+  Use kind `vpc` for the VPC frame and kind `subnet` for a subnet tier frame. Role groups use kind null. Every group id is unique; parents must exist.
   Every group has an integer `column` (0 to 3) that places role groups left to right in request order, for example
   0 = entry (DNS, CDN, WAF, load balancers, identity, event sources), 1 = APIs and front compute (Lambda, containers,
   agent runtimes such as AgentCore), 2 = data stores, queues and pipelines, 3 = back-end services, ML or analytics,
   and shared platform services. Use up to 4 columns (0 to 3). Balance the columns so none is much taller than the others,
   and order groups top to bottom within a column in list order. Frames (cloud, region, account) set column 0, and
   it is ignored. A group nested in another role group or in a vpc group gets its parent's column.
+- Network nesting: facts.json has `vpcs` (id like v1, name, cidrs, remote) and `placements` (id like p1, a resource,
+  its vpc fact id and tier public, private or isolated). Put each VPC-attached node in a `subnet` group with that
+  `tier`, whose parent is its `vpc` group (one subnet group per tier that holds a node, label "Public subnets",
+  "Private subnets" or "Isolated subnets"). The subnet group cites a placement fact of that tier in `evidence`, and
+  a node stays in it only when a placement fact of that tier exists for one of its `tf` addresses. Give a `vpc` group
+  `cidrs` only copied from a `vpcs` fact (the same list), and cite that fact in the group's `evidence`; with no
+  cidrs in the fact, leave `cidrs` out. A vpc group that comes from a remote fact is named after it, without cidrs.
+- Workloads: propose role groups (kind null) from the Terraform module or root a resource lives in, named for what
+  the workload does ("Order processing", not the module name). A workload that has VPC-attached nodes sits inside
+  the subnet group of their tier. Regional services (S3, DynamoDB, SQS, Bedrock) have no subnet: put them in a
+  workload group directly under the account. A workload spanning both gets one group per place with the same label.
 - Labels: short name, then a newline, then a 2 to 4 word role, for example "sessions API\nchat history".
   Plain ASCII only. No em dashes, en dashes, or smart quotes. Use a comma or colon instead.
 - Title: one line naming the system and "AWS architecture".
