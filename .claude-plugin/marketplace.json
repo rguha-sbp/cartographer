@@ -1,0 +1,13 @@
+{
+  "name": "cartographer",
+  "owner": {
+    "name": "Rakesh Guha"
+  },
+  "plugins": [
+    {
+      "name": "cartographer",
+      "source": "./",
+      "description": "Terraform folder to a verified AWS architecture diagram, curated in your own Claude session."
+    }
+  ]
+}

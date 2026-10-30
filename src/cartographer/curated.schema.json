@@ -1,0 +1,256 @@
+{
+  "$defs": {
+    "evidence": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fact": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "fact"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contains": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            },
+            "line": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "file",
+            "line",
+            "contains"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "edges": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "dashed": {
+            "type": "boolean"
+          },
+          "dst": {
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/$defs/evidence"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "flow": {
+            "enum": [
+              "web",
+              "trigger",
+              "runtime",
+              "credential",
+              "data"
+            ]
+          },
+          "label": {
+            "description": "A specific verb plus protocol, at most 28 characters",
+            "maxLength": 28,
+            "type": "string"
+          },
+          "src": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "src",
+          "dst",
+          "label",
+          "flow",
+          "dashed",
+          "evidence"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "externals": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "items": {
+              "$ref": "#/$defs/evidence"
+            },
+            "type": "array"
+          },
+          "icon": {
+            "description": "draw.io generic icon shape, brand logo or none. The enum is injected at run time by tfdiagram.py from generic_icons.json and brand_icons.json.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "service": {
+            "description": "draw.io AWS icon name for an AWS managed service the stack calls but Terraform does not create. The enum is injected at run time by tfdiagram.py from aws_icons.json. Leave unset for third-party systems.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "icon",
+          "evidence"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "groups": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "maximum": 3,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "cloud",
+              "region",
+              "account",
+              "vpc",
+              null
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "parent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "parent",
+          "column"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "inputs_sha256": {
+      "description": "The inputs key printed by cartographer extract and prompt, copied exactly.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "nodes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "group": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "icon": {
+            "description": "For a non-AWS node (service other): the draw.io generic icon shape or brand logo it is drawn as. Same enum as the external icon, injected at run time by tfdiagram.py. Leave unset for AWS resources.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "multi": {
+            "type": "boolean"
+          },
+          "service": {
+            "description": "draw.io AWS icon name or other. The enum is injected at run time by tfdiagram.py from aws_icons.json.",
+            "type": "string"
+          },
+          "tf": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "service",
+          "group",
+          "tf",
+          "multi"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "omitted": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "hint": {
+            "description": "A hint id or value from facts.json hints that is not an external system",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 80,
+            "type": "string"
+          }
+        },
+        "required": [
+          "hint",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "title": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "edges",
+    "externals",
+    "groups",
+    "inputs_sha256",
+    "nodes",
+    "omitted",
+    "title"
+  ],
+  "title": "tfdiagram curated architecture",
+  "type": "object"
+}

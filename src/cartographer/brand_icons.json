@@ -1,0 +1,8 @@
+{
+  "atlassian": "image;image=img/lib/atlassian/Atlassian_Logo.svg;html=1;verticalLabelPosition=bottom;verticalAlign=top;labelBackgroundColor=#ffffff;",
+  "confluence": "image;image=img/lib/atlassian/Confluence_Logo.svg;html=1;verticalLabelPosition=bottom;verticalAlign=top;labelBackgroundColor=#ffffff;",
+  "github": "shape=mxgraph.webicons.github;gradientColor=#DFDEDE;dashed=0;outlineConnect=0;html=1;align=center;labelPosition=center;verticalLabelPosition=bottom;verticalAlign=top;",
+  "jira": "image;image=img/lib/atlassian/Jira_Logo.svg;html=1;verticalLabelPosition=bottom;verticalAlign=top;labelBackgroundColor=#ffffff;",
+  "okta": "shape=mxgraph.citrix2.authentication_okta;sketch=0;aspect=fixed;html=1;verticalLabelPosition=bottom;verticalAlign=top;strokeColor=none;fillColor=#000000;align=center;outlineConnect=0;pointerEvents=1;",
+  "statuspage": "image;image=img/lib/atlassian/Statuspage_Logo.svg;html=1;verticalLabelPosition=bottom;verticalAlign=top;labelBackgroundColor=#ffffff;"
+}
