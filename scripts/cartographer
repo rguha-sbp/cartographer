@@ -1,0 +1,7 @@
+#!/bin/sh
+# Plugin launcher: cartographer DATA_DIR ARGS... Keeps every download and cache inside DATA_DIR.
+data="$1"; shift
+command -v uvx >/dev/null 2>&1 || { echo "cartographer: uvx not found, install uv: https://docs.astral.sh/uv/getting-started/installation/" >&2; exit 127; }
+root="$(cd "$(dirname "$0")/.." && pwd)"
+export CARTOGRAPHER_HOME="$data" UV_CACHE_DIR="$data/uv" UV_PYTHON_INSTALL_DIR="$data/python"
+exec uvx --from "$root" cartographer "$@"

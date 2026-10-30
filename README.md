@@ -16,13 +16,40 @@ image. Closing the window stops the server.
 ## What you need
 
 - Claude Code.
-- `uv` (`uvx --version` should work).
-- SSH access to `github.com/rguha-sbp/cartographer`.
+- `uv` (`uv --version` should work). No git, no SSH key and no Python install are needed.
 - Google Chrome, used headless for images and screenshots.
-- Nothing else. cartographer downloads a pinned draw.io web app once (about 49 MB, into
-  `${XDG_CACHE_HOME:-~/.cache}/cartographer/drawio/<version>/`, checked against a sha256) and serves it on
-  `127.0.0.1` only while a command runs. Diagrams are rendered and edited by that local copy, run with `offline=1`
-  and the local server's Content Security Policy limits the page to `127.0.0.1`, so they are never sent to a public draw.io host. No Docker.
+
+## What gets installed
+
+Diagrams are rendered and edited by a pinned draw.io web app run with `offline=1`. A local server on `127.0.0.1`
+serves it only while a command runs, and its Content Security Policy limits the page to `127.0.0.1`, so diagrams are
+never sent to a public draw.io host. No Docker.
+
+### With the plugin
+
+On the first command, cartographer downloads:
+
+- Its Python dependencies from PyPI, through `uv` (about 11 MB of uv cache).
+- A Python interpreter, only if `uv` finds none on the machine.
+- The pinned draw.io build (version in the SBOM below), about 49 MB to download, checked against its sha256 and
+  unpacked to about 118 MB on disk.
+
+All of it lives in the plugin data folder, `~/.claude/plugins/data/<id>/` (`cartographer-cartographer` for this
+marketplace), under `drawio/`, `uv/` and `python/`. So do the intermediates (facts, schema, screenshots), in
+`<name>/`. Nothing is written to `~/.cache` or to uv's global directories. The folder survives plugin updates and
+`claude plugin uninstall cartographer` deletes it, unless you pass `--keep-data`.
+
+### Without the plugin (standalone CLI)
+
+`uvx --from git+ssh://...` keeps its environment in uv's cache (`uv cache dir`, `~/.cache/uv` on Linux and macOS)
+and cartographer keeps draw.io and the intermediates in `${XDG_CACHE_HOME:-~/.cache}/cartographer/`. To remove them:
+
+```
+rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/cartographer"
+uv cache clean cartographer
+```
+
+Set `CARTOGRAPHER_HOME=/some/dir` to move the cartographer folder elsewhere.
 
 ## Bundled component (SBOM)
 
@@ -80,8 +107,8 @@ Everything goes to `docs/architecture/diagrams/` in your repo:
 | `<name>.curated.json` | the curation: what was drawn and the evidence for it |
 | `README.md` | generated index of the diagrams in the folder |
 
-Commit all four. Intermediates (facts, schema, screenshots) live in `~/.cache/cartographer/<name>/` and are not
-committed. Claude never commits or pushes for you.
+Commit all four. Intermediates (facts, schema, screenshots) live in the plugin data folder (`~/.cache/cartographer/<name>/` for the
+standalone CLI) and are not committed. Claude never commits or pushes for you.
 
 ## Nesting on the diagram
 
@@ -173,7 +200,8 @@ uv run --locked ruff check
 uv run --locked pytest -q
 ```
 
-Set `CARTOGRAPHER_FROM=/path/to/checkout` to make the skill run your working tree instead of the pinned tag. Bump the
-version in `pyproject.toml`, `.claude-plugin/plugin.json` and the `@vX.Y.Z` pin in `skills/cartographer/SKILL.md`
-together; a test checks that they agree. Design docs: [DESIGN.md](DESIGN.md), `docs/superpowers/specs/`, and
+To try the plugin from a working tree, run `claude --plugin-dir /path/to/checkout`: the plugin launcher
+(`scripts/cartographer`) runs the checkout itself, so no tag or git access is involved. Bump the version in
+`pyproject.toml`, `.claude-plugin/plugin.json` and the `@vX.Y.Z` pins in this README together; a test checks that
+they agree. Design docs: [DESIGN.md](DESIGN.md), `docs/superpowers/specs/`, and
 [src/cartographer/RULES.md](src/cartographer/RULES.md) for the drawing rules.

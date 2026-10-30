@@ -11,7 +11,7 @@ BANNED = "—–‘’“”"
 def test_versions_agree() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
     plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
-    pins = set(re.findall(r"cartographer@v(\d+\.\d+\.\d+)", SKILL.read_text() + (ROOT / "commands" / "view.md").read_text()))
+    pins = set(re.findall(r"cartographer@v(\d+\.\d+\.\d+)", (ROOT / "README.md").read_text()))
     assert pins == {pyproject} == {plugin["version"]}
 
 
@@ -21,10 +21,23 @@ def test_marketplace_lists_the_plugin_at_the_repo_root() -> None:
     assert [(p["name"], p["source"]) for p in market["plugins"]] == [("cartographer", "./")]
 
 
-def test_skill_calls_the_tool_through_uvx_and_cartographer_from() -> None:
-    text = SKILL.read_text()
-    assert 'uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v' in text
-    assert "claude -p" not in text and "cartographer-snapshot" not in text
+def test_every_plugin_invocation_goes_through_the_launcher() -> None:
+    launcher = '"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" '
+    for path in (SKILL, ROOT / "commands" / "view.md"):
+        text = path.read_text()
+        assert "uvx" not in text and "CARTOGRAPHER_FROM" not in text, path
+        assert "claude -p" not in text and "cartographer-snapshot" not in text, path
+        assert text.count(launcher) >= 1, path
+        assert text.count("${CLAUDE_PLUGIN_ROOT}") == text.count(launcher), path
+        bare = [ln for ln in text.splitlines() if "To reopen later" not in ln and re.search(r"\bcartographer (extract|prompt|build|image|snapshot|view|check|docs)\b", ln)]
+        assert not bare, (path, bare)
+
+
+def test_launcher_is_posix_sh_and_executable() -> None:
+    launcher = ROOT / "scripts" / "cartographer"
+    assert launcher.read_text().startswith("#!/bin/sh\n")
+    assert launcher.stat().st_mode & 0o111
+    assert "[[" not in launcher.read_text()
 
 
 def test_user_facing_text_has_no_dashes_or_smart_quotes() -> None:
