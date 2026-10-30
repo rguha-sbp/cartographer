@@ -23,7 +23,7 @@ from cartographer.diagram_model import (
 )
 from cartographer.tf_aws_externals import adopt
 from cartographer.tf_blocks import GAP, Blocks
-from cartographer.tf_check import measure, stats
+from cartographer.tf_check import defects, measure
 from cartographer.tf_colors import Colours
 from cartographer.tf_place import place
 from cartographer.tf_space import Widening, fit
@@ -69,8 +69,7 @@ def _arrange(curated: Curated, cols: int, labels: bool, px_per_crossing: float) 
 
 
 def _defects(fitted: tuple[Diagram, list[Widening]]) -> tuple[int, int]:
-    routed = stats(fitted[0])
-    return routed.crossings + routed.violations, routed.bends
+    return defects(fitted[0])
 
 
 def extent(diagram: Diagram) -> tuple[int, int]:

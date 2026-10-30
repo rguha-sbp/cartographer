@@ -116,3 +116,15 @@ def test_line_keeps_line_gap_from_frame_borders_it_runs_beside() -> None:
         nodes = (Group("g", "G", 100, 100, 300, 300), Icon("o", "O", "s3", ox, -40), Icon("i", "I", "s3", ix, 300, "g"))
         xml = gen_drawio.render(route(_scene(nodes, (Edge("o", "i"),))), page_id="t", page_name="t")
         assert (measure(xml).line_on_frame, _hard(xml)) == (0, dict.fromkeys(HARD, 0))
+
+
+def test_ports_on_a_side_are_ordered_by_the_way_their_routes_turn() -> None:
+    frames = (Group("data", "Storage\nSPA and access logs", 1296, 220, 421, 246),
+              Group("platform", "Platform\ndeploy, maps, monitoring", 1811, 220, 540, 402))
+    nodes = tuple(Icon(i, f"{i}\nsecond line", "s3", x, 286) for i, x in (
+        ("proxy", 1064), ("cdn", 870), ("deploy", 2171), ("bucket", 1381), ("tiles", 1931), ("logs", 1571)))
+    edges = (Edge("cdn", "proxy", "/als/map origin"), Edge("cdn", "bucket", "SPA origin"),
+             Edge("cdn", "tiles", "map tiles"), Edge("cdn", "logs", "access logs"),
+             Edge("deploy", "cdn", "invalidate cache"))
+    xml = gen_drawio.render(route(_scene(frames + nodes, edges)), page_id="t", page_name="t")
+    assert _hard(xml) == dict.fromkeys(HARD, 0)

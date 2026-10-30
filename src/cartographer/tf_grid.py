@@ -172,7 +172,15 @@ class Grid:
                 self.owner[axis][k] = edge + 1 if self.owner[axis][k] in (0, edge + 1) else MIXED
 
     def reserve(self, a: Point, b: Point, edge: int) -> None:
-        """Close the grid segments between a port and its stub to every other edge."""
+        """Close the grid segments between a port and its stub end `b` to every other edge, and the line across the
+        stub end, LINE_GAP either side of it, to every edge: a route leaves its stub straight on, and no route runs
+        over a stub end, where it would box that stub in or jog beside it."""
+        across = 1 if a[1] == b[1] else 0  # axis of the segments that cross the stub's line
+        lines, at = (self.ys, b[1]) if across else (self.xs, b[0])
+        line = self.xi[b[0]] if across else self.yi[b[1]]
+        size = len(self.ys) if across else len(self.xs)
+        for k in range(bisect_left(lines, at - LINE_GAP), bisect_right(lines, at + LINE_GAP) - 1):
+            self.owner[across][line * size + k] = MIXED
         (x0, y0), (x1, y1) = sorted((a, b))
         if y0 == y1:
             first, last = bisect_left(self.xs, x0), bisect_right(self.xs, x1) - 1

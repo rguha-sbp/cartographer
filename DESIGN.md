@@ -215,7 +215,11 @@ placement). Every number is a module constant
   generated legend listing only the flows used under everything, title from curated.json.
 - Routing (`tf_route.py`, after the arrangement is chosen): `tf_ports.py` picks a side per edge end (sideways when the
   other end is 90 px or more away horizontally and the gap fits the caption, else top/bottom; an icon's bottom holds its
-  caption so it uses a flank) and spreads the edges on one side evenly, ordered by the other end's position. The router is
+  caption so it uses a flank) and spreads the edges on one side evenly, ordered by the other end's position. That
+  routing shows which way each route turns off its stub; the ports on every side are then reordered so no two routes
+  cross beside the node (`tf_ports.untangle`), the diagram is routed again and the one with fewer defects is kept.
+  The stub out of a port is closed to every other edge, and so is the line across its end, LINE_GAP either side, so
+  no route boxes a stub in or jogs beside it. The router is
   an orthogonal A* over a sparse grid (obstacle borders, ports, evenly spaced tracks in each gap); every leaf plus the
   caption under an icon is a wall (`tf_geom.py`), so is every group title band (`title_rect`: every line of the
   title at its rendered left spacing), and so is every group that holds neither end of the edge (a group is an

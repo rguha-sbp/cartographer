@@ -8,6 +8,7 @@ that one colour sits together. An icon and its label are one unit: its bottom po
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
+from itertools import pairwise
 from math import hypot
 from statistics import mean
 
@@ -97,8 +98,32 @@ def _assign(ends: list[_End], nodes: dict[str, Leaf]) -> dict[tuple[int, int], s
     return chosen
 
 
-def anchors(edges: tuple[Edge, ...], nodes: dict[str, Leaf]) -> list[tuple[Anchor, Anchor]]:
-    """One (source, target) anchor pair per edge."""
+def _spread(leaf: Leaf, side: str, ends: list[tuple[int, int]]) -> dict[tuple[int, int], Anchor]:
+    """Anchors for the ends on one side, in the given order, PORT_GAP apart and centred on the side."""
+    n, along = len(ends), side in "LR"
+    step = min(PORT_GAP, (side_size(leaf, side) - 2 * PORT_EDGE) / (n - 1)) if n > 1 else 0
+    depth = label_size(leaf.label)[1] if side == "B" and isinstance(leaf, Icon) else 0
+    out = {}
+    for k, key in enumerate(ends):
+        o = round((k - (n - 1) / 2) * step)
+        off = (0, o) if along else (o, depth)
+        x, y = port_xy(leaf, FRAC[side], off)
+        out[key] = Anchor(leaf.id, side, x, y, FRAC[side], off)
+    return out
+
+
+def _by_colour(keys: dict[tuple[int, int], tuple], colour: dict[tuple[int, int], str]) -> list[tuple[int, int]]:
+    """Ends sorted by key, each colour kept together at the mean rank of its ends."""
+    rank = {e: r for r, e in enumerate(sorted(keys, key=lambda e: (keys[e], e)))}
+    centre = {c: mean(rank[e] for e in keys if colour[e] == c) for c in {colour[e] for e in keys}}
+    return sorted(keys, key=lambda e: (centre[colour[e]], colour[e], rank[e]))
+
+
+Pair = tuple[Anchor, Anchor]
+
+
+def anchors(edges: tuple[Edge, ...], nodes: dict[str, Leaf]) -> list[Pair]:
+    """One (source, target) anchor pair per edge; on each side ordered by where the other end sits."""
     ends: list[_End] = []
     for i, e in enumerate(edges):
         hs, hd = _headings(nodes[e.src], nodes[e.dst], caption_size(e.label)[0])
@@ -109,14 +134,33 @@ def anchors(edges: tuple[Edge, ...], nodes: dict[str, Leaf]) -> list[tuple[Ancho
         users[end.node, chosen[end.edge, end.end]].append(end)
     placed: dict[tuple[int, int], Anchor] = {}
     for (node, side), group in users.items():
-        leaf, n = nodes[node], len(group)
-        along = 1 if side in "LR" else 0
-        centre = {c: mean(_along(e, along) for e in group if e.colour == c) for c in {e.colour for e in group}}
-        step = min(PORT_GAP, (side_size(leaf, side) - 2 * PORT_EDGE) / (n - 1)) if n > 1 else 0
-        for k, end in enumerate(sorted(group, key=lambda e: (centre[e.colour], e.colour, _along(e, along), e.edge, e.end))):
-            o = round((k - (n - 1) / 2) * step)
-            depth = label_size(leaf.label)[1] if side == "B" and isinstance(leaf, Icon) else 0
-            off = (0, o) if along else (o, depth)
-            x, y = port_xy(leaf, FRAC[side], off)
-            placed[end.edge, end.end] = Anchor(node, side, x, y, FRAC[side], off)
+        axis = 1 if side in "LR" else 0
+        keys = {(e.edge, e.end): (_along(e, axis),) for e in group}
+        placed |= _spread(nodes[node], side, _by_colour(keys, {(e.edge, e.end): e.colour for e in group}))
+    return [(placed[i, 0], placed[i, 1]) for i in range(len(edges))]
+
+
+def _turn(anchor: Anchor, outward: list[Point]) -> tuple[int, int]:
+    """Which way a route bends off its port's line (-1 towards the side's start, 1 towards its end, 0 never), and
+    how far out: bending the same way, the end nearer the bend's side bends nearest the node."""
+    axis = 1 if anchor.side in "LR" else 0
+    start = outward[0]
+    for prev, p in pairwise(outward):
+        if p[axis] != start[axis]:
+            sign = 1 if p[axis] > start[axis] else -1
+            out = abs(prev[1 - axis] - start[1 - axis])
+            return sign, -out if sign > 0 else out
+    return 0, 0
+
+
+def untangle(edges: tuple[Edge, ...], nodes: dict[str, Leaf], pairs: list[Pair], polys: list[list[Point]]) -> list[Pair]:
+    """The same sides with the ports on each reordered the way the routes leave them, so that routes bending the
+    same way do not cross or run over each other's stubs next to the node."""
+    keys: dict[tuple[str, str], dict[tuple[int, int], tuple]] = defaultdict(dict)
+    for i, (pair, poly) in enumerate(zip(pairs, polys)):
+        for end, (anchor, outward) in enumerate(((pair[0], poly), (pair[1], poly[::-1]))):
+            keys[anchor.node, anchor.side][i, end] = (*_turn(anchor, outward[1:]), pairs[i][end].off)
+    placed: dict[tuple[int, int], Anchor] = {}
+    for (node, side), group in keys.items():
+        placed |= _spread(nodes[node], side, _by_colour(group, {e: edges[e[0]].color for e in group}))
     return [(placed[i, 0], placed[i, 1]) for i in range(len(edges))]
