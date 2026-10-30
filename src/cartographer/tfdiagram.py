@@ -9,6 +9,7 @@ from cartographer.diagram_model import AWS_ICONS, BRAND_ICONS, GENERIC_ICONS
 HERE = Path(__file__).parent
 SCHEMA = HERE / "curated.schema.json"
 PROMPT = HERE / "curate_prompt.md"
+VIEW_NAMES = {"l7": "Layer 7"}
 
 
 def schema_text() -> str:
@@ -43,3 +44,7 @@ def inputs_sha256(facts_path: Path) -> str:
     for part in (PROMPT.read_text(), schema_text()):
         h.update(b"\0" + part.encode())
     return h.hexdigest()
+
+
+def diagram_title(curated: dict) -> str:
+    return f"{VIEW_NAMES[curated['view']]} diagram for {curated['system']}"

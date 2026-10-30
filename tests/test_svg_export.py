@@ -1,5 +1,5 @@
+import hashlib
 import subprocess
-from pathlib import Path
 from xml.etree import ElementTree
 
 import pytest
@@ -23,8 +23,11 @@ def _fetch(url: str) -> tuple[bytes, str]:
     return LOGO, "image/svg+xml"
 
 
+SHA = "a" * 64
+
+
 def _svg() -> str:
-    return svg_export.svg_from_dom(DOM, XML, (800, 600), "http://localhost:8080", _fetch)
+    return svg_export.svg_from_dom(DOM, SHA, (800, 600), "http://localhost:8080", _fetch)
 
 
 def test_result_is_well_formed_and_standalone() -> None:
@@ -37,8 +40,10 @@ def test_result_is_well_formed_and_standalone() -> None:
     assert root.get("viewBox") == "0 0 900 700"
 
 
-def test_content_attribute_round_trips_the_mxfile() -> None:
-    assert ElementTree.fromstring(_svg()).get("content") == XML
+def test_root_carries_the_source_fingerprint_and_no_embedded_mxfile() -> None:
+    root = ElementTree.fromstring(_svg())
+    assert root.get("data-cartographer-source-sha256") == SHA
+    assert root.get("content") is None
 
 
 def test_images_become_data_uris() -> None:
@@ -52,15 +57,16 @@ def test_light_variant_is_kept() -> None:
 
 def test_missing_diagram_container_is_an_error() -> None:
     with pytest.raises(svg_export.SvgError):
-        svg_export.svg_from_dom("<html></html>", XML, (1, 1), "http://localhost:8080", _fetch)
+        svg_export.svg_from_dom("<html></html>", SHA, (1, 1), "http://localhost:8080", _fetch)
 
 
-def test_export_runs_headless_chrome_with_dump_dom(tmp_path: Path, monkeypatch) -> None:
-    drawio = tmp_path / "a.drawio"
-    drawio.write_text("<mxfile><diagram><mxGraphModel><root>"
-                      '<mxCell id="0"/><mxCell id="1" parent="0"/>'
-                      '<mxCell id="g" parent="1" vertex="1"><mxGeometry width="10" height="10"/></mxCell>'
-                      "</root></mxGraphModel></diagram></mxfile>")
+def test_export_runs_headless_chrome_with_dump_dom(monkeypatch) -> None:
+    mxfile = (
+        "<mxfile><diagram><mxGraphModel><root>"
+        '<mxCell id="0"/><mxCell id="1" parent="0"/>'
+        '<mxCell id="g" parent="1" vertex="1"><mxGeometry width="10" height="10"/></mxCell>'
+        "</root></mxGraphModel></diagram></mxfile>"
+    )
     seen = []
 
     def fake_run(cmd, **kw):
@@ -69,6 +75,14 @@ def test_export_runs_headless_chrome_with_dump_dom(tmp_path: Path, monkeypatch) 
 
     monkeypatch.setattr(snapshot, "find_chrome", lambda: "/bin/chrome")
     monkeypatch.setattr(svg_export.subprocess, "run", fake_run)
-    out = svg_export.export_svg(drawio, "http://localhost:8080", _fetch)
+    monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
+    out = svg_export.export_svg(mxfile, "http://localhost:8080", _fetch)
     assert "--dump-dom" in seen[0]
-    ElementTree.fromstring(out)
+    root = ElementTree.fromstring(out)
+    assert root.get("data-cartographer-source-sha256") == hashlib.sha256(mxfile.encode()).hexdigest()
+
+
+def test_export_refuses_when_the_local_draw_io_is_down(monkeypatch) -> None:
+    monkeypatch.setattr(snapshot, "drawio_up", lambda url: False)
+    with pytest.raises(svg_export.SvgError, match="start the local draw.io"):
+        svg_export.export_svg("<mxfile/>", "http://localhost:8080", _fetch)
