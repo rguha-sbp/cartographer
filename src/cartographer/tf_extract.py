@@ -13,6 +13,7 @@ from typing import Any
 import hcl2
 
 from cartographer.tf_hints import collect_hints
+from cartographer.tf_network import network_facts
 from cartographer.tf_policies import OPTS, doc_statements, policy_doc, unq
 
 REF = re.compile(r"(?<![\w.\-])([A-Za-z_]\w*)\.([A-Za-z_][\w-]*)(?:\[[^\]]*\])?(?:\.([A-Za-z_][\w-]*))?")
@@ -79,6 +80,7 @@ class Module:
     locals: dict[str, Any] = field(default_factory=dict)
     outputs: dict[str, Any] = field(default_factory=dict)
     calls: dict[str, Block] = field(default_factory=dict)
+    variables: dict[str, Any] = field(default_factory=dict)
 
 
 def parse_module(directory: Path, repo_root: Path) -> Module:
@@ -103,6 +105,9 @@ def parse_module(directory: Path, repo_root: Path) -> Module:
         for item in doc.get("output", []):
             for name, body in item.items():
                 mod.outputs[unq(name)] = body.get("value")
+        for item in doc.get("variable", []):
+            for name, body in item.items():
+                mod.variables[unq(name)] = body.get("default")
         for item in doc.get("locals", []):
             mod.locals.update(attrs(item))
     return mod
@@ -340,6 +345,7 @@ class Extractor:
             ],
             "edges": edges,
             **collect_hints(self.insts, self.res, self.repo_root),
+            **network_facts(self),
             "services": [
                 {"service": s, "actions": sorted(v["actions"]), "principals": sorted(v["principals"])}
                 for s, v in sorted(self.services.items())
