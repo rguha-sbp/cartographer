@@ -87,7 +87,7 @@ def parse_module(directory: Path, repo_root: Path) -> Module:
     mod = Module(directory)
     for path in sorted(directory.glob("*.tf")):
         raw = path.read_text()
-        rel = str(path.relative_to(repo_root))
+        rel = path.relative_to(repo_root).as_posix()
         lines = {}
         for m in HEADER.finditer(raw):
             key = m.group(1, 2, 3) if m.group(1) else m.group(4, 5)
