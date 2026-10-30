@@ -161,3 +161,21 @@ def test_run_falls_back_to_the_lightbox_when_a_url_was_given(tmp_path: Path, mon
     assert view.run(_args(drawio, "http://localhost:8080")) == 0
     assert opened[0].startswith("http://localhost:8080/?lightbox=1") and capsys.readouterr().out.strip() == view.VIEW_NOTE
     assert view.run(_args(tmp_path / "a.svg")) == 2
+
+
+def _headers(base: str, path: str, *, host: str | None = None) -> dict[str, str]:
+    req = urllib.request.Request(base + path)
+    if host:
+        req.add_header("Host", host)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return dict(resp.headers)
+    except urllib.error.HTTPError as err:
+        return dict(err.headers)
+
+
+def test_every_reply_carries_the_content_security_policy(served) -> None:
+    base, _, _, _ = served
+    for path in ("/index.html", f"{view.PREFIX}/", f"{view.PREFIX}/file", "/missing.html", f"{view.PREFIX}/nope"):
+        assert _headers(base, path).get("Content-Security-Policy") == drawio_app.CSP, path
+    assert _headers(base, f"{view.PREFIX}/", host="evil.example").get("Content-Security-Policy") == drawio_app.CSP

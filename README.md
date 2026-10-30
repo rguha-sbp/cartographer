@@ -22,7 +22,7 @@ image. Closing the window stops the server.
 - Nothing else. cartographer downloads a pinned draw.io web app once (about 49 MB, into
   `${XDG_CACHE_HOME:-~/.cache}/cartographer/drawio/<version>/`, checked against a sha256) and serves it on
   `127.0.0.1` only while a command runs. Diagrams are rendered and edited by that local copy, run with `offline=1`
-  and with Chrome limited to `127.0.0.1`, so they are never sent to a public draw.io host. No Docker.
+  and the local server's Content Security Policy limits the page to `127.0.0.1`, so they are never sent to a public draw.io host. No Docker.
 
 ## Bundled component (SBOM)
 

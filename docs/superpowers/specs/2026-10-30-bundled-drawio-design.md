@@ -32,8 +32,10 @@ web app, only while a command needs it.
    embeds the full editor with the file loaded. Save posts the XML back to the host page, which posts it to the local
    server, which writes the file in place. The server stops when the tab is closed or on Ctrl-C. Nothing keeps running.
    After a save, the next skill run sees the hand edit and asks the user, as it does now.
-4. **Offline.** The diagram never leaves the machine: the embed URL sets `offline=1` and `stealth=1`, and Chrome runs
-   with host resolution limited to 127.0.0.1, so a request to any other host fails instead of leaking.
+4. **Offline.** The diagram never leaves the machine: the embed URL sets `offline=1` and `stealth=1`, and the local
+   server sends a Content Security Policy on every reply that limits the page to 127.0.0.1, so a request to any other
+   host is refused instead of leaking. Headless renders also keep a Chrome host-resolver rule, because they may point at
+   the user's own draw.io, which the policy does not cover.
 5. **Fallback.** If the download is blocked or fails, `view` prints the lightbox note and render commands exit 5 with
    the reason.
 

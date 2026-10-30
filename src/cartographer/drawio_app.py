@@ -25,6 +25,11 @@ EMBED_QUERY = "embed=1&proto=json&spin=1&offline=1&stealth=1"
 DOWNLOAD_TIMEOUT_S = 60
 CHUNK = 1 << 20
 MARKER = ".complete"
+# Keeps the page on its own origin: no request, frame, form or worker may reach another host.
+CSP = (
+    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src 'self'; img-src 'self' data: blob:; "
+    "frame-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
+)
 
 
 class DrawioError(Exception):
@@ -80,6 +85,10 @@ def ensure() -> Path:
 
 
 class StaticHandler(SimpleHTTPRequestHandler):
+    def end_headers(self) -> None:
+        self.send_header("Content-Security-Policy", CSP)
+        super().end_headers()
+
     def log_message(self, format: str, *args: object) -> None:
         pass
 
