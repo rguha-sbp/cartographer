@@ -66,16 +66,18 @@ dashes in user-facing text, `main` changes through a PR.
 
 ## Builder's calls (open to correction)
 
-- **Schema**: group `kind` gains `subnet` and `workload`. A `subnet` group has `tier` (`public` | `private` |
-  `isolated`) and its `parent` is a `vpc`. A `vpc` group gains optional `cidrs` (list) with evidence. A `workload`
-  group's `parent` is a `subnet` group or the `account`. Role groups (`kind: null`) stay for diagrams without
-  workloads.
-- **Extract** gains two fact kinds: `vpc` (address, name, cidrs or `remote`) and `placement` (resource, vpc, tier,
-  source of the tier). No subnet ids or AZs are recorded.
-- **Verify** (Terraform flow) checks a `vpc` group's `cidrs` against a `vpc` fact, and that every node inside a
-  `subnet` group has a `placement` fact with that tier. Describe mode checks `cidrs` carry `stated` evidence.
-- **Layout**: tier and workload frames reuse the existing block packing (`tf_blocks`); frame colour is the workload's
-  colour, so edge colouring by destination group keeps working.
+- **Schema**: group `kind` gains `subnet`, with `tier` (`public` | `private` | `isolated`); its `parent` is a `vpc`.
+  A `vpc` group gains optional `cidrs` (list). Both carry `evidence` (same arms as edges). Workload frames are the
+  existing role groups (`kind: null`): no new kind, a workload is simply a role group whose parent is a `subnet` group
+  or the `account`.
+- **Extract** gains two fact lists: `vpcs` (address or remote reference, name, cidrs, remote flag) and `placements`
+  (resource, vpc, tier, what the tier came from). No subnet ids or AZs are recorded.
+- **Verify** (Terraform flow) checks a `vpc` group's `cidrs` against the `vpcs` fact it cites, and that every node
+  inside a `subnet` group has a `placements` fact with that tier. Describe mode requires `stated` or `file` evidence
+  for `cidrs` and for a subnet tier.
+- **Colour**: the palette goes to the outermost role groups (workloads); `vpc` and `subnet` frames use the AWS
+  frame colours and pass no colour down.
+- **Layout**: subnet and workload frames reuse the existing block packing (`tf_blocks`), which already nests blocks.
 - **`view`** prints "Read-only view. To edit, open the .drawio in your local draw.io (never a public host) and run `cartographer image` after." until
   the editor question is settled.
 - Version 0.3.0, plugin pin and SKILL.md updated, tag after merge.
