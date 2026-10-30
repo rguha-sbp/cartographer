@@ -83,17 +83,17 @@ def test_view_flushes_every_status_line_and_stops_when_chrome_exits(tmp_path: Pa
     assert len(flushed) >= 3 and all(flushed)
 
 
-def test_chrome_argv_is_its_own_locked_down_instance() -> None:
+def test_chrome_argv_is_its_own_instance_without_unsupported_flags() -> None:
     argv = view_browser.chrome_argv("/c/chrome", Path("/tmp/p"), "http://127.0.0.1:9/_cartographer/")
     assert argv[0] == "/c/chrome"
     assert "--user-data-dir=/tmp/p" in argv
-    assert f"--host-resolver-rules={snapshot.OFFLINE_RULES}" in argv
+    assert not any("host-resolver" in a for a in argv)
     assert "--no-first-run" in argv and "--no-default-browser-check" in argv
     assert argv[-1] == "--app=http://127.0.0.1:9/_cartographer/"
     assert not any("headless" in a for a in argv)
 
 
-def test_launch_without_chrome_falls_back_and_says_lockdown_is_off(monkeypatch) -> None:
+def test_launch_without_chrome_falls_back_to_the_default_browser(monkeypatch) -> None:
     opened = []
 
     def no_chrome() -> str:
@@ -104,4 +104,4 @@ def test_launch_without_chrome_falls_back_and_says_lockdown_is_off(monkeypatch) 
     result = view_browser.launch("http://x/")
     assert opened == ["http://x/"]
     assert result.process is None and result.profile is None
-    assert "network lockdown is not applied" in result.note
+    assert "default browser" in result.note

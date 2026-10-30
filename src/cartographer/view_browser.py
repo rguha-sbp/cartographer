@@ -1,4 +1,4 @@
-"""Open the editor in its own Chrome instance so the offline lockdown flag always applies."""
+"""Open the editor in its own Chrome app window with a throwaway profile."""
 
 import shutil
 import subprocess
@@ -9,7 +9,7 @@ from typing import NamedTuple
 
 from cartographer import snapshot
 
-NO_LOCKDOWN = "No Chrome found: opened your default browser, the network lockdown is not applied."
+NO_CHROME = "No Chrome found: opened your default browser."
 
 
 class Launch(NamedTuple):
@@ -20,7 +20,7 @@ class Launch(NamedTuple):
 
 def chrome_argv(chrome: str, profile: Path, url: str) -> list[str]:
     return [
-        chrome, f"--user-data-dir={profile}", f"--host-resolver-rules={snapshot.OFFLINE_RULES}",
+        chrome, f"--user-data-dir={profile}",
         "--no-first-run", "--no-default-browser-check", f"--app={url}",
     ]
 
@@ -30,7 +30,7 @@ def launch(url: str) -> Launch:
         chrome = snapshot.find_chrome()
     except snapshot.SnapshotError:
         webbrowser.open(url)
-        return Launch(None, None, NO_LOCKDOWN)
+        return Launch(None, None, NO_CHROME)
     profile = Path(tempfile.mkdtemp(prefix="cartographer-chrome-"))
     process = subprocess.Popen(chrome_argv(chrome, profile, url), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return Launch(process, profile, "")
