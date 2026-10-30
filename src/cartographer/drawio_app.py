@@ -1,6 +1,7 @@
 """The pinned draw.io web app: download once, check, unpack, and serve it on 127.0.0.1 while a command needs it."""
 
 import hashlib
+import json
 import os
 import shutil
 import threading
@@ -13,11 +14,12 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
 
+_PIN = json.loads(Path(__file__).with_name("drawio_pin.json").read_text(encoding="utf-8"))
 NAME = "draw.io"
-VERSION = "32.5.5"
-LICENCE = "Apache-2.0"
-URL = f"https://github.com/jgraph/drawio/releases/download/v{VERSION}/draw.war"
-SHA256 = "cde0ebd72da197da37d100353e226d5344b08f0fcf7e1b18d1e000a77f9c5f52"
+VERSION: str = _PIN["version"]
+LICENCE: str = _PIN["licence"]
+URL: str = _PIN["url"]
+SHA256: str = _PIN["sha256"]
 LOOPBACK = "127.0.0.1"
 EMBED_QUERY = "embed=1&proto=json&spin=1&offline=1&stealth=1"
 DOWNLOAD_TIMEOUT_S = 60
