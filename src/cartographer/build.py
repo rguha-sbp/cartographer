@@ -1,4 +1,5 @@
-"""`cartographer build`: verify the committed curation against the cached facts, then lay out and write the diagram."""
+"""`cartographer build`: verify the committed curation (against the cached facts for a Terraform diagram, by its own
+structure and evidence for a described one), then lay out and write the diagram."""
 
 import argparse
 import json
