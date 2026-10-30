@@ -61,13 +61,13 @@ def _scan_root(root: Path, owner: str | None, repo_root: Path, budget: list[int]
         dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
         here_path = Path(here)
         if INTEGRATION_DIRS.match(here_path.name):
-            out += [("module", d, str((here_path / d).relative_to(repo_root)), 1, owner)
+            out += [("module", d, (here_path / d).relative_to(repo_root).as_posix(), 1, owner)
                     for d in dirs if not d.startswith("_")]
         for name in sorted(files):
             if Path(name).suffix in CODE_SUFFIXES and not TEST_FILE.match(name) and budget[0] > 0:
                 budget[0] -= 1
                 path = here_path / name
-                out += _scan_text(path, str(path.relative_to(repo_root)), owner)
+                out += _scan_text(path, path.relative_to(repo_root).as_posix(), owner)
     return out
 
 
@@ -76,7 +76,7 @@ def _terraform(insts: list, resources: list, repo_root: Path) -> list[Occurrence
     for directory in sorted({i.mod.directory for i in insts}):
         for pattern in TF_SUFFIXES:
             for path in sorted(directory.glob(pattern)):
-                out += _scan_text(path, str(path.relative_to(repo_root)), None, hosts_only=True)
+                out += _scan_text(path, path.relative_to(repo_root).as_posix(), None, hosts_only=True)
     for r in resources:
         if r.type in PARAM_TYPES and "name" in r.block.body:
             out.append(("param", unq(r.block.body["name"]), r.block.file, r.block.line, r.address))

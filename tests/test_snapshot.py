@@ -94,3 +94,49 @@ def test_find_chrome_missing(monkeypatch):
     monkeypatch.setattr(snapshot.shutil, "which", lambda name: None)
     with pytest.raises(snapshot.SnapshotError, match="Chrome"):
         snapshot.find_chrome()
+
+
+def _no_chrome_anywhere(monkeypatch):
+    for var in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(snapshot.Path, "exists", lambda self: False)
+    monkeypatch.setattr(snapshot.shutil, "which", lambda name: None)
+
+
+def test_find_chrome_windows_install_dirs(monkeypatch, tmp_path):
+    _no_chrome_anywhere(monkeypatch)
+    exe = tmp_path / "local" / "Google" / "Chrome" / "Application" / "chrome.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("")
+    monkeypatch.setenv("PROGRAMFILES", str(tmp_path / "unused"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setattr(snapshot.Path, "exists", lambda self: self == exe)
+    assert snapshot.find_chrome() == str(exe)
+
+
+def test_chrome_candidates_skip_unset_env_vars(monkeypatch):
+    _no_chrome_anywhere(monkeypatch)
+    assert snapshot.chrome_candidates() == [Path(snapshot.CHROME_MAC)]
+
+
+def test_find_chrome_program_files_x86(monkeypatch, tmp_path):
+    _no_chrome_anywhere(monkeypatch)
+    monkeypatch.setenv("PROGRAMFILES(X86)", str(tmp_path))
+    exe = tmp_path / "Google" / "Chrome" / "Application" / "chrome.exe"
+    monkeypatch.setattr(snapshot.Path, "exists", lambda self: self == exe)
+    assert snapshot.find_chrome() == str(exe)
+
+
+@pytest.mark.parametrize("name", ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "chrome"])
+def test_find_chrome_path_names(monkeypatch, name):
+    _no_chrome_anywhere(monkeypatch)
+    monkeypatch.setattr(snapshot.shutil, "which", lambda n: f"/usr/bin/{n}" if n == name else None)
+    assert snapshot.find_chrome() == f"/usr/bin/{name}"
+
+
+def test_find_chrome_prefers_install_path_over_path(monkeypatch):
+    _no_chrome_anywhere(monkeypatch)
+    mac = Path(snapshot.CHROME_MAC)
+    monkeypatch.setattr(snapshot.Path, "exists", lambda self: self == mac)
+    monkeypatch.setattr(snapshot.shutil, "which", lambda n: "/usr/bin/chromium")
+    assert snapshot.find_chrome() == str(mac)
