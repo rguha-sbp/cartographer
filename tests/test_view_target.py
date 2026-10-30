@@ -87,7 +87,7 @@ def test_view_flushes_every_status_line_and_stops_when_chrome_exits(tmp_path: Pa
 def test_chrome_argv_is_its_own_instance_without_unsupported_flags() -> None:
     argv = view_browser.chrome_argv("/c/chrome", Path("/tmp/p"), "http://127.0.0.1:9/_cartographer/")
     assert argv[0] == "/c/chrome"
-    assert "--user-data-dir=/tmp/p" in argv
+    assert f"--user-data-dir={Path('/tmp/p')}" in argv
     assert not any("host-resolver" in a for a in argv)
     assert "--no-first-run" in argv and "--no-default-browser-check" in argv
     assert argv[-1] == "--app=http://127.0.0.1:9/_cartographer/"
