@@ -1,6 +1,6 @@
 {
   "name": "cartographer",
-  "version": "0.3.1",
+  "version": "0.3.0",
   "description": "Turn a Terraform folder into a verified AWS architecture diagram (draw.io and svg), curated in your own Claude session.",
   "author": {
     "name": "Rakesh Guha"
