@@ -14,6 +14,10 @@ Fields for a described diagram
 - `system` is the display name of the system (for example "Shop") and `view` is "l7".
 - Every node has `"tf": []`. A node is an AWS service the engineer named or that the described flow clearly needs;
   `service` is its draw.io AWS icon name. A named non-AWS system is an external with an `icon`.
+- Groups: always nest the AWS nodes in frames, one group of kind `cloud` (AWS Cloud), inside it `region`, inside it
+  `account`, plus a `vpc` group for what runs in a VPC. Role groups (for example "Edge", "Data stores") have `parent`
+  set to the account or the VPC. If the engineer did not name the region or account, label them with your best guess
+  and record it in `assumptions`. Users and third-party systems are externals and sit outside the frames.
 - Label: short name, a newline, then a 2 to 4 word role. Plain ASCII, no em dashes, en dashes or smart quotes.
 
 Evidence
