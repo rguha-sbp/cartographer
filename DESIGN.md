@@ -181,7 +181,9 @@ Any other `Icon.service` renders as a plain box.
 Pure Python, no external process, five modules: `tf_layout.py` (orchestration, edges, legend), `tf_blocks.py` (frames
 and block grids), `tf_lanes.py` (externals), `tf_order.py` (barycentric ordering), `tf_place.py` (crossing-aware
 placement). Every number is a module constant
-(icon pitch 150x150, group padding 30 sides and 50 top, frame padding 20 sides and 40 top, gap 40).
+(icon pitch 150x150, group padding 30 sides and 50 top, frame padding 20 sides and 40 top, gap 40). Blocks side by side or stacked in a
+  frame are BLOCK_GAP apart: a channel of CHANNEL_TRACKS (6) lines at LINE_GAP, each GROUP_CLEAR from both blocks, so
+  routes between distant blocks run through the gaps instead of round the whole drawing.
 
 - Frames are groups of kind cloud, region or account. Every other group (kind null or vpc) is a block. A block with no
   nodes and no non-empty child block is dropped (`tf_blocks.empty_blocks`; verify reports it as a warning).

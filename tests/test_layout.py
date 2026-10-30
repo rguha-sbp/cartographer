@@ -3,7 +3,8 @@ import xml.etree.ElementTree as ET
 
 from cartographer import gen_drawio, tf_layout, tfdiagram
 from cartographer.diagram_model import Icon
-from cartographer.tf_geom import leaves
+from cartographer.tf_blocks import CHANNEL_TRACKS
+from cartographer.tf_geom import GROUP_CLEAR, LINE_GAP, groups, leaves
 from cartographer.tf_read import read
 
 CURATED = {
@@ -48,3 +49,16 @@ def test_schema_offers_node_icons_from_the_external_icon_enum() -> None:
     node_icon = props["nodes"]["items"]["properties"]["icon"]
     assert node_icon["enum"] == props["externals"]["items"]["properties"]["icon"]["enum"]
     assert "icon" not in props["nodes"]["items"]["required"]
+
+
+def test_gaps_between_blocks_hold_a_channel_of_lines_clear_of_both_blocks() -> None:
+    blocks = [{"id": f"b{c}{r}", "label": f"B{c}{r}", "kind": None, "parent": None, "column": c}
+              for c in range(2) for r in range(2)]
+    nodes = [{"id": f"n{b['id']}", "label": "n", "service": "lambda", "group": b["id"], "tf": ["x"], "multi": False}
+             for b in blocks]
+    placed = {g.id: g for g in groups(tf_layout.layout({"title": "T", "groups": blocks, "nodes": nodes,
+                                                         "externals": [], "edges": []}))}
+    channel = 2 * GROUP_CLEAR + (CHANNEL_TRACKS - 1) * LINE_GAP
+    assert CHANNEL_TRACKS >= 4
+    assert placed["b10"].x - (placed["b00"].x + placed["b00"].w) >= channel
+    assert placed["b01"].y - (placed["b00"].y + placed["b00"].h) >= channel
