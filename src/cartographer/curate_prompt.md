@@ -7,6 +7,8 @@ Inputs
 - Output file: {output_path}. Write one JSON object there that validates against the schema and includes
   "inputs_sha256": "{inputs_sha256}" exactly. If the file already exists, start from it and change only what the facts
   or code no longer support, so the diff stays small. Write nothing else and run no commands.
+- `system` is the display name of the system (for example "GIP") and `view` is "l7". Never write a title: the tool
+  derives "Layer 7 diagram for <system>". Leave `drawio_sha256` as it is when the file has one: the tool writes it.
 
 Step 1: understand the facts
 - Read {facts_path}. List resources by type and module. Note edge kinds: iam, trigger, route, network, uses.

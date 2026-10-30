@@ -1,13 +1,13 @@
-"""Where cartographer keeps what is not committed: the facts, the schema and the verify output of a stack."""
+"""Where cartographer keeps what is not committed: the facts, the schema and the verify output of a diagram."""
 
 import json
 import os
 from pathlib import Path
 
 
-def cache_dir(stack: str) -> Path:
+def cache_dir(name: str) -> Path:
     root = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
-    path = root / "cartographer" / stack
+    path = root / "cartographer" / name
     path.mkdir(parents=True, exist_ok=True)
     return path
 

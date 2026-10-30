@@ -1,0 +1,7 @@
+- id: cartographer-check
+  name: cartographer check
+  description: Fail when a .drawio has no image or an image rendered from a different .drawio
+  entry: cartographer check docs/architecture/diagrams
+  language: python
+  files: ^docs/architecture/diagrams/
+  pass_filenames: false

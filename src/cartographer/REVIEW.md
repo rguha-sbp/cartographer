@@ -3,7 +3,7 @@
 What Claude checks on the `cartographer snapshot` PNGs (full image and every tile) before calling a diagram ready.
 One line per rule. The tag says how a finding is fixed:
 
-- [curation]: edit `docs/architecture/<stack>.curated.json`, then rebuild. The evidence rules in the `cartographer prompt` output still apply; never invent evidence.
+- [curation]: edit `docs/architecture/diagrams/<name>.curated.json`, then rebuild. The evidence rules in the `cartographer prompt` output still apply; never invent evidence.
 - [tool]: a cartographer defect. Report it with the tile it appears in; do not patch the .drawio or the curated file by hand.
 
 Drawing rules the tool already enforces are in `RULES.md` (`cartographer docs rules` prints its path); this list is what a human eye still has to confirm on the rendered result.
