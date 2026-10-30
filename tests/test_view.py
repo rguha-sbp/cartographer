@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from cartographer import drawio_app, files, svg_export, view
+from cartographer import drawio_app, files, svg_export, view, view_browser
 
 MXFILE = (
     '<mxfile><diagram name="p"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>'
@@ -118,21 +118,22 @@ def test_run_serves_until_close_then_stops(tmp_path: Path, monkeypatch, capsys) 
     drawio.write_text(MXFILE)
     opened = []
 
-    def fake_open(url: str) -> None:
+    def fake_open(url: str) -> view_browser.Launch:
         opened.append(url)
         base = url.removesuffix(f"{view.PREFIX}/")
         threading.Timer(0.2, lambda: _request(base, f"{view.PREFIX}/close", body="c")).start()
+        return view_browser.Launch(None, None, "")
 
-    monkeypatch.setattr(view, "open_browser", fake_open)
+    monkeypatch.setattr(view_browser, "launch", fake_open)
     assert view.run(_args(drawio)) == 0
     out = capsys.readouterr().out
-    assert opened[0] in out and "Editing a.drawio. Save in the editor writes the file. Close the tab to stop." in out
+    assert opened[0] in out and "Editing a.drawio. Save in the editor writes the file. Close the window to stop." in out
     with pytest.raises(OSError):
         urllib.request.urlopen(opened[0], timeout=2)
 
 
 def _args(drawio: Path, url: str | None = None):
-    return argparse.Namespace(file=drawio, drawio_url=url)
+    return argparse.Namespace(file=str(drawio), drawio_url=url)
 
 
 def test_run_without_the_app_and_without_a_url_prints_the_read_only_note(tmp_path: Path, monkeypatch, capsys) -> None:

@@ -102,7 +102,7 @@ If the user kept a hand-edited .drawio, regenerate its image with
 
 ## 7. Show it
 
-Run `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer view docs/architecture/diagrams/<name>.drawio` in the background (it blocks until the editor tab is closed) to open the result in the bundled draw.io editor. Saving in the editor writes the file and its image.
+Run `uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer view docs/architecture/diagrams/<name>.drawio` in the background (it blocks until the editor tab is closed) to open the result in the bundled draw.io editor. Saving in the editor writes the file and its image. Then tell the user: "To reopen later: /cartographer:view NAME in Claude Code, or `cartographer view NAME` from the repo root."
 
 ## Stopping
 

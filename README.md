@@ -5,6 +5,14 @@ a solution you describe to Claude. Claude does the curation and, in describe mod
 routing and verification and never calls a model. A diagram is only called ready after a visual review loop in which
 Claude looks at the rendered image, fixes what is wrong and looks again.
 
+## View and edit a diagram
+
+- In Claude Code: `/cartographer:view` (the only diagram) or `/cartographer:view shop-l7`.
+- From the repo root: `cartographer view` or `cartographer view shop-l7` (a path to a .drawio works too).
+
+This serves a pinned draw.io on `127.0.0.1` only while the window is open. Save writes the .drawio and regenerates the
+image. Closing the window stops the server.
+
 ## What you need
 
 - Claude Code.

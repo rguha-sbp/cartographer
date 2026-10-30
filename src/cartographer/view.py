@@ -3,7 +3,6 @@
 import argparse
 import base64
 import os
-import subprocess
 import sys
 import threading
 import urllib.parse
@@ -12,12 +11,14 @@ import zlib
 from pathlib import Path
 from xml.etree import ElementTree
 
-from cartographer import drawio_app, snapshot, svg_export
+from cartographer import drawio_app, snapshot, svg_export, view_browser, view_target
 from cartographer.drawio_app import LOOPBACK, StaticHandler
 
 PREFIX = "/_cartographer"
 MAX_SAVE_BYTES = 64 << 20
-OPEN_NOTE = "Editing {name}. Save in the editor writes the file. Close the tab to stop."
+OPEN_NOTE = "Editing {name}. Save in the editor writes the file. Close the window to stop."
+REOPEN_NOTE = ("To reopen later: /cartographer:view {stem} in Claude Code, "
+               "or `cartographer view {stem}` from the repo root.")
 VIEW_NOTE = ("Read-only view. To edit, open the .drawio in your local draw.io (never a public host) "
              "and run `cartographer image` after.")
 HOST_PAGE = """<!doctype html>
@@ -137,16 +138,9 @@ class Session:
         return Handler
 
 
-def open_browser(url: str) -> None:
-    if sys.platform == "darwin" and Path(snapshot.CHROME_MAC).exists():
-        subprocess.run(["open", "-a", "Google Chrome", url], check=False)
-    else:
-        webbrowser.open(url)
-
-
 def _lightbox(drawio: Path, url: str) -> int:
     webbrowser.open(snapshot.viewer_url(url, drawio.read_text()))
-    print(VIEW_NOTE)
+    print(VIEW_NOTE, flush=True)
     return 0
 
 
@@ -154,20 +148,32 @@ def _edit(drawio: Path) -> None:
     session = Session(drawio)
     with drawio_app.serve(session.handler()) as base:
         url = f"{base}{PREFIX}/"
-        print(url)
-        open_browser(url)
-        print(OPEN_NOTE.format(name=drawio.name))
+        print(url, flush=True)
+        opened = view_browser.launch(url)
+        if opened.note:
+            print(opened.note, flush=True)
+        if opened.process is not None:
+            threading.Thread(target=lambda: (opened.process.wait(), session.closed.set()), daemon=True).start()
+        print(OPEN_NOTE.format(name=drawio.name), flush=True)
+        print(REOPEN_NOTE.format(stem=drawio.stem), flush=True)
         try:
             session.closed.wait()
         except KeyboardInterrupt:
             pass
+        finally:
+            view_browser.cleanup(opened)
         with session.busy:
             pass
 
 
 def run(args: argparse.Namespace) -> int:
-    if args.file.suffix != ".drawio":
-        print("view takes a .drawio file", file=sys.stderr)
+    try:
+        target = view_target.resolve(args.file)
+    except view_target.TargetError as err:
+        print(err, file=sys.stderr, flush=True)
+        return 2
+    if target.suffix != ".drawio":
+        print("view takes a .drawio file", file=sys.stderr, flush=True)
         return 2
     try:
         drawio_app.ensure()
@@ -180,6 +186,6 @@ def run(args: argparse.Namespace) -> int:
         if not snapshot.drawio_up(url):
             print(snapshot.DRAWIO_DOWN, file=sys.stderr)
             return 2
-        return _lightbox(args.file, url)
-    _edit(args.file.resolve())
+        return _lightbox(target, url)
+    _edit(target.resolve())
     return 0

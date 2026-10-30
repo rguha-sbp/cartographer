@@ -74,7 +74,7 @@ def _parser() -> argparse.ArgumentParser:
     p = command("snapshot", snapshot.run, "screenshot a .drawio file in the bundled draw.io", named=False)
     snapshot.add_arguments(p)
     p = command("view", view.run, "edit a .drawio in the bundled draw.io until the tab is closed", named=False)
-    p.add_argument("file", type=Path)
+    p.add_argument("file", nargs="?", default=None, help="a .drawio path or a diagram name (default: the only one)")
     p.add_argument("--drawio-url", default=None, help="read-only fallback when the bundled draw.io cannot be fetched")
     p = command("image", _image, "regenerate the .svg image next to a .drawio", named=False)
     p.add_argument("file", type=Path, help="the .drawio file")
