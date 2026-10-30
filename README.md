@@ -73,7 +73,7 @@ In Claude Code:
 /plugin install cartographer@cartographer
 ```
 
-Then run `/cartographer` in the repo you want to document.
+Then, in the repo you want to document, start a prompt with `/cartographer:cartographer` (see First run).
 
 ### Update
 
@@ -91,7 +91,13 @@ again unless its pin changed.
 
 ### Terraform mode
 
-Say: "Draw the architecture of the Terraform in `infra/`." Claude then:
+In the repo root:
+
+```
+/cartographer:cartographer draw the architecture diagram of the Terraform in infra/
+```
+
+Claude then:
 
 1. Asks for a diagram name (`<system>-<view>`, for example `shop-l7`) and the Terraform folder.
 2. Extracts the facts (the Terraform is parsed, not planned, so no cloud credentials are needed).
@@ -102,7 +108,13 @@ Say: "Draw the architecture of the Terraform in `infra/`." Claude then:
 
 ### Describe mode
 
-Say: "Help me design a diagram for a new solution." Use it when there is no Terraform yet. Claude then:
+Use it when there is no Terraform yet:
+
+```
+/cartographer:cartographer help me design an architecture diagram for a new solution
+```
+
+Claude then:
 
 1. Interviews you, one question per message, until the gaps (entry points, data stores, integrations, who calls whom)
    are closed.
