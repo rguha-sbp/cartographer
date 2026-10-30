@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import os
 import shutil
 import threading
 import urllib.error
@@ -13,6 +12,8 @@ from contextlib import contextmanager
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
+
+from cartographer.workdir import cache_root
 
 _PIN = json.loads(Path(__file__).with_name("drawio_pin.json").read_text(encoding="utf-8"))
 NAME = "draw.io"
@@ -37,8 +38,7 @@ class DrawioError(Exception):
 
 
 def app_dir() -> Path:
-    root = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
-    return root / "cartographer" / "drawio" / VERSION
+    return cache_root() / "drawio" / VERSION
 
 
 def _download(target: Path) -> None:

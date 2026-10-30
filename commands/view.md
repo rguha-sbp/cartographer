@@ -8,7 +8,7 @@ Reopen a diagram in the bundled draw.io editor. Run this from the repo root, in 
 editor window is closed):
 
 ```
-uvx --from "${CARTOGRAPHER_FROM:-git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0}" cartographer view $ARGUMENTS
+"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" view $ARGUMENTS
 ```
 
 With no argument it opens the only diagram in `docs/architecture/diagrams`. If it exits with code 2 and lists names,

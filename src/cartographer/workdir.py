@@ -5,9 +5,15 @@ import os
 from pathlib import Path
 
 
+def cache_root() -> Path:
+    """Everything cartographer downloads or caches. The plugin launcher points CARTOGRAPHER_HOME at its data folder."""
+    if home := os.environ.get("CARTOGRAPHER_HOME"):
+        return Path(home)
+    return Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "cartographer"
+
+
 def cache_dir(name: str) -> Path:
-    root = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
-    path = root / "cartographer" / name
+    path = cache_root() / name
     path.mkdir(parents=True, exist_ok=True)
     return path
 
