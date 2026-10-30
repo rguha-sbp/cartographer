@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from xml.etree import ElementTree
 
+from cartographer import drawio_app
+
 MARGIN = 120
 SCALE = 2
 TILE_OVERLAP = 0.10
@@ -20,8 +22,8 @@ DRAWIO_TIMEOUT_S = 3
 VIRTUAL_TIME_MS = 15000
 CHROME_MAC = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 CHROME_HINT = "install Google Chrome or Chromium, or put google-chrome / chromium on PATH"
-DRAWIO_URL = "http://localhost:8080"
-DRAWIO_DOWN = "start the local draw.io (localhost:8080) first"
+DRAWIO_DOWN = "no draw.io answers at the given --drawio-url: start it, or omit the flag to use the bundled one"
+OFFLINE_RULES = "MAP * ~NOTFOUND , EXCLUDE 127.0.0.1 , EXCLUDE localhost"
 
 
 class SnapshotError(Exception):
@@ -117,7 +119,7 @@ def drawio_up(url: str) -> bool:
 def headless_cmd(chrome: str, size: tuple[int, int], *tail: str) -> list[str]:
     return [
         chrome, "--headless=new", "--disable-gpu", "--hide-scrollbars", f"--force-device-scale-factor={SCALE}",
-        f"--virtual-time-budget={VIRTUAL_TIME_MS}", f"--window-size={size[0]},{size[1]}", *tail,
+        f"--virtual-time-budget={VIRTUAL_TIME_MS}", f"--host-resolver-rules={OFFLINE_RULES}", f"--window-size={size[0]},{size[1]}", *tail,
     ]
 
 
@@ -163,13 +165,17 @@ def snapshot(drawio: Path, out_dir: Path, drawio_url: str, tiles: str) -> list[P
 def add_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("drawio", type=Path)
     ap.add_argument("-o", "--out-dir", type=Path, required=True)
-    ap.add_argument("--drawio-url", default=DRAWIO_URL, help="local draw.io; never a public host")
+    ap.add_argument("--drawio-url", default=None, help="your own local draw.io (never a public host); default: the bundled one")
     ap.add_argument("--tiles", default="2x2", help="COLSxROWS, 1x1 for the full image only (default 2x2)")
 
 
 def run(args: argparse.Namespace) -> int:
     try:
-        paths = snapshot(args.drawio, args.out_dir, args.drawio_url.rstrip("/"), args.tiles)
+        with drawio_app.drawio_at(args.drawio_url) as url:
+            paths = snapshot(args.drawio, args.out_dir, url, args.tiles)
+    except drawio_app.DrawioError as err:
+        print(err, file=sys.stderr)
+        return 2
     except SnapshotError as err:
         print(err, file=sys.stderr)
         return 2 if str(err) == DRAWIO_DOWN else 1

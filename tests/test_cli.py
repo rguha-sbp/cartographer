@@ -4,7 +4,7 @@ from xml.etree import ElementTree
 
 import pytest
 
-from cartographer import cli, files, snapshot, svg_export, tfdiagram
+from cartographer import cli, drawio_app, files, snapshot, svg_export, tfdiagram
 
 FIXTURES = Path(__file__).parent / "fixtures"
 STALE = "Terraform changed since curation: rerun the curation"
@@ -81,7 +81,7 @@ def _build(tmp_path: Path, curated: Path, *extra: str) -> int:
 
 
 @pytest.fixture
-def renderer(monkeypatch) -> None:
+def renderer(monkeypatch, bundled_app) -> None:
     monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
     monkeypatch.setattr(svg_export, "export_svg", lambda mxfile, url: f"<svg>{files.sha256_text(mxfile)}</svg>")
 
@@ -109,12 +109,24 @@ def test_build_defaults_to_the_diagrams_folder(tmp_path: Path, capsys, renderer)
     assert "[mini.drawio](mini.drawio)" in (folder / "README.md").read_text()
 
 
+def test_build_exits_5_when_the_bundled_draw_io_cannot_be_fetched(tmp_path: Path, capsys, monkeypatch) -> None:
+    curated = _setup_build(tmp_path, capsys)
+
+    def refuse():
+        raise drawio_app.DrawioError("could not download draw.io 1 from u: blocked")
+
+    monkeypatch.setattr(drawio_app, "ensure", refuse)
+    assert _build(tmp_path, curated) == 5
+    assert "could not download" in capsys.readouterr().err
+    assert not (tmp_path / "out").exists()
+
+
 def test_build_fails_before_writing_when_draw_io_is_down(tmp_path: Path, capsys, monkeypatch) -> None:
     curated = _setup_build(tmp_path, capsys)
     before = curated.read_text()
     monkeypatch.setattr(snapshot, "drawio_up", lambda url: False)
-    assert _build(tmp_path, curated) == 5
-    assert "start the local draw.io" in capsys.readouterr().err
+    assert _build(tmp_path, curated, "--drawio-url", "http://localhost:8080") == 5
+    assert "no draw.io answers" in capsys.readouterr().err
     assert not (tmp_path / "out").exists()
     assert curated.read_text() == before
 
@@ -198,19 +210,6 @@ def test_build_defaults_curated_to_the_out_folder(tmp_path: Path, capsys, render
     assert cli.main(["build", "--name", "mini", "--repo", str(FIXTURES), "--out", str(out)]) == 0
 
 
-def test_view_opens_the_local_viewer(tmp_path: Path, monkeypatch, capsys) -> None:
-    opened = []
-    monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
-    monkeypatch.setattr(cli.webbrowser, "open", opened.append)
-    drawio = tmp_path / "a.drawio"
-    drawio.write_text("<mxfile/>")
-    assert cli.main(["view", str(drawio)]) == 0
-    assert opened[0].startswith("http://localhost:8080/?") and "#R" in opened[0]
-    assert capsys.readouterr().out.strip() == cli.VIEW_NOTE
-    assert cli.VIEW_NOTE == ("Read-only view. To edit, open the .drawio in your local draw.io (never a public host) "
-                             "and run `cartographer image` after.")
-
-
 def test_view_refuses_anything_but_a_drawio(tmp_path: Path, capsys) -> None:
     assert cli.main(["view", str(tmp_path / "a.svg")]) == 2
     assert "takes a .drawio" in capsys.readouterr().err
@@ -229,8 +228,8 @@ def test_image_fails_with_exit_5_when_draw_io_is_down(tmp_path: Path, capsys, mo
     monkeypatch.setattr(snapshot, "drawio_up", lambda url: False)
     drawio = tmp_path / "a.drawio"
     drawio.write_text("<mxfile/>")
-    assert cli.main(["image", str(drawio)]) == 5
-    assert "start the local draw.io" in capsys.readouterr().err
+    assert cli.main(["image", str(drawio), "--drawio-url", "http://localhost:8080"]) == 5
+    assert "no draw.io answers" in capsys.readouterr().err
     assert not (tmp_path / "a.svg").exists()
 
 

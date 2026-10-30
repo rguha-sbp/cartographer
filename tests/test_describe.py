@@ -175,7 +175,7 @@ def cache(tmp_path: Path, monkeypatch) -> Path:
 
 
 @pytest.fixture
-def renderer(monkeypatch) -> None:
+def renderer(monkeypatch, bundled_app) -> None:
     monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
     monkeypatch.setattr(svg_export, "export_svg", lambda mxfile, url: f"<svg>{files.sha256_text(mxfile)}</svg>")
 

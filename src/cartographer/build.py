@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from cartographer import (
+    drawio_app,
     files,
     gen_drawio,
     index,
@@ -54,7 +55,7 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--out", type=Path, default=Path("docs/architecture/diagrams"), help="relative to --repo")
     ap.add_argument("--curated", type=Path, help="curated file (default <out>/<name>.curated.json)")
     ap.add_argument("--edge-labels", choices=("on", "off"), default="on", help="print edge captions (default on)")
-    ap.add_argument("--drawio-url", default=snapshot.DRAWIO_URL, help="local draw.io for the image; never a public host")
+    ap.add_argument("--drawio-url", default=None, help="your own local draw.io (never a public host); default: the bundled one")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--replace", action="store_true", help="overwrite a .drawio that was edited by hand")
     mode.add_argument("--side-file", action="store_true", help="write <name>.generated.drawio and its image instead")
@@ -100,8 +101,9 @@ def _build(args: argparse.Namespace) -> int:
     diagram = tf_layout.layout({**verified, "title": title}, edge_labels=args.edge_labels == "on")
     mxfile = gen_drawio.render(diagram, page_id=f"{args.name}-architecture", page_name=title)
     try:
-        svg = svg_export.export_svg(mxfile, args.drawio_url.rstrip("/"))
-    except (svg_export.SvgError, snapshot.SnapshotError) as err:
+        with drawio_app.drawio_at(args.drawio_url) as url:
+            svg = svg_export.export_svg(mxfile, url)
+    except (svg_export.SvgError, snapshot.SnapshotError, drawio_app.DrawioError) as err:
         raise Refusal(EXIT_NO_RENDERER, str(err)) from err
 
     target = out / f"{args.name}.generated.drawio" if args.side_file else drawio_path
