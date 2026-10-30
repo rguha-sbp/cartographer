@@ -8,16 +8,19 @@ Claude looks at the rendered image, fixes what is wrong and looks again.
 ## View and edit a diagram
 
 - In Claude Code: `/cartographer:view` (the only diagram) or `/cartographer:view shop-l7`.
-- From the repo root: `cartographer view` or `cartographer view shop-l7` (a path to a .drawio works too).
+- With the standalone CLI (see "Running the CLI directly"): `view` or `view shop-l7` from the repo root (a path to a
+  .drawio works too).
 
 This serves a pinned draw.io on `127.0.0.1` only while the window is open. Save writes the .drawio and regenerates the
 image. Closing the window stops the server.
 
 ## What you need
 
-- Claude Code.
-- `uv` (`uv --version` should work). No git, no SSH key and no Python install are needed.
-- Google Chrome, used headless for images and screenshots.
+- Claude Code, and `git`, which Claude Code uses to add the marketplace. No SSH key is needed: it clones over HTTPS
+  when none is set up.
+- `uv` (`uv --version` should work). No Python install is needed: `uv` fetches one if the machine has none.
+- Google Chrome or Chromium on macOS, Linux or Windows. It opens the editor window and renders images and screenshots
+  headless.
 
 ## What gets installed
 
@@ -41,7 +44,7 @@ marketplace), under `drawio/`, `uv/` and `python/`. So do the intermediates (fac
 
 ### Without the plugin (standalone CLI)
 
-`uvx --from git+ssh://...` keeps its environment in uv's cache (`uv cache dir`, `~/.cache/uv` on Linux and macOS)
+`uvx --from git+https://...` keeps its environment in uv's cache (`uv cache dir`, `~/.cache/uv` on Linux and macOS)
 and cartographer keeps draw.io and the intermediates in `${XDG_CACHE_HOME:-~/.cache}/cartographer/`. To remove them:
 
 ```
@@ -66,11 +69,23 @@ and opens a PR (`scripts/bump_drawio.py`, or run it by hand with `--dry-run` to 
 In Claude Code:
 
 ```
-/plugin marketplace add git@github.com:rguha-sbp/cartographer.git
+/plugin marketplace add rguha-sbp/cartographer
 /plugin install cartographer@cartographer
 ```
 
 Then run `/cartographer` in the repo you want to document.
+
+### Update
+
+Claude Code does not auto-update plugins from third-party marketplaces unless you turn it on (`/plugin` >
+Marketplaces > Enable auto-update). To update by hand:
+
+```
+claude plugin update cartographer@cartographer
+```
+
+then start a new session or run `/reload-plugins`. Updates keep the plugin data folder, so draw.io is not downloaded
+again unless its pin changed.
 
 ## First run
 
@@ -120,26 +135,14 @@ An L7 diagram nests AWS Cloud, region, account, VPC, subnet tier and workload:
 - Workload frames hold the services of one application, so separate workloads read as separate, inside a subnet frame
   or directly under the account for regional services such as S3.
 
-`cartographer view` opens the diagram in the bundled draw.io editor. To change a diagram, edit it there as below.
-
-## Nesting on the diagram
-
-An L7 diagram nests AWS Cloud, region, account, VPC, subnet tier and workload:
-
-- A VPC frame carries its address ranges in the title, for example `shop-vpc (10.0.0.0/16)`, but only when the
-  Terraform or you gave them. A CIDR is never guessed.
-- Subnet frames group the services of one tier: public, private or isolated. Availability Zones are not drawn.
-- Workload frames hold the services of one application, so separate workloads read as separate, inside a subnet frame
-  or directly under the account for regional services such as S3.
-
-`cartographer view` opens the diagram in the bundled draw.io editor. To change a diagram, edit it there as below.
+The view command opens the diagram in the bundled draw.io editor. To change a diagram, edit it there as below.
 
 ## Editing a diagram by hand
 
-1. `cartographer view docs/architecture/diagrams/<name>.drawio` opens the editor in your browser. It keeps running
-   until you close the tab (or press Ctrl-C).
-2. Edit, then Save. Save writes the `.drawio` and regenerates its image next to it, so `cartographer check` stays
-   green.
+1. `/cartographer:view <name>` in Claude Code (or `view docs/architecture/diagrams/<name>.drawio` with the
+   standalone CLI) opens the editor in its own Chrome window. It keeps running until you close the window (or press
+   Ctrl-C).
+2. Edit, then Save. Save writes the `.drawio` and regenerates its image next to it, so `check` stays green.
 
 The next time the skill runs it notices the hand edit and asks you whether to keep it, replace it with a fresh
 generation, or write a side file to compare. These map to doing nothing, `build --replace` and `build --side-file`
@@ -151,8 +154,8 @@ Add to `.pre-commit-config.yaml`:
 
 ```yaml
 repos:
-  - repo: git@github.com:rguha-sbp/cartographer
-    rev: v0.3.0
+  - repo: https://github.com/rguha-sbp/cartographer
+    rev: v0.3.1
     hooks:
       - id: cartographer-check
 ```
@@ -163,7 +166,7 @@ rendered from a different `.drawio`, for example after a hand edit without `cart
 ## Running the CLI directly
 
 Without the plugin, prefix each command with
-`uvx --from git+ssh://git@github.com/rguha-sbp/cartographer@v0.3.0 cartographer`:
+`uvx --from git+https://github.com/rguha-sbp/cartographer@v0.3.1 cartographer`:
 
 | Command | What it does |
 |---|---|

@@ -18,7 +18,7 @@ PREFIX = "/_cartographer"
 MAX_SAVE_BYTES = 64 << 20
 OPEN_NOTE = "Editing {name}. Save in the editor writes the file. Close the window to stop."
 REOPEN_NOTE = ("To reopen later: /cartographer:view {stem} in Claude Code, "
-               "or `cartographer view {stem}` from the repo root.")
+               "or `view {stem}` with the standalone CLI from the repo root.")
 VIEW_NOTE = ("Read-only view. To edit, open the .drawio in your local draw.io (never a public host) "
              "and run `cartographer image` after.")
 HOST_PAGE = """<!doctype html>
