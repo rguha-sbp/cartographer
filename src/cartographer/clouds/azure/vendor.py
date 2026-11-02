@@ -1,9 +1,10 @@
 """Vendor draw.io's Azure icon table: icons.json {"<name>": {"path": "<category>/<File>.svg", "title": "<draw.io title>"}}.
 
-Source: the pinned draw.io app (see drawio_pin.json), unpacked at <app>: the files under <app>/img/lib/azure2/ and the
-titles in <app>/js/diagramly/sidebar/Sidebar-Azure2.js. Refresh with:
+Source: the pinned, sha256-checked draw.io web app (drawio_pin.json) that renders the diagrams, unpacked at <app>: the
+files under <app>/img/lib/azure2/ and the titles in <app>/js/diagramly/sidebar/Sidebar-Azure2.js. Refresh after a bump
+with:
 
-    python -m cartographer.clouds.azure.vendor <app>
+    uv run python -m cartographer.clouds.azure.vendor
 
 A name is the lower-cased file stem with anything but letters, digits and "_" removed; a stem that exists in two
 categories belongs to the first category in sorted order. The title is the sidebar title, else the stem with spaces.
@@ -18,6 +19,8 @@ import json
 import re
 import sys
 from pathlib import Path
+
+from cartographer import drawio_app
 
 OUT = Path(__file__).with_name("icons.json")
 CATALOG = Path(__file__).with_name("catalog.json")
@@ -66,7 +69,7 @@ def draft_catalog() -> list[str]:
 if __name__ == "__main__" and sys.argv[1:] == ["--draft-catalog"]:
     print("\n".join(draft_catalog()))
 elif __name__ == "__main__":
-    azure = parse(Path(sys.argv[1]))
+    azure = parse(drawio_app.ensure())
     lines = [f"  {json.dumps(name)}: {json.dumps(icon)}" for name, icon in azure.items()]
     OUT.write_text("{\n" + ",\n".join(lines) + "\n}\n", encoding="utf-8")
     print(f"{len(azure)} icons -> {OUT}")
