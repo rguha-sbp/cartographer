@@ -25,26 +25,21 @@ def schema_text() -> str:
     return json.dumps(schema, indent=2, sort_keys=True)
 
 
-def render_prompt(facts_path: Path, repo_root: Path, schema_path: Path, output_path: Path, key: str) -> str:
-    fills = {
-        "facts_path": facts_path,
-        "repo_root": repo_root,
-        "schema_path": schema_path,
-        "output_path": output_path,
-        "inputs_sha256": key,
-    }
-    text = PROMPT.read_text()
+def fill(template: Path, **fills: object) -> str:
+    """The text of `template` with every `{name}` replaced by its fill."""
+    text = template.read_text()
     for name, value in fills.items():
         text = text.replace("{" + name + "}", str(value))
     return text
+
+
+def render_prompt(facts_path: Path, repo_root: Path, schema_path: Path, output_path: Path, key: str) -> str:
+    return fill(PROMPT, facts_path=facts_path, repo_root=repo_root, schema_path=schema_path, output_path=output_path,
+                inputs_sha256=key)
 
 
 def render_describe_prompt(schema_path: Path, output_path: Path, interview_path: Path) -> str:
-    fills = {"schema_path": schema_path, "output_path": output_path, "interview_path": interview_path}
-    text = DESCRIBE_PROMPT.read_text()
-    for name, value in fills.items():
-        text = text.replace("{" + name + "}", str(value))
-    return text
+    return fill(DESCRIBE_PROMPT, schema_path=schema_path, output_path=output_path, interview_path=interview_path)
 
 
 def inputs_sha256(facts_path: Path) -> str:

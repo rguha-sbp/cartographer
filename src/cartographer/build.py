@@ -3,7 +3,6 @@ structure and evidence for a described one), then lay out and write the diagram.
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 from cartographer import (
@@ -30,15 +29,32 @@ STALE = "Terraform changed since curation: rerun the curation"
 
 
 class Refusal(Exception):
+    """A command stopping with an exit code and a message; `cli.main` prints the message and returns the code."""
+
     def __init__(self, code: int, message: str) -> None:
         super().__init__(message)
         self.code = code
 
 
-def _verify_terraform(name: str, curated: dict, repo: Path) -> tuple[dict, str]:
+def cached_facts(name: str) -> Path:
+    """The facts `cartographer extract` cached for diagram `name`."""
     facts_path = cache_dir(name) / "facts.json"
     if not facts_path.is_file():
         raise Refusal(EXIT_NO_FACTS, f"no facts for diagram {name}: run `cartographer extract` first")
+    return facts_path
+
+
+def render_svgs(mxfiles: list[str], drawio_url: str | None) -> list[str]:
+    """The svg image of every mxfile, from one draw.io: the caller's own at `drawio_url`, else the bundled one."""
+    try:
+        with drawio_app.drawio_at(drawio_url) as url:
+            return [svg_export.export_svg(mxfile, url) for mxfile in mxfiles]
+    except (svg_export.SvgError, snapshot.SnapshotError, drawio_app.DrawioError) as err:
+        raise Refusal(EXIT_NO_RENDERER, str(err)) from err
+
+
+def _verify_terraform(name: str, curated: dict, repo: Path) -> tuple[dict, str]:
+    facts_path = cached_facts(name)
     if curated.get("inputs_sha256") != tfdiagram.inputs_sha256(facts_path):
         raise Refusal(EXIT_STALE, STALE)
     return tf_verify.verify(json.loads(facts_path.read_text()), curated, repo)
@@ -62,14 +78,6 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
-    try:
-        return _build(args)
-    except Refusal as refusal:
-        print(refusal, file=sys.stderr)
-        return refusal.code
-
-
-def _build(args: argparse.Namespace) -> int:
     repo = args.repo.resolve()
     out = repo / args.out
     curated_path = args.curated or out / f"{args.name}.curated.json"
@@ -100,11 +108,7 @@ def _build(args: argparse.Namespace) -> int:
     title = tfdiagram.diagram_title(verified)
     diagram = tf_layout.layout({**verified, "title": title}, edge_labels=args.edge_labels == "on")
     mxfile = gen_drawio.render(diagram, page_id=f"{args.name}-architecture", page_name=title)
-    try:
-        with drawio_app.drawio_at(args.drawio_url) as url:
-            svg = svg_export.export_svg(mxfile, url)
-    except (svg_export.SvgError, snapshot.SnapshotError, drawio_app.DrawioError) as err:
-        raise Refusal(EXIT_NO_RENDERER, str(err)) from err
+    (svg,) = render_svgs([mxfile], args.drawio_url)
 
     target = out / f"{args.name}.generated.drawio" if args.side_file else drawio_path
     out.mkdir(parents=True, exist_ok=True)

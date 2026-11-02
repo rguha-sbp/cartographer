@@ -4,7 +4,7 @@ from xml.etree import ElementTree
 
 import pytest
 
-from cartographer import cli, drawio_app, files, snapshot, svg_export, tfdiagram
+from cartographer import cli, drawio_app, files, snapshot, tfdiagram
 
 FIXTURES = Path(__file__).parent / "fixtures"
 STALE = "Terraform changed since curation: rerun the curation"
@@ -78,12 +78,6 @@ def _build(tmp_path: Path, curated: Path, *extra: str) -> int:
     out = tmp_path / "out"
     return cli.main(["build", "--name", "mini", "--repo", str(FIXTURES), "--out", str(out), "--curated", str(curated),
                      *extra])
-
-
-@pytest.fixture
-def renderer(monkeypatch, bundled_app) -> None:
-    monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
-    monkeypatch.setattr(svg_export, "export_svg", lambda mxfile, url: f"<svg>{files.sha256_text(mxfile)}</svg>")
 
 
 def test_build_writes_drawio_svg_fingerprint_and_index(cache: Path, tmp_path: Path, capsys, renderer) -> None:
