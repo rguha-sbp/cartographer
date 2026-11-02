@@ -1,12 +1,12 @@
 """`cartographer prompt --c4` and `cartographer build --c4`: curate one C4 model of a system, then write every view
-it supports, replacing the views an earlier model wrote."""
+it supports as a page of one .drawio, replacing the views an earlier model wrote."""
 
 import argparse
 import json
 from pathlib import Path
 
-from cartographer import c4_model, c4_styles, c4_verify, c4_views, files, gen_drawio, index, tf_layout, tfdiagram
-from cartographer.build import EXIT_STALE, EXIT_VERIFY, Refusal, cached_facts, render_svgs
+from cartographer import c4_model, c4_styles, c4_verify, c4_views, files, gen_drawio, tf_layout, tfdiagram
+from cartographer.build import EXIT_STALE, EXIT_VERIFY, Refusal, cached_facts, publish, render_images
 from cartographer.workdir import cache_dir
 
 PROMPT = Path(__file__).with_name("c4_prompt.md")
@@ -42,24 +42,16 @@ def build(args: argparse.Namespace) -> int:
 
     # Every view is laid out and rendered before anything is written, so a failure leaves the folder as it was.
     edge_labels = args.edge_labels == "on"
-    mxfiles = {
-        out / f"{args.name}-{v.slug}.drawio": gen_drawio.render(
-            tf_layout.layout(v.curated, edge_labels=edge_labels, notation=c4_styles.C4),
-            page_id=f"{args.name}-{v.slug}", page_name=v.title, notation=c4_styles.C4)
+    drawio = out / c4_views.drawio_name(args.name)
+    mxfile = files.mxfile([
+        gen_drawio.page(tf_layout.layout(v.curated, edge_labels=edge_labels, notation=c4_styles.C4),
+                        page_id=f"{args.name}-{v.slug}", page_name=v.title, notation=c4_styles.C4)
         for v in views
-    }
-    svgs = render_svgs(list(mxfiles.values()), args.drawio_url)
+    ])
+    images = render_images(drawio, mxfile, args.drawio_url)
 
-    out.mkdir(parents=True, exist_ok=True)
-    for (drawio, mxfile), svg in zip(mxfiles.items(), svgs, strict=True):
-        drawio.write_bytes(mxfile.encode())
-        files.image_path(drawio).write_text(svg)
-    for stale in out.glob("*.drawio"):
-        if stale not in mxfiles and c4_views.written_by_c4(args.name, stale):
+    for stale in out.glob("*"):
+        if stale not in images and c4_views.written_by_c4(args.name, stale):
             stale.unlink()
-            files.image_path(stale).unlink(missing_ok=True)
-    index.write_index(out)
-    for drawio in mxfiles:
-        print(drawio)
-        print(files.image_path(drawio))
+    publish(drawio, mxfile, images)
     return 0

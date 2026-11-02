@@ -57,10 +57,20 @@ def renderer(drawio_url: str | None) -> Iterator[str]:
         raise Refusal(EXIT_NO_RENDERER, str(err)) from err
 
 
-def render_svgs(mxfiles: list[str], drawio_url: str | None) -> list[str]:
-    """The svg image of every mxfile, from one draw.io."""
+def render_images(drawio: Path, mxfile: str, drawio_url: str | None) -> dict[Path, str]:
+    """The images of `mxfile`, to be written as `drawio`, from one draw.io."""
     with renderer(drawio_url) as url:
-        return [svg_export.export_svg(mxfile, url) for mxfile in mxfiles]
+        return svg_export.images(drawio, mxfile, url)
+
+
+def publish(drawio: Path, mxfile: str, images: dict[Path, str]) -> None:
+    """Write the .drawio and its images, refresh the folder index and print every written path."""
+    drawio.parent.mkdir(parents=True, exist_ok=True)
+    drawio.write_bytes(mxfile.encode())
+    for image, svg in images.items():
+        image.write_text(svg)
+    index.write_index(drawio.parent)
+    print(drawio, *images, sep="\n")
 
 
 def _verify_terraform(name: str, curated: dict, repo: Path) -> tuple[dict, str]:
@@ -118,15 +128,8 @@ def run(args: argparse.Namespace) -> int:
     title = tfdiagram.diagram_title(verified)
     diagram = tf_layout.layout({**verified, "title": title}, edge_labels=args.edge_labels == "on")
     mxfile = gen_drawio.render(diagram, page_id=f"{args.name}-architecture", page_name=title)
-    (svg,) = render_svgs([mxfile], args.drawio_url)
-
     target = out / f"{args.name}.generated.drawio" if args.side_file else drawio_path
-    out.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(mxfile.encode())
-    files.image_path(target).write_text(svg)
+    publish(target, mxfile, render_images(target, mxfile, args.drawio_url))
     if not args.side_file:
         files.record_sha256(curated_path, files.sha256_text(mxfile))
-    index.write_index(out)
-    print(target)
-    print(files.image_path(target))
     return 0

@@ -5,6 +5,7 @@ import urllib.error
 import urllib.request
 import zlib
 from pathlib import Path
+from xml.etree import ElementTree
 
 import pytest
 
@@ -28,9 +29,9 @@ def served(tmp_path: Path, monkeypatch):
     drawio.write_text(MXFILE)
     renders = []
 
-    def fake_export(mxfile: str, url: str) -> str:
+    def fake_export(mxfile: str, source_sha256: str, url: str) -> str:
         renders.append((mxfile, url))
-        return f"<svg>{files.sha256_text(mxfile)}</svg>"
+        return f"<svg>{source_sha256}</svg>"
 
     monkeypatch.setattr(svg_export, "export_svg", fake_export)
     session = view.Session(drawio)
@@ -67,6 +68,16 @@ def test_save_writes_the_file_atomically_and_regenerates_the_image(served) -> No
     assert not list(drawio.parent.glob(".*.tmp"))
     assert renders == [(EDITED, base)]
     assert files.image_path(drawio).read_text() == f"<svg>{files.sha256_file(drawio)}</svg>"
+
+
+def test_save_of_a_book_regenerates_an_image_per_page(served) -> None:
+    base, _, drawio, renders = served
+    pages = MXFILE.replace('<diagram name="p">', '<diagram id="a-1" name="p">') + MXFILE.replace(
+        '<diagram name="p">', '<diagram id="a-2" name="q">')
+    book = pages.replace("</mxfile><mxfile>", "")
+    assert _request(base, f"{view.PREFIX}/save", body=book)[0] == 204
+    assert [ElementTree.fromstring(m).find("diagram").get("id") for m, _ in renders] == ["a-1", "a-2"]
+    assert (drawio.parent / "a-1.svg").read_text() == f"<svg>{files.sha256_file(drawio)}</svg>"
 
 
 def test_save_expands_a_compressed_diagram_so_the_image_matches_the_file(served) -> None:

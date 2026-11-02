@@ -129,7 +129,14 @@ def views(model: Model) -> list[View]:
     return result
 
 
-def written_by_c4(name: str, drawio: Path) -> bool:
-    """Whether drawio is a view file a C4 build of the model named `name` writes, for any ids."""
+def drawio_name(name: str) -> str:
+    """The .drawio that holds every view of the model named `name`, one page each."""
+    return f"{name}-c4.drawio"
+
+
+def written_by_c4(name: str, path: Path) -> bool:
+    """Whether path is a view image a C4 build of the model named `name` writes beside its .drawio, or a view file
+    an earlier build wrote, for any ids."""
     view = f"({CONTEXT}|{CONTAINER}|{DEPLOYMENT}|({COMPONENT}|{CODE}|{DYNAMIC})-{ID})"
-    return re.fullmatch(f"{re.escape(name)}-{view}\\.drawio", drawio.name) is not None
+    book = re.escape(Path(drawio_name(name)).stem)
+    return re.fullmatch(f"{book}-{view}\\.svg|{re.escape(name)}-{view}\\.(drawio|svg)", path.name) is not None

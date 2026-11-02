@@ -38,7 +38,7 @@ def _prompt(args: argparse.Namespace) -> int:
 
 def _image(args: argparse.Namespace) -> int:
     with build.renderer(args.drawio_url) as url:
-        print(svg_export.write_image(args.file, url, args.file.read_bytes().decode()))
+        print(*svg_export.write_image(args.file, url, args.file.read_bytes().decode()), sep="\n")
     return 0
 
 
@@ -75,7 +75,7 @@ def _parser() -> argparse.ArgumentParser:
     p = command("view", view.run, "edit a .drawio in the bundled draw.io until the tab is closed", named=False)
     p.add_argument("file", nargs="?", default=None, help="a .drawio path or a diagram name (default: the only one)")
     p.add_argument("--drawio-url", default=None, help="read-only fallback when the bundled draw.io cannot be fetched")
-    p = command("image", _image, "regenerate the .svg image next to a .drawio", named=False)
+    p = command("image", _image, "regenerate the .svg images next to a .drawio, one per page", named=False)
     p.add_argument("file", type=Path, help="the .drawio file")
     p.add_argument("--drawio-url", default=None, help="your own local draw.io (never a public host)")
     p = command("check", drift.run, "fail when a .drawio has no image or a stale one (offline)", named=False)
