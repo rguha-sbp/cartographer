@@ -142,33 +142,54 @@ class Blocks:
             used_w = max(used_w, loose_w)
         return used_w, used_h
 
-    def _frame_chain(self) -> list[str]:
-        """Frames from outermost to innermost, following the deepest frame's ancestry."""
-        def depth(fid: str) -> int:
-            parent = self.groups[fid]["parent"]
-            return 1 + (depth(parent) if parent in self.frames else 0)
-
-        chain: list[str] = []
-        if self.frames:
-            fid: str | None = max(self.frames, key=depth)
-            while fid in self.frames:
-                chain.insert(0, fid)
-                fid = self.groups[fid]["parent"]
-        return chain
+    def _frame_tree(self) -> tuple[list[str], dict[str, list[str]]]:
+        """Root frames and each frame's child frames, in order of first appearance in the curated groups."""
+        kids = {f: [c for c in self.frames if self.groups[c]["parent"] == f] for f in self.frames}
+        return [f for f in self.frames if self.groups[f]["parent"] not in kids], kids
 
     def place_frames(self, x: int, y: int) -> Size:
-        """Place the frames and everything inside them at (x, y); return the outer size."""
-        chain = self._frame_chain()
-        n = len(chain)
-        # Blocks whose parent is not a block, and nodes not in a block, live directly in the innermost frame.
+        """Place the frame trees side by side and everything inside them at (x, y); return the outer size."""
+        roots, kids = self._frame_tree()
+        # Blocks whose parent is not a block, and nodes not in a block, live in the innermost frame of the
+        # single-child chain below their frame; with no frame of their own they go to the first tree.
         tops = [b for b in self.blocks if self.groups[b]["parent"] not in self.children]
         loose = [m for gid, ns in self.nodes.items() if gid not in self.children for m in ns]
-        used_w, used_h = self._columns(x + n * FRAME_PAD_X, y + n * FRAME_PAD_TOP, chain[-1] if chain else None,
-                                       tops, loose)
-        w, h = used_w + 2 * n * FRAME_PAD_X, used_h + n * (FRAME_PAD_TOP + FRAME_PAD_X)
-        for depth, fid in enumerate(chain):
+        owned: dict[str | None, tuple[list[str], list[dict[str, Any]]]] = {f: ([], []) for f in self.frames}
+
+        def owner(parent: str | None) -> str | None:
+            fid = parent if parent in kids else next(iter(roots), None)
+            while fid is not None and len(kids[fid]) == 1:
+                fid = kids[fid][0]
+            return fid
+
+        for b in tops:
+            owned.setdefault(owner(self.groups[b]["parent"]), ([], []))[0].append(b)
+        for n in loose:
+            owned.setdefault(owner(n["group"]), ([], []))[1].append(n)
+
+        def place_frame(fid: str, fx: int, fy: int) -> Size:
             g = self.groups[fid]
-            self.out_frames.append(Group(fid, g["label"], x + depth * FRAME_PAD_X, y + depth * FRAME_PAD_TOP,
-                                         w - 2 * depth * FRAME_PAD_X, h - depth * (FRAME_PAD_TOP + FRAME_PAD_X),
-                                         g["parent"], g["kind"], cloud=g.get("cloud")))
-        return w, h
+            slot = len(self.out_frames)
+            left = fx + FRAME_PAD_X
+            cx, content_h = left, 0
+            for child in kids[fid]:
+                cx += BLOCK_GAP if cx > left else 0
+                cw, ch = place_frame(child, cx, fy + FRAME_PAD_TOP)
+                cx, content_h = cx + cw, max(content_h, ch)
+            own_tops, own_loose = owned[fid]
+            if own_tops or own_loose:
+                cx += BLOCK_GAP if cx > left else 0
+                used_w, used_h = self._columns(cx, fy + FRAME_PAD_TOP, fid, own_tops, own_loose)
+                cx, content_h = cx + used_w, max(content_h, used_h)
+            w, h = cx + FRAME_PAD_X - fx, content_h + FRAME_PAD_TOP + FRAME_PAD_X
+            self.out_frames.insert(slot, Group(fid, g["label"], fx, fy, w, h, g["parent"], g["kind"],
+                                               cloud=g.get("cloud")))
+            return w, h
+
+        if not roots:
+            return self._columns(x, y, None, *owned.get(None, ([], [])))
+        rx, height = x, 0
+        for root in roots:
+            w, h = place_frame(root, rx, y)
+            rx, height = rx + w + BLOCK_GAP, max(height, h)
+        return rx - BLOCK_GAP - x, height
