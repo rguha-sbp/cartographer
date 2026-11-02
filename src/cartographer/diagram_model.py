@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from cartographer.clouds.aws import AWS
+
 ICON = 60
 ICON_LABEL = 34
 BOX_W, BOX_H = 200, 56
@@ -22,8 +24,8 @@ FLOW_MEANINGS = {
     "data": ("Grey", "data plumbing, audit, egress, delivery"),
 }
 
-# draw.io resIcon name -> category fill colour, vendored from draw.io by vendor_aws_icons.py.
-AWS_ICONS: dict[str, str] = json.loads(Path(__file__).with_name("aws_icons.json").read_text(encoding="utf-8"))
+# draw.io resIcon name -> category fill colour, vendored from draw.io by clouds/aws/vendor.py.
+AWS_ICONS: dict[str, str] = {name: icon["fill"] for name, icon in AWS.icons.items()}
 # draw.io General Resources shape name (users, client, internet, ...) -> fill colour; disjoint from AWS_ICONS.
 GENERIC_ICONS: dict[str, str] = json.loads(Path(__file__).with_name("generic_icons.json").read_text(encoding="utf-8"))
 

@@ -31,7 +31,7 @@ The numbers of the Layer 7 rules did not change when the list was split, so a fi
 
 ## Layer 7
 
-2. [curation] Every icon is a real icon: no empty box, and not the generic four-squares icon when a brand or AWS icon fits (`brand_icons.json`, `aws_icons.json`).
+2. [curation] Every icon is a real icon: no empty box, and not the generic four-squares icon when a brand or AWS icon fits (`brand_icons.json`, `clouds/aws/icons.json`).
 5. [tool] Lines in a bundle are distinguishable by colour (RULES.md: an arrow takes the colour of its destination).
 7. [curation] AWS services sit inside the AWS Cloud frame; third parties (brands, SaaS, users) sit outside it (RULES.md: AWS managed services are externals with `service` set).
 9. [tool] The legend matches what is drawn: colour meaning and solid versus dashed (RULES.md: line style is explained in words).

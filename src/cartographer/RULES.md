@@ -28,7 +28,7 @@ Each rule, where it is enforced, and where it comes from.
 | Arrowheads are open | renderer style (`gen_drawio`) | C4 model notation |
 | Line style is explained in words (solid primary, dashed secondary) | legend (`tf_layout`) | C4 model notation |
 | Captions are a specific verb plus protocol where known, never "uses" | curation prompt (`curate_prompt.md`, schema `maxLength` 28) | C4 model notation |
-| Official AWS icons and group frames (cloud, region, account, VPC) | renderer (`gen_drawio`, `aws_icons.json`) | AWS Architecture Icons |
+| Official AWS icons and group frames (cloud, region, account, VPC) | renderer (`gen_drawio`, `clouds/aws/icons.json`) | AWS Architecture Icons |
 | Layout fits A4 landscape | `tf_layout` grid choice | AWS networking best-practices conventions |
 | C4: the page name and the title state the view type and scope ("Container diagram for S") | `c4_views` | C4 model notation |
 | C4: the key explains every shape, colour, line style and arrowhead drawn | `c4_views` legend, `c4_styles` | C4 model notation |

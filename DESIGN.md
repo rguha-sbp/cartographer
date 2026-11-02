@@ -51,16 +51,16 @@ passes `<name>-architecture` and the curated title, `tf_layout.__main__` derives
 their purpose colour. A `Box` carries its node's `shape` (its `icon`, else its `service`) and no colours.
 Nothing in the generic modules is specific to one stack.
 
-## Icons (`aws_icons.json`)
+## Icons (`clouds/aws/icons.json`)
 
 The tool works for any AWS Terraform stack. Icons are draw.io's own 329 AWS resource icons, keyed by draw.io
 `resIcon` name (`lambda`, `s3`, `key_management_service`, `systems_manager`, `eventbridge`, `cloudwatch_2`, ...).
-`aws_icons.json` maps each name to its category fill colour (`{"lambda": "#ED7100"}`). It is vendored by
-`vendor_aws_icons.py` from `Sidebar-AWS4.js` of the pinned draw.io web app (`drawio_pin.json`), the same
+`clouds/aws/icons.json` maps each name to its category fill colour and draw.io title (`{"lambda": {"fill": "#ED7100", "title": "Lambda"}}`). It is vendored by
+`clouds/aws/vendor.py` from `Sidebar-AWS4.js` of the pinned draw.io web app (`drawio_pin.json`), the same
 sha256-checked build that renders the diagrams. Refresh after a bump with:
 
 ```
-uv run python -m cartographer.vendor_aws_icons
+uv run python -m cartographer.clouds.aws.vendor
 ```
 
 `generic_icons.json` (same script, same source file) holds the General Resources shapes drawn as
@@ -149,7 +149,7 @@ Any other `Icon.service` renders as a box of icon size, drawn by the notation.
 - `kind` in groups: `cloud | region | account | vpc | null` (the AWS frames; null = plain dashed group).
 - `column` in groups: integer 0 to 3, required. Role groups directly in the account are placed left to right by it
   (ignored for frames and for groups nested in another group, which follow their parent).
-- `service`: a draw.io icon name from `aws_icons.json` (`AWS_ICONS`) or `other` (SaaS, non-AWS), which becomes a
+- `service`: a draw.io icon name from `clouds/aws/icons.json` (`AWS_ICONS`) or `other` (SaaS, non-AWS), which becomes a
   plain box. The static `curated.schema.json` keeps `"type": "string"`; `tfdiagram.schema_text()` injects the enum
   (`sorted(AWS_ICONS) + ["other"]`) when it builds the schema the curation validates against, and that injected text
   feeds `inputs_sha256`. The prompt has no service list: the schema enum is the list.

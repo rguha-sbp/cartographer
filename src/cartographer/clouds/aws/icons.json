@@ -1,0 +1,1318 @@
+{
+  "activate": {
+    "fill": "#C925D1",
+    "title": "Activate"
+  },
+  "all_products": {
+    "fill": "#1E262E",
+    "title": "All Products"
+  },
+  "amplify": {
+    "fill": "#DD344C",
+    "title": "Amplify"
+  },
+  "analytics": {
+    "fill": "#8C4FFF",
+    "title": "Analytics"
+  },
+  "apache_mxnet_on_aws": {
+    "fill": "#01A88D",
+    "title": "Apache MXNet on AWS"
+  },
+  "api_gateway": {
+    "fill": "#E7157B",
+    "title": "API Gateway"
+  },
+  "app_config": {
+    "fill": "#E7157B",
+    "title": "App Config"
+  },
+  "app_mesh": {
+    "fill": "#8C4FFF",
+    "title": "App Mesh"
+  },
+  "app_runner": {
+    "fill": "#ED7100",
+    "title": "App Runner"
+  },
+  "app_studio": {
+    "fill": "#01A88D",
+    "title": "App Studio"
+  },
+  "app_wizard": {
+    "fill": "#E7157B",
+    "title": "Launch Wizard"
+  },
+  "appfabric": {
+    "fill": "#DD344C",
+    "title": "AppFabric"
+  },
+  "appflow": {
+    "fill": "#E7157B",
+    "title": "AppFlow"
+  },
+  "application_auto_scaling": {
+    "fill": "#E7157B",
+    "title": "Application Auto Scaling"
+  },
+  "application_composer": {
+    "fill": "#C925D1",
+    "title": "Infrastructure Composer"
+  },
+  "application_discovery_service": {
+    "fill": "#01A88D",
+    "title": "Application Discovery Service"
+  },
+  "application_integration": {
+    "fill": "#E7157B",
+    "title": "Application Integration"
+  },
+  "application_recovery_controller": {
+    "fill": "#8C4FFF",
+    "title": "Application Recovery Controller"
+  },
+  "appsync": {
+    "fill": "#E7157B",
+    "title": "AppSync"
+  },
+  "artifact": {
+    "fill": "#DD344C",
+    "title": "Artifact"
+  },
+  "athena": {
+    "fill": "#8C4FFF",
+    "title": "Athena"
+  },
+  "audit_manager": {
+    "fill": "#DD344C",
+    "title": "Audit Manager"
+  },
+  "augmented_ai": {
+    "fill": "#01A88D",
+    "title": "Augmented AI (A2I)"
+  },
+  "aurora": {
+    "fill": "#C925D1",
+    "title": "Aurora"
+  },
+  "auto_scaling2": {
+    "fill": "#ED7100",
+    "title": "EC2 Auto Scaling"
+  },
+  "auto_scaling3": {
+    "fill": "#ED7100",
+    "title": "Auto Scaling"
+  },
+  "autoscaling": {
+    "fill": "#E7157B",
+    "title": "Auto Scaling"
+  },
+  "b2b_data_interchange": {
+    "fill": "#E7157B",
+    "title": "B2B Data Interchange"
+  },
+  "backint_agent": {
+    "fill": "#E7157B",
+    "title": "Backint Agent"
+  },
+  "backup": {
+    "fill": "#7AA116",
+    "title": "Backup"
+  },
+  "batch": {
+    "fill": "#ED7100",
+    "title": "Batch"
+  },
+  "bedrock": {
+    "fill": "#01A88D",
+    "title": "Bedrock"
+  },
+  "bedrock_agentcore": {
+    "fill": "#01A88D",
+    "title": "Bedrock AgentCore"
+  },
+  "blockchain": {
+    "fill": "#ED7100",
+    "title": "Blockchain"
+  },
+  "bottlerocket": {
+    "fill": "#ED7100",
+    "title": "Bottlerocket"
+  },
+  "braket": {
+    "fill": "#ED7100",
+    "title": "Braket"
+  },
+  "budgets_2": {
+    "fill": "#7AA116",
+    "title": "Budgets"
+  },
+  "business_application": {
+    "fill": "#DD344C",
+    "title": "Business Applications"
+  },
+  "certificate_manager_3": {
+    "fill": "#DD344C",
+    "title": "Certificate Manager"
+  },
+  "chatbot": {
+    "fill": "#E7157B",
+    "title": "Chatbot"
+  },
+  "chime": {
+    "fill": "#DD344C",
+    "title": "Chime"
+  },
+  "chime_sdk": {
+    "fill": "#DD344C",
+    "title": "Chime SDK"
+  },
+  "clean_rooms": {
+    "fill": "#8C4FFF",
+    "title": "Clean Rooms"
+  },
+  "client_vpn": {
+    "fill": "#8C4FFF",
+    "title": "Client VPN"
+  },
+  "cloud9": {
+    "fill": "#C925D1",
+    "title": "Cloud9"
+  },
+  "cloud_control_api": {
+    "fill": "#C925D1",
+    "title": "Cloud Control API"
+  },
+  "cloud_development_kit": {
+    "fill": "#C925D1",
+    "title": "Cloud Development Kit"
+  },
+  "cloud_directory": {
+    "fill": "#8C4FFF",
+    "title": "Cloud Directory"
+  },
+  "cloud_map": {
+    "fill": "#8C4FFF",
+    "title": "Cloud Map"
+  },
+  "cloud_wan": {
+    "fill": "#8C4FFF",
+    "title": "Cloud WAN"
+  },
+  "cloudendure_disaster_recovery": {
+    "fill": "#7AA116",
+    "title": "Elastic Disaster Recovery"
+  },
+  "cloudendure_migration": {
+    "fill": "#01A88D",
+    "title": "Application Migration Service"
+  },
+  "cloudformation": {
+    "fill": "#E7157B",
+    "title": "CloudFormation"
+  },
+  "cloudfront": {
+    "fill": "#8C4FFF",
+    "title": "CloudFront"
+  },
+  "cloudhsm": {
+    "fill": "#DD344C",
+    "title": "CloudHSM"
+  },
+  "cloudsearch2": {
+    "fill": "#8C4FFF",
+    "title": "CloudSearch"
+  },
+  "cloudshell": {
+    "fill": "#C925D1",
+    "title": "CloudShell"
+  },
+  "cloudtrail": {
+    "fill": "#E7157B",
+    "title": "CloudTrail"
+  },
+  "cloudwatch_2": {
+    "fill": "#E7157B",
+    "title": "CloudWatch"
+  },
+  "codeartifact": {
+    "fill": "#C925D1",
+    "title": "CodeArtifact"
+  },
+  "codebuild": {
+    "fill": "#C925D1",
+    "title": "CodeBuild"
+  },
+  "codecatalyst": {
+    "fill": "#C925D1",
+    "title": "CodeCatalyst"
+  },
+  "codecommit": {
+    "fill": "#C925D1",
+    "title": "CodeCommit"
+  },
+  "codedeploy": {
+    "fill": "#C925D1",
+    "title": "CodeDeploy"
+  },
+  "codeguru": {
+    "fill": "#E7157B",
+    "title": "CodeGuru"
+  },
+  "codeguru_2": {
+    "fill": "#01A88D",
+    "title": "CodeGuru"
+  },
+  "codepipeline": {
+    "fill": "#C925D1",
+    "title": "CodePipeline"
+  },
+  "codewhisperer": {
+    "fill": "#01A88D",
+    "title": "CodeWhisperer"
+  },
+  "cognito": {
+    "fill": "#DD344C",
+    "title": "Cognito"
+  },
+  "command_line_interface": {
+    "fill": "#C925D1",
+    "title": "Command Line Interface"
+  },
+  "comprehend": {
+    "fill": "#01A88D",
+    "title": "Comprehend"
+  },
+  "comprehend_medical": {
+    "fill": "#01A88D",
+    "title": "Comprehend Medical"
+  },
+  "compute": {
+    "fill": "#ED7100",
+    "title": "Compute"
+  },
+  "compute_optimizer": {
+    "fill": "#ED7100",
+    "title": "Compute Optimizer"
+  },
+  "config": {
+    "fill": "#E7157B",
+    "title": "Config"
+  },
+  "connect": {
+    "fill": "#DD344C",
+    "title": "Connect"
+  },
+  "console_mobile_application": {
+    "fill": "#E7157B",
+    "title": "Console Mobile Application"
+  },
+  "contact_center": {
+    "fill": "#DD344C",
+    "title": "Customer Experience"
+  },
+  "containers": {
+    "fill": "#ED7100",
+    "title": "Containers"
+  },
+  "control_tower": {
+    "fill": "#E7157B",
+    "title": "Control Tower"
+  },
+  "corretto": {
+    "fill": "#C925D1",
+    "title": "Corretto"
+  },
+  "cost_and_usage_report": {
+    "fill": "#7AA116",
+    "title": "Cost & Usage Report"
+  },
+  "cost_explorer": {
+    "fill": "#7AA116",
+    "title": "Cost Explorer"
+  },
+  "cost_management": {
+    "fill": "#7AA116",
+    "title": "Cloud Financial Management"
+  },
+  "custom_billing_manager": {
+    "fill": "#7AA116",
+    "title": "Billing Conductor"
+  },
+  "customer_enablement": {
+    "fill": "#C925D1",
+    "title": "Customer Enablement"
+  },
+  "customer_engagement": {
+    "fill": "#3334B9",
+    "title": "Customer Engagement"
+  },
+  "data_exchange": {
+    "fill": "#8C4FFF",
+    "title": "Data Exchange"
+  },
+  "data_transfer_terminal": {
+    "fill": "#01A88D",
+    "title": "Data Transfer Terminal"
+  },
+  "database": {
+    "fill": "#C925D1",
+    "title": "Databases"
+  },
+  "database_migration_service": {
+    "fill": "#C925D1",
+    "title": "Database Migration Service"
+  },
+  "datasync": {
+    "fill": "#01A88D",
+    "title": "DataSync"
+  },
+  "datazone": {
+    "fill": "#8C4FFF",
+    "title": "DataZone"
+  },
+  "deadline_cloud": {
+    "fill": "#ED7100",
+    "title": "Deadline Cloud"
+  },
+  "deep_learning_amis": {
+    "fill": "#01A88D",
+    "title": "Deep Learning AMIs"
+  },
+  "deep_learning_containers": {
+    "fill": "#01A88D",
+    "title": "Deep Learning Containers"
+  },
+  "deepracer": {
+    "fill": "#01A88D",
+    "title": "DeepRacer"
+  },
+  "desktop_and_app_streaming": {
+    "fill": "#01A88D",
+    "title": "End User Computing"
+  },
+  "detective": {
+    "fill": "#DD344C",
+    "title": "Detective"
+  },
+  "developer_tools": {
+    "fill": "#C925D1",
+    "title": "Developer Tools"
+  },
+  "device_farm": {
+    "fill": "#DD344C",
+    "title": "Device Farm"
+  },
+  "devops_agent": {
+    "fill": "#E7157B",
+    "title": "DevOps Agent"
+  },
+  "devops_guru": {
+    "fill": "#01A88D",
+    "title": "DevOps Guru"
+  },
+  "direct_connect": {
+    "fill": "#8C4FFF",
+    "title": "Direct Connect"
+  },
+  "directory_service": {
+    "fill": "#DD344C",
+    "title": "Directory Service"
+  },
+  "distro_for_opentelemetry": {
+    "fill": "#E7157B",
+    "title": "Distro for OpenTelemetry"
+  },
+  "documentdb_with_mongodb_compatibility": {
+    "fill": "#C925D1",
+    "title": "DocumentDB"
+  },
+  "dynamodb": {
+    "fill": "#C925D1",
+    "title": "DynamoDB"
+  },
+  "ec2": {
+    "fill": "#ED7100",
+    "title": "EC2"
+  },
+  "ec2_image_builder": {
+    "fill": "#ED7100",
+    "title": "EC2 Image Builder"
+  },
+  "ecr": {
+    "fill": "#ED7100",
+    "title": "Elastic Container Registry"
+  },
+  "ecs": {
+    "fill": "#ED7100",
+    "title": "Elastic Container Service"
+  },
+  "ecs_anywhere": {
+    "fill": "#ED7100",
+    "title": "ECS Anywhere"
+  },
+  "eks": {
+    "fill": "#ED7100",
+    "title": "Elastic Kubernetes Service"
+  },
+  "eks_anywhere": {
+    "fill": "#ED7100",
+    "title": "EKS Anywhere"
+  },
+  "eks_distro": {
+    "fill": "#ED7100",
+    "title": "EKS Distro"
+  },
+  "elastic_beanstalk": {
+    "fill": "#ED7100",
+    "title": "Elastic Beanstalk"
+  },
+  "elastic_block_store": {
+    "fill": "#7AA116",
+    "title": "Elastic Block Store"
+  },
+  "elastic_fabric_adapter": {
+    "fill": "#ED7100",
+    "title": "Elastic Fabric Adapter"
+  },
+  "elastic_file_system": {
+    "fill": "#7AA116",
+    "title": "Elastic File System"
+  },
+  "elastic_inference_2": {
+    "fill": "#01A88D",
+    "title": "Elastic Inference"
+  },
+  "elastic_load_balancing": {
+    "fill": "#ED7100",
+    "title": "Elastic Load Balancing"
+  },
+  "elastic_vmware_service": {
+    "fill": "#ED7100",
+    "title": "Elastic VMware Service"
+  },
+  "elasticache": {
+    "fill": "#C925D1",
+    "title": "ElastiCache"
+  },
+  "elasticsearch_service": {
+    "fill": "#8C4FFF",
+    "title": "OpenSearch Service"
+  },
+  "elemental": {
+    "fill": "#ED7100",
+    "title": "Elemental Appliances & Software"
+  },
+  "elemental_inference": {
+    "fill": "#01A88D",
+    "title": "Elemental Inference"
+  },
+  "elemental_link": {
+    "fill": "#ED7100",
+    "title": "Elemental Link"
+  },
+  "elemental_mediaconnect": {
+    "fill": "#ED7100",
+    "title": "Elemental MediaConnect"
+  },
+  "elemental_mediaconvert": {
+    "fill": "#ED7100",
+    "title": "Elemental MediaConvert"
+  },
+  "elemental_medialive": {
+    "fill": "#ED7100",
+    "title": "Elemental MediaLive"
+  },
+  "elemental_mediapackage": {
+    "fill": "#ED7100",
+    "title": "Elemental MediaPackage"
+  },
+  "elemental_mediastore": {
+    "fill": "#ED7100",
+    "title": "Elemental MediaStore"
+  },
+  "elemental_mediatailor": {
+    "fill": "#ED7100",
+    "title": "Elemental MediaTailor"
+  },
+  "emr": {
+    "fill": "#8C4FFF",
+    "title": "EMR"
+  },
+  "end_user_messaging": {
+    "fill": "#DD344C",
+    "title": "End User Messaging"
+  },
+  "entity_resolution": {
+    "fill": "#8C4FFF",
+    "title": "Entity Resolution"
+  },
+  "eventbridge": {
+    "fill": "#E7157B",
+    "title": "EventBridge"
+  },
+  "express_workflow": {
+    "fill": "#E7157B",
+    "title": "Express Workflows"
+  },
+  "fargate": {
+    "fill": "#ED7100",
+    "title": "Fargate"
+  },
+  "fault_injection_simulator": {
+    "fill": "#C925D1",
+    "title": "Fault Injection Service"
+  },
+  "file_cache": {
+    "fill": "#7AA116",
+    "title": "File Cache"
+  },
+  "finops_agent": {
+    "fill": "#7AA116",
+    "title": "FinOps Agent"
+  },
+  "finspace": {
+    "fill": "#8C4FFF",
+    "title": "FinSpace"
+  },
+  "firewall_manager": {
+    "fill": "#DD344C",
+    "title": "Firewall Manager"
+  },
+  "forecast": {
+    "fill": "#01A88D",
+    "title": "Forecast"
+  },
+  "fraud_detector": {
+    "fill": "#01A88D",
+    "title": "Fraud Detector"
+  },
+  "freertos": {
+    "fill": "#7AA116",
+    "title": "FreeRTOS"
+  },
+  "fsx": {
+    "fill": "#7AA116",
+    "title": "FSx"
+  },
+  "fsx_for_lustre": {
+    "fill": "#7AA116",
+    "title": "FSx for Lustre"
+  },
+  "fsx_for_netapp_ontap": {
+    "fill": "#7AA116",
+    "title": "FSx for NetApp ONTAP"
+  },
+  "fsx_for_openzfs": {
+    "fill": "#7AA116",
+    "title": "FSx for OpenZFS"
+  },
+  "fsx_for_windows_file_server": {
+    "fill": "#7AA116",
+    "title": "FSx for Windows File Server"
+  },
+  "gamelift_2": {
+    "fill": "#8C4FFF",
+    "title": "GameLift Servers"
+  },
+  "gamelift_streams": {
+    "fill": "#8C4FFF",
+    "title": "GameLift Streams"
+  },
+  "games": {
+    "fill": "#8C4FFF",
+    "title": "Game Tech"
+  },
+  "general": {
+    "fill": "#1E262E",
+    "title": "General"
+  },
+  "glacier": {
+    "fill": "#7AA116",
+    "title": "S3 Glacier"
+  },
+  "global_accelerator": {
+    "fill": "#8C4FFF",
+    "title": "Global Accelerator"
+  },
+  "glue": {
+    "fill": "#8C4FFF",
+    "title": "Glue"
+  },
+  "glue_databrew": {
+    "fill": "#8C4FFF",
+    "title": "Glue DataBrew"
+  },
+  "greengrass": {
+    "fill": "#7AA116",
+    "title": "IoT Greengrass"
+  },
+  "ground_station": {
+    "fill": "#C925D1",
+    "title": "Ground Station"
+  },
+  "guardduty": {
+    "fill": "#DD344C",
+    "title": "GuardDuty"
+  },
+  "healthimaging": {
+    "fill": "#01A88D",
+    "title": "HealthImaging"
+  },
+  "healthlake": {
+    "fill": "#01A88D",
+    "title": "HealthLake"
+  },
+  "healthscribe": {
+    "fill": "#01A88D",
+    "title": "HealthScribe"
+  },
+  "identity_and_access_management": {
+    "fill": "#DD344C",
+    "title": "Identity & Access Management"
+  },
+  "inspector": {
+    "fill": "#DD344C",
+    "title": "Inspector"
+  },
+  "interactive_video": {
+    "fill": "#ED7100",
+    "title": "Interactive Video Service"
+  },
+  "interconnect": {
+    "fill": "#8C4FFF",
+    "title": "Interconnect"
+  },
+  "internet_of_things": {
+    "fill": "#7AA116",
+    "title": "Internet of Things"
+  },
+  "iot_core": {
+    "fill": "#7AA116",
+    "title": "Core"
+  },
+  "iot_device_defender": {
+    "fill": "#7AA116",
+    "title": "Device Defender"
+  },
+  "iot_device_management": {
+    "fill": "#7AA116",
+    "title": "Device Management"
+  },
+  "iot_events": {
+    "fill": "#7AA116",
+    "title": "Events"
+  },
+  "iot_expresslink": {
+    "fill": "#7AA116",
+    "title": "ExpressLink"
+  },
+  "iot_fleetwise": {
+    "fill": "#7AA116",
+    "title": "FleetWise"
+  },
+  "iot_sitewise": {
+    "fill": "#7AA116",
+    "title": "SiteWise"
+  },
+  "iot_twinmaker": {
+    "fill": "#7AA116",
+    "title": "TwinMaker"
+  },
+  "iq": {
+    "fill": "#C925D1",
+    "title": "IQ"
+  },
+  "kendra": {
+    "fill": "#01A88D",
+    "title": "Kendra"
+  },
+  "key_management_service": {
+    "fill": "#DD344C",
+    "title": "Key Management Service"
+  },
+  "keyspaces": {
+    "fill": "#C925D1",
+    "title": "Keyspaces"
+  },
+  "kinesis": {
+    "fill": "#8C4FFF",
+    "title": "Kinesis"
+  },
+  "kinesis_data_firehose": {
+    "fill": "#8C4FFF",
+    "title": "Data Firehose"
+  },
+  "kinesis_data_streams": {
+    "fill": "#8C4FFF",
+    "title": "Kinesis Data Streams"
+  },
+  "kinesis_video_streams": {
+    "fill": "#8C4FFF",
+    "title": "Kinesis Video Streams"
+  },
+  "lake_formation": {
+    "fill": "#8C4FFF",
+    "title": "Lake Formation"
+  },
+  "lambda": {
+    "fill": "#ED7100",
+    "title": "Lambda"
+  },
+  "lex": {
+    "fill": "#01A88D",
+    "title": "Lex"
+  },
+  "license_manager": {
+    "fill": "#E7157B",
+    "title": "License Manager"
+  },
+  "lightsail": {
+    "fill": "#ED7100",
+    "title": "Lightsail"
+  },
+  "lightsail_for_research": {
+    "fill": "#ED7100",
+    "title": " Lightsail for Research"
+  },
+  "local_zones": {
+    "fill": "#ED7100",
+    "title": "Local Zones"
+  },
+  "location_service": {
+    "fill": "#DD344C",
+    "title": "Location Service"
+  },
+  "lookout_for_equipment": {
+    "fill": "#01A88D",
+    "title": "Lookout for Equipment"
+  },
+  "lookout_for_vision": {
+    "fill": "#01A88D",
+    "title": "Lookout for Vision"
+  },
+  "machine_learning": {
+    "fill": "#01A88D",
+    "title": "Artificial Intelligence"
+  },
+  "macie": {
+    "fill": "#DD344C",
+    "title": "Macie"
+  },
+  "mainframe_modernization": {
+    "fill": "#01A88D",
+    "title": "Mainframe Modernization"
+  },
+  "managed_apache_cassandra_service": {
+    "fill": "#C925D1",
+    "title": "Managed Apache Cassandra Service"
+  },
+  "managed_blockchain": {
+    "fill": "#ED7100",
+    "title": "Managed Blockchain"
+  },
+  "managed_service_for_apache_flink": {
+    "fill": "#8C4FFF",
+    "title": "Managed Service for Apache Flink"
+  },
+  "managed_service_for_grafana": {
+    "fill": "#E7157B",
+    "title": "Managed Grafana"
+  },
+  "managed_service_for_prometheus": {
+    "fill": "#E7157B",
+    "title": "Managed Service for Prometheus"
+  },
+  "managed_services": {
+    "fill": "#C925D1",
+    "title": "Managed Services"
+  },
+  "managed_streaming_for_kafka": {
+    "fill": "#8C4FFF",
+    "title": "Managed Streaming for Apache Kafka"
+  },
+  "managed_workflows_for_apache_airflow": {
+    "fill": "#E7157B",
+    "title": "Managed Workflows for Apache Airflow"
+  },
+  "management_and_governance": {
+    "fill": "#E7157B",
+    "title": "Management Tools"
+  },
+  "management_console": {
+    "fill": "#E7157B",
+    "title": "Management Console"
+  },
+  "marketplace": {
+    "fill": "#1E262E",
+    "title": "Marketplace"
+  },
+  "media_services": {
+    "fill": "#ED7100",
+    "title": "Media Services"
+  },
+  "memorydb_for_redis": {
+    "fill": "#C925D1",
+    "title": "MemoryDB"
+  },
+  "migration_and_transfer": {
+    "fill": "#01A88D",
+    "title": "Migration & Modernization"
+  },
+  "migration_evaluator": {
+    "fill": "#01A88D",
+    "title": "Migration Evaluator"
+  },
+  "mobile": {
+    "fill": "#DD344C",
+    "title": "Front-End Web & Mobile"
+  },
+  "monitron": {
+    "fill": "#01A88D",
+    "title": "Monitron"
+  },
+  "mq": {
+    "fill": "#E7157B",
+    "title": "MQ"
+  },
+  "multicloud_and_hybrid": {
+    "fill": "#E7157B",
+    "title": "Multicloud and Hybrid"
+  },
+  "neptune": {
+    "fill": "#C925D1",
+    "title": "Neptune"
+  },
+  "network_firewall": {
+    "fill": "#DD344C",
+    "title": "Network Firewall"
+  },
+  "networking_and_content_delivery": {
+    "fill": "#8C4FFF",
+    "title": "Networking & Content Delivery"
+  },
+  "neuron_ml_sdk": {
+    "fill": "#01A88D",
+    "title": "Neuron"
+  },
+  "nice_dcv": {
+    "fill": "#ED7100",
+    "title": "DCV"
+  },
+  "nitro_enclaves": {
+    "fill": "#ED7100",
+    "title": "Nitro Enclaves"
+  },
+  "nova2": {
+    "fill": "#01A88D",
+    "title": "Nova"
+  },
+  "omics": {
+    "fill": "#01A88D",
+    "title": "HealthOmics"
+  },
+  "open_3d_engine_2": {
+    "fill": "#8C4FFF",
+    "title": "Open 3D Engine"
+  },
+  "oracle_database_at_aws": {
+    "fill": "#C925D1",
+    "title": "Oracle Database at AWS"
+  },
+  "organizations": {
+    "fill": "#E7157B",
+    "title": "Organizations"
+  },
+  "outposts": {
+    "fill": "#ED7100",
+    "title": "Outposts rack"
+  },
+  "outposts_1u_and_2u_servers": {
+    "fill": "#ED7100",
+    "title": "Outposts servers"
+  },
+  "panorama": {
+    "fill": "#01A88D",
+    "title": "Panorama"
+  },
+  "parallel_cluster": {
+    "fill": "#ED7100",
+    "title": "Parallel Cluster"
+  },
+  "parallel_computing_service": {
+    "fill": "#ED7100",
+    "title": "Parallel Computing Service"
+  },
+  "partner_central": {
+    "fill": "#E7157B",
+    "title": "Partner Central"
+  },
+  "payment_cryptography": {
+    "fill": "#DD344C",
+    "title": "Payment Cryptography"
+  },
+  "personal_health_dashboard": {
+    "fill": "#E7157B",
+    "title": "Health Dashboard"
+  },
+  "personalize": {
+    "fill": "#01A88D",
+    "title": "Personalize"
+  },
+  "pinpoint": {
+    "fill": "#DD344C",
+    "title": "Pinpoint"
+  },
+  "polly": {
+    "fill": "#01A88D",
+    "title": "Polly"
+  },
+  "private_certificate_authority": {
+    "fill": "#DD344C",
+    "title": "Private Certificate Authority"
+  },
+  "professional_services": {
+    "fill": "#C925D1",
+    "title": "Professional Services"
+  },
+  "proton": {
+    "fill": "#E7157B",
+    "title": "Proton"
+  },
+  "q": {
+    "fill": "#01A88D",
+    "title": "Q"
+  },
+  "quantum_technologies": {
+    "fill": "#ED7100",
+    "title": "Quantum Technologies"
+  },
+  "quick_suite": {
+    "fill": "#DD344C",
+    "title": "Quick"
+  },
+  "rds": {
+    "fill": "#C925D1",
+    "title": "RDS"
+  },
+  "red_hat_openshift": {
+    "fill": "#ED7100",
+    "title": "Red Hat OpenShift Service on AWS"
+  },
+  "redshift": {
+    "fill": "#8C4FFF",
+    "title": "Redshift"
+  },
+  "rekognition_2": {
+    "fill": "#01A88D",
+    "title": "Rekognition"
+  },
+  "repost": {
+    "fill": "#C925D1",
+    "title": "rePost"
+  },
+  "repost_private": {
+    "fill": "#C925D1",
+    "title": "rePost Private"
+  },
+  "reserved_instance_reporting": {
+    "fill": "#7AA116",
+    "title": "Reserved Instance Reporting"
+  },
+  "resilience_hub": {
+    "fill": "#E7157B",
+    "title": "Resilience Hub"
+  },
+  "resource_access_manager": {
+    "fill": "#DD344C",
+    "title": "Resource Access Manager"
+  },
+  "resource_explorer": {
+    "fill": "#E7157B",
+    "title": "Resource Explorer"
+  },
+  "route_53": {
+    "fill": "#8C4FFF",
+    "title": "Route 53"
+  },
+  "rtb_fabric": {
+    "fill": "#8C4FFF",
+    "title": "RTB Fabric"
+  },
+  "s3": {
+    "fill": "#7AA116",
+    "title": "Simple Storage Service (S3)"
+  },
+  "s3_on_outposts_storage": {
+    "fill": "#7AA116",
+    "title": "S3 on Outposts"
+  },
+  "sagemaker": {
+    "fill": "#01A88D",
+    "title": "SageMaker AI"
+  },
+  "sagemaker_2": {
+    "fill": "#8C4FFF",
+    "title": "SageMaker"
+  },
+  "sagemaker_ground_truth": {
+    "fill": "#01A88D",
+    "title": "SageMaker Ground Truth"
+  },
+  "sagemaker_studio_lab": {
+    "fill": "#01A88D",
+    "title": "SageMaker Studio Lab"
+  },
+  "satellite": {
+    "fill": "#C925D1",
+    "title": "Satellite"
+  },
+  "savings_plans": {
+    "fill": "#7AA116",
+    "title": "Savings Plans"
+  },
+  "secrets_manager": {
+    "fill": "#DD344C",
+    "title": "Secrets Manager"
+  },
+  "security_agent": {
+    "fill": "#DD344C",
+    "title": "Security Agent"
+  },
+  "security_hub": {
+    "fill": "#DD344C",
+    "title": "Security Hub"
+  },
+  "security_identity_and_compliance": {
+    "fill": "#DD344C",
+    "title": "Security & Identity"
+  },
+  "security_incident_response": {
+    "fill": "#DD344C",
+    "title": "Security Incident Response"
+  },
+  "security_lake": {
+    "fill": "#DD344C",
+    "title": "Security Lake"
+  },
+  "serverless": {
+    "fill": "#8C4FFF",
+    "title": "Serverless"
+  },
+  "serverless_application_repository": {
+    "fill": "#ED7100",
+    "title": "Serverless Application Repository"
+  },
+  "service_catalog": {
+    "fill": "#E7157B",
+    "title": "Service Catalog"
+  },
+  "service_management_connector": {
+    "fill": "#E7157B",
+    "title": "Service Management Connector"
+  },
+  "shield": {
+    "fill": "#DD344C",
+    "title": "Shield"
+  },
+  "signer": {
+    "fill": "#DD344C",
+    "title": "Signer"
+  },
+  "simple_email_service": {
+    "fill": "#DD344C",
+    "title": "Simple Email Service"
+  },
+  "simspace_weaver": {
+    "fill": "#ED7100",
+    "title": "SimSpace Weaver"
+  },
+  "single_sign_on": {
+    "fill": "#DD344C",
+    "title": "IAM Identity Center"
+  },
+  "site_to_site_vpn": {
+    "fill": "#8C4FFF",
+    "title": "Site-to-Site VPN"
+  },
+  "snowball": {
+    "fill": "#01A88D",
+    "title": "Snowball"
+  },
+  "snowball_edge": {
+    "fill": "#01A88D",
+    "title": "Snowball Edge"
+  },
+  "sns": {
+    "fill": "#E7157B",
+    "title": "Simple Notification Service"
+  },
+  "sqs": {
+    "fill": "#E7157B",
+    "title": "Simple Queue Service"
+  },
+  "step_functions": {
+    "fill": "#E7157B",
+    "title": "Step Functions"
+  },
+  "storage": {
+    "fill": "#7AA116",
+    "title": "Storage"
+  },
+  "storage_gateway": {
+    "fill": "#7AA116",
+    "title": "Storage Gateway"
+  },
+  "supply_chain": {
+    "fill": "#DD344C",
+    "title": "Supply Chain"
+  },
+  "support": {
+    "fill": "#C925D1",
+    "title": "Support"
+  },
+  "sustainability": {
+    "fill": "#E7157B",
+    "title": "Sustainability"
+  },
+  "systems_manager": {
+    "fill": "#E7157B",
+    "title": "Systems Manager"
+  },
+  "systems_manager_incident_manager": {
+    "fill": "#E7157B",
+    "title": "Systems Manager - Incident Manager"
+  },
+  "telco_network_builder": {
+    "fill": "#E7157B",
+    "title": "Telco Network Builder"
+  },
+  "tensorflow_on_aws": {
+    "fill": "#01A88D",
+    "title": "TensorFlow on AWS"
+  },
+  "textract": {
+    "fill": "#01A88D",
+    "title": "Textract"
+  },
+  "thinkbox_deadline": {
+    "fill": "#ED7100",
+    "title": "Thinkbox Deadline"
+  },
+  "thinkbox_frost": {
+    "fill": "#ED7100",
+    "title": "Thinkbox Frost"
+  },
+  "thinkbox_krakatoa": {
+    "fill": "#ED7100",
+    "title": "Thinkbox Krakatoa"
+  },
+  "thinkbox_stoke": {
+    "fill": "#ED7100",
+    "title": "Thinkbox Stoke"
+  },
+  "thinkbox_xmesh": {
+    "fill": "#ED7100",
+    "title": "Thinkbox XMesh"
+  },
+  "timestream": {
+    "fill": "#C925D1",
+    "title": "Timestream"
+  },
+  "tools_and_sdks": {
+    "fill": "#C925D1",
+    "title": "Tools and SDKs"
+  },
+  "torchserve": {
+    "fill": "#01A88D",
+    "title": "PyTorch on AWS"
+  },
+  "training_certification": {
+    "fill": "#C925D1",
+    "title": "Training Certification"
+  },
+  "transcribe": {
+    "fill": "#01A88D",
+    "title": "Transcribe"
+  },
+  "transfer_family": {
+    "fill": "#01A88D",
+    "title": "Transfer Family"
+  },
+  "transform": {
+    "fill": "#01A88D",
+    "title": "Transform"
+  },
+  "transit_gateway": {
+    "fill": "#8C4FFF",
+    "title": "Transit Gateway"
+  },
+  "translate": {
+    "fill": "#01A88D",
+    "title": "Translate"
+  },
+  "trusted_advisor": {
+    "fill": "#E7157B",
+    "title": "Trusted Advisor"
+  },
+  "user_notifications": {
+    "fill": "#E7157B",
+    "title": "User Notifications"
+  },
+  "verified_access": {
+    "fill": "#8C4FFF",
+    "title": "Verified Access"
+  },
+  "verified_permissions": {
+    "fill": "#DD344C",
+    "title": "Verified Permissions"
+  },
+  "vpc": {
+    "fill": "#8C4FFF",
+    "title": "VPC"
+  },
+  "vpc_lattice": {
+    "fill": "#8C4FFF",
+    "title": "VPC Lattice"
+  },
+  "vpc_privatelink": {
+    "fill": "#8C4FFF",
+    "title": "PrivateLink"
+  },
+  "waf": {
+    "fill": "#DD344C",
+    "title": "WAF"
+  },
+  "wavelength": {
+    "fill": "#ED7100",
+    "title": "Wavelength"
+  },
+  "well_architect_tool": {
+    "fill": "#E7157B",
+    "title": "Well-Architected Tool"
+  },
+  "wickr": {
+    "fill": "#DD344C",
+    "title": "Wickr"
+  },
+  "workdocs": {
+    "fill": "#DD344C",
+    "title": "WorkDocs SDK"
+  },
+  "workmail": {
+    "fill": "#DD344C",
+    "title": "WorkMail"
+  },
+  "workspaces": {
+    "fill": "#01A88D",
+    "title": "WorkSpaces"
+  },
+  "workspaces_thin_client": {
+    "fill": "#01A88D",
+    "title": "WorkSpaces Thin Client"
+  },
+  "xray": {
+    "fill": "#C925D1",
+    "title": "X-Ray"
+  }
+}
