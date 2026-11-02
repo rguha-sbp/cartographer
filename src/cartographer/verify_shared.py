@@ -42,15 +42,22 @@ def shape_warnings(item: dict) -> list[str]:
     return [f"{item['id']}: icon {icon!r} is not a known icon, renders as a box"]
 
 
+def set_reason(item: dict, reason: str | None) -> None:
+    """Keep `reason` only on a marked item, so a re-verified item never carries a stale one."""
+    if reason:
+        item["reason"] = reason
+    else:
+        item.pop("reason", None)
+
+
 def declared_icon(item: dict) -> None:
-    """Set `icon`, `decided_by`, `marked` and a marked item's `reason` from the catalog when the item names a `tf_type`; an item that names a
-    cloud icon directly is marked as the curator's choice."""
+    """Set `icon`, `decided_by`, `marked` and a marked item's `reason` from the catalog when the item names a
+    `tf_type`; an item that names a cloud icon directly is marked as the curator's choice."""
     if tf_type := item.get("tf_type"):
         res = resolve_declared(tf_type, item.get("attributes", {}))
         if res.icon:
             item.update(icon=res.icon, decided_by=res.decided_by, marked=res.marked)
-            if res.marked and res.reason:
-                item["reason"] = res.reason
+            set_reason(item, res.reason if res.marked else None)
             return
     if icons.cloud_of(item.get("icon", "")):
         item.update(decided_by="curator", marked=True)

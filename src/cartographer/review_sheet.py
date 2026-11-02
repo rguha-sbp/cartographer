@@ -32,7 +32,8 @@ def write(cache: Path, verified: dict, facts: dict | None, diagram: Diagram) -> 
         entries.append({
             "id": icon.id, "label": item["label"], "cloud": icons.cloud_of(icon.icon), "icon": icon.icon,
             "icon_title": icons.title(icon.icon), "tf": _tf(item, facts), "decided_by": item.get("decided_by", ""),
-            "marked": item.get("marked", False), "reason": item.get("reason"), "override": item.get("override"), "frame": _frame(icon, groups),
+            "marked": item.get("marked", False), "reason": item.get("reason"), "override": item.get("override"),
+            "frame": _frame(icon, groups),
             "tiles": [],
         })
     sheet = {"view": verified["view"], "view_name": VIEW_SUMMARIES[verified["view"]],
