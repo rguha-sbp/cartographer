@@ -1,5 +1,6 @@
 """The C4 model: one flat list of elements and relationships that every view projects from."""
 
+import json
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 Model = dict[str, Any]
 
 SCHEMA = Path(__file__).with_name("c4.schema.json")
+SHAPE = json.loads(SCHEMA.read_text())
 
 _TYPE_NAMES = {"person": "Person", "system": "Software System", "container": "Container", "component": "Component"}
 

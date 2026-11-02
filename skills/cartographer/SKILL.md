@@ -108,8 +108,9 @@ C4 runs differ from the AWS flow:
 
 - Each run overwrites `docs/architecture/diagrams/<name>-<view>.drawio` and `.svg` for every view. There is no
   hand-edit guard: do not edit those files by hand.
-- Each run deletes the `<name>-*` view files the model no longer produces, and rewrites the folder `README.md`
-  index (one row per .drawio).
+- Each run deletes the view files the model no longer produces (`<name>-1-context`, `<name>-2-container`,
+  `<name>-3-component-<id>`, `<name>-4-code-<id>`, `<name>-5-deployment`, `<name>-6-dynamic-<id>`; no other file),
+  and rewrites the folder `README.md` index (one row per .drawio).
 - No curated file is kept in the repo. `model.json` stays in the cache folder.
 
 ## Describe flow (instead of steps 3 to 5)

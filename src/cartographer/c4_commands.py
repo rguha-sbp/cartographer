@@ -54,8 +54,8 @@ def build(args: argparse.Namespace) -> int:
     for (drawio, mxfile), svg in zip(mxfiles.items(), svgs, strict=True):
         drawio.write_bytes(mxfile.encode())
         files.image_path(drawio).write_text(svg)
-    for stale in out.glob(f"{args.name}-[1-6]-*.drawio"):
-        if stale not in mxfiles and not files.is_side_file(stale):
+    for stale in out.glob("*.drawio"):
+        if stale not in mxfiles and c4_views.written_by_c4(args.name, stale):
             stale.unlink()
             files.image_path(stale).unlink(missing_ok=True)
     index.write_index(out)

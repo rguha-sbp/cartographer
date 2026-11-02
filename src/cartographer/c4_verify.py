@@ -1,11 +1,10 @@
 """Check a C4 model against its structure, its evidence and the Terraform facts before any diagram is drawn."""
 
-import json
 from collections import Counter
 from pathlib import Path
 
 from cartographer import c4_views, schema_check
-from cartographer.c4_model import SCHEMA, Model, RollupError, ancestors, elements
+from cartographer.c4_model import SHAPE, Model, RollupError, ancestors, elements
 from cartographer.secret_patterns import contains_secret
 from cartographer.verify_shared import SECRET_REASON, code_hit, shape_warnings
 
@@ -14,7 +13,6 @@ COMPLETE_TYPES = (
     "aws_rds_cluster", "aws_dynamodb_table", "aws_s3_bucket", "aws_sqs_queue", "aws_sns_topic",
     "aws_kinesis_stream", "aws_elasticache_cluster", "aws_elasticache_replication_group",
 )
-SHAPE = json.loads(SCHEMA.read_text())
 INSIDE = {"container", "component", "code"}
 PARENT_TYPE = {"container": "system", "component": "container", "code": "component"}
 STATED_HEADING = "Stated by the engineer, not found in the repo"

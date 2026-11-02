@@ -1,12 +1,18 @@
 """Projections of a C4 model into curated-shaped dicts, one per diagram, for the layout engine to draw."""
 
+import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from cartographer.c4_boxes import element_node
 from cartographer.c4_deploy import deployment
-from cartographer.c4_model import Model, edge_text, in_scope, rollup, type_line, visible
+from cartographer.c4_model import SHAPE, Model, edge_text, in_scope, rollup, type_line, visible
 
 HEADS = {"uses": "open", "inherits": "inherits", "implements": "implements"}
+# Slugs of the views: the first three once per model, the rest once per container, component or scenario id.
+CONTEXT, CONTAINER, DEPLOYMENT = "1-context", "2-container", "5-deployment"
+COMPONENT, CODE, DYNAMIC = "3-component", "4-code", "6-dynamic"
+ID = SHAPE["$defs"]["id"]["pattern"].strip("^$")
 
 
 @dataclass(frozen=True)
@@ -92,20 +98,20 @@ def core(model: Model) -> list[View]:
     containers = _children(model, system, "container")
     context, container_title = f"System Context diagram for {name}", f"Container diagram for {name}"
     result = [
-        View("1-context", context, _curated(model, context, None, [system], rollup(model, _shown(model, [system])))),
-        View("2-container", container_title,
+        View(CONTEXT, context, _curated(model, context, None, [system], rollup(model, _shown(model, [system])))),
+        View(CONTAINER, container_title,
              _curated(model, container_title, system, containers, rollup(model, _shown(model, containers)))),
     ]
     for container in containers:
         if components := _children(model, container, "component"):
             title = f"Component diagram for {name}: {container['name']}"
             siblings = [c for c in containers if c["id"] != container["id"]]
-            result.append(View(f"3-component-{container['id']}", title,
+            result.append(View(f"{COMPONENT}-{container['id']}", title,
                                _component(model, title, container, components, siblings)))
     for component in (e for e in model["elements"] if e["type"] == "component"):
         if classes := _children(model, component, "code"):
             title = f"Code diagram for {name}: {component['name']}"
-            result.append(View(f"4-code-{component['id']}", title, _code(model, component, classes, title)))
+            result.append(View(f"{CODE}-{component['id']}", title, _code(model, component, classes, title)))
     return result
 
 
@@ -116,8 +122,14 @@ def views(model: Model) -> list[View]:
     result = core(model)
     if "deployment" in model:
         title = f"Deployment diagram for {name}: {model['deployment']['environment']}"
-        result.append(View("5-deployment", title, deployment(model, title)))
+        result.append(View(DEPLOYMENT, title, deployment(model, title)))
     for scenario in model.get("scenarios", []):
         title = f"Dynamic diagram for {name}: {scenario['name']}"
-        result.append(View(f"6-dynamic-{scenario['id']}", title, _dynamic(model, system, scenario, title)))
+        result.append(View(f"{DYNAMIC}-{scenario['id']}", title, _dynamic(model, system, scenario, title)))
     return result
+
+
+def written_by_c4(name: str, drawio: Path) -> bool:
+    """Whether drawio is a view file a C4 build of the model named `name` writes, for any ids."""
+    view = f"({CONTEXT}|{CONTAINER}|{DEPLOYMENT}|({COMPONENT}|{CODE}|{DYNAMIC})-{ID})"
+    return re.fullmatch(f"{re.escape(name)}-{view}\\.drawio", drawio.name) is not None

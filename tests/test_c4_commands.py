@@ -148,6 +148,29 @@ def test_build_c4_of_model_shop_keeps_its_l7_diagram(tmp_path: Path, renderer) -
     assert (out / "shop-l7.drawio").read_text() == "y" and (out / "shop-1-context.drawio").is_file()
 
 
+def test_build_c4_deletes_only_names_a_view_can_have(tmp_path: Path, renderer) -> None:
+    out = tmp_path / "out"
+    out.mkdir()
+    keep = ["shop-3-tier.drawio", "shop-1-contexts.drawio", "shop-3-component-.drawio", "shop-4-code-A.drawio",
+            "shop-6-dynamic-x.generated.drawio", "shop-2-container-v2.drawio"]
+    stale = ["shop-5-deployment.drawio", "shop-4-code-old_k.drawio", "shop-6-dynamic-pay.drawio"]
+    for name in keep + stale:
+        (out / name).write_text("y")
+    (cache_dir("shop") / "model.json").write_text(json.dumps(_shop()))
+    assert cli.main(["build", "--c4", "--name", "shop", "--repo", str(tmp_path), "--out", "out"]) == 0
+    assert all((out / name).read_text() == "y" for name in keep)
+    assert not any((out / name).exists() for name in stale)
+
+
+def test_build_c4_escapes_the_name(tmp_path: Path, renderer) -> None:
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "shopx-1-context.drawio").write_text("y")
+    (cache_dir("shop[x]") / "model.json").write_text(json.dumps(_shop()))
+    assert cli.main(["build", "--c4", "--name", "shop[x]", "--repo", str(tmp_path), "--out", "out"]) == 0
+    assert (out / "shopx-1-context.drawio").read_text() == "y"
+
+
 @pytest.mark.parametrize("flag", [["--side-file"], ["--replace"], ["--curated", "x.json"]])
 def test_build_c4_refuses_l7_only_flags(tmp_path: Path, capsys, flag: list[str]) -> None:
     _model(_shop())
