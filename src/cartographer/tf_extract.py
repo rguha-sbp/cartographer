@@ -27,7 +27,10 @@ class Extractor:
     def __init__(self, infra_dir: Path, repo_root: Path) -> None:
         self.infra_dir = infra_dir
         self.repo_root = repo_root.resolve()
-        root = build((repo_root / infra_dir).resolve(), repo_root, "", [], None, False)
+        directory = (self.repo_root / infra_dir).resolve()
+        if not any(directory.glob("*.tf")):
+            raise FileNotFoundError(f"no .tf files in {directory}; the infra dir is relative to the repo root")
+        root = build(directory, self.repo_root, "", [], None, False)
         found: list[Res] = []
         self.insts = list(root.walk())
         for inst in self.insts:

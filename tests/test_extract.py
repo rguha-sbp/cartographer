@@ -58,3 +58,13 @@ def test_a_non_literal_rule_attribute_marks_the_resource(neutral_facts: dict) ->
     lb = by_address(neutral_facts, "aws_lb.front")
     assert lb["icon"] == "aws:elastic_load_balancing" and lb["marked"] is True
     assert lb["reason"] == "load_balancer_type is not a literal"
+
+
+def test_a_relative_repo_root_is_resolved(monkeypatch):
+    monkeypatch.chdir(FIXTURES)
+    assert tf_extract.extract(Path("mini"), Path("."))["resources"]
+
+
+def test_an_infra_dir_without_terraform_files_is_an_error_not_an_empty_diagram():
+    with pytest.raises(FileNotFoundError, match="no .tf files in .*nope"):
+        tf_extract.extract(Path("nope"), FIXTURES)
