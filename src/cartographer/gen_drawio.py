@@ -3,6 +3,7 @@
 import html
 import xml.etree.ElementTree as ET
 
+from cartographer import c4_styles
 from cartographer.diagram_model import (
     AWS_ICONS,
     BRAND_ICONS,
@@ -30,6 +31,12 @@ GROUP_STYLES = {
     "subnet-public": "group_security_group;strokeColor=#7AA116;fillColor=none;fontColor=#248814;dashed=0",
     "subnet-private": "group_security_group;strokeColor=#00A4A6;fillColor=none;fontColor=#147EBA;dashed=0",
     "subnet-isolated": "group_security_group;strokeColor=#00A4A6;fillColor=none;fontColor=#147EBA;dashed=1",
+}
+
+END_ARROWS = {
+    "open": "endArrow=open;endFill=0;",
+    "inherits": "endArrow=block;endFill=0;",
+    "implements": "endArrow=block;endFill=0;dashed=1;",
 }
 
 TITLE_STYLE = "text;html=1;align=left;verticalAlign=top;fontSize=18;fontStyle=1;fontColor=#232F3E;whiteSpace=wrap;"
@@ -112,18 +119,22 @@ class DrawioRenderer:
 
     def node(self, n: Group | Icon | Box) -> None:
         match n:
+            case Group(kind=str(kind)) if kind in c4_styles.GROUP_KINDS:
+                self._vertex(n.id, _html_value(n.label), c4_styles.group_style(kind), n.x, n.y, n.w, n.h, n.parent)
             case Group():
                 self._vertex(n.id, _html_value(n.label), _group_style(n), n.x, n.y, n.w, n.h, n.parent)
             case Icon():
                 style = _icon_style(n) if has_icon(n.service) else _box_style(Box(n.id, n.label, 0, 0))
                 self._vertex(n.id, _html_value(n.label), style, n.x, n.y, ICON, ICON, n.parent)
+            case Box(kind=str(kind)):
+                self._vertex(n.id, c4_styles.box_html(n.label), c4_styles.box_style(kind), n.x, n.y, n.w, n.h, n.parent)
             case Box():
                 self._vertex(n.id, _html_value(n.label), _box_style(n), n.x, n.y, n.w, n.h, n.parent)
 
     def edge(self, e: Edge) -> None:
         connector = "rounded=0;" if e.exact else "edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;"
-        style = (f"{connector}html=1;endArrow=open;"
-                 f"endFill=0;strokeColor={e.color};strokeWidth=1.5;fontSize=12;fontColor=#232F3E;"
+        style = (f"{connector}html=1;{END_ARROWS[e.head]}"
+                 f"strokeColor={e.color};strokeWidth=1.5;fontSize=12;fontColor=#232F3E;"
                  f"labelBackgroundColor=#FFFFFF;{'dashed=1;' if e.dashed else ''}{_port('exit', e.out, e.out_off, e.exact)}"
                  f"{_port('entry', e.into, e.into_off, e.exact)}")
         self.edge_count += 1

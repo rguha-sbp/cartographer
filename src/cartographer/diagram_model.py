@@ -8,6 +8,7 @@ from typing import Literal
 ICON = 60
 ICON_LABEL = 34
 BOX_W, BOX_H = 200, 56
+ORIGIN = (40, 100)  # top-left of the drawing below the title; the legend starts at the same x
 FRAME_TITLE_LEFT, GROUP_TITLE_LEFT = 30, 8  # a group title starts this far in: after the AWS frame icon, or plain
 
 BLUE, RED, GREEN, PURPLE, GREY = "#147EBA", "#DD344C", "#1D8102", "#8C4FFF", "#879196"
@@ -39,7 +40,8 @@ L, R, T, B = (0, 0.5), (1, 0.5), (0.5, 0), (0.5, 1)
 
 Port = tuple[float, float]
 Point = tuple[int, int]
-Kind = Literal["cloud", "region", "account", "vpc", "subnet"]
+Kind = Literal["cloud", "region", "account", "vpc", "subnet", "boundary", "deployment"]
+Head = Literal["open", "inherits", "implements"]
 
 
 @dataclass(frozen=True)
@@ -78,6 +80,7 @@ class Box:
     parent: str | None = None
     fill: str = "#F2F3F3"
     stroke: str = EDGE_DEFAULT
+    kind: str | None = None  # a C4 element kind (person, container, ...) drawn in C4 style; else a plain box
 
 
 @dataclass(frozen=True)
@@ -95,6 +98,7 @@ class Edge:
     exact: bool = False  # `points` are the whole route, drawn as given; otherwise they only hint the connector
     out_off: Point = (0, 0)  # whole-pixel offset of the exit port from its fractional anchor
     into_off: Point = (0, 0)
+    head: Head = "open"
 
 
 @dataclass(frozen=True)

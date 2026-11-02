@@ -39,16 +39,25 @@ def shape(n: dict[str, Any]) -> str:
     return n.get("icon", n["service"])
 
 
-def _cell_w(nodes: list[dict[str, Any]]) -> int:
-    """Grids holding a plain box widen every cell so neighbouring boxes cannot overlap."""
-    if any(not has_icon(shape(n)) for n in nodes):
-        return BOX_W + GAP
-    return cell_w([_label(n) for n in nodes])
+def box_size(n: dict[str, Any]) -> Size:
+    """A plain box's size: its curated `box`, else the default box."""
+    w, h = n.get("box", (BOX_W, BOX_H))
+    return w, h
+
+
+def _cell(nodes: list[dict[str, Any]]) -> Size:
+    """Grids holding a plain box widen every cell to the widest box so neighbouring boxes cannot overlap, and
+    heighten it to the tallest box with GAP below."""
+    boxes = [box_size(n) for n in nodes if not has_icon(shape(n))]
+    if not boxes:
+        return cell_w([_label(n) for n in nodes]), CELL_H
+    return max(w for w, _ in boxes) + GAP, max(CELL_H, max(h for _, h in boxes) + GAP)
 
 
 def _grid(nodes: list[dict[str, Any]], cols: int) -> Size:
     """Size of the nodes' cells in at most `cols` columns."""
-    return min(len(nodes), cols) * _cell_w(nodes), math.ceil(len(nodes) / cols) * CELL_H
+    w, h = _cell(nodes)
+    return min(len(nodes), cols) * w, math.ceil(len(nodes) / cols) * h
 
 
 def group_label(g: dict[str, Any]) -> str:
@@ -88,14 +97,15 @@ class Blocks:
                 GROUP_PAD_TOP + sum(stacked) + GAP * (len(stacked) - 1) + GROUP_PAD_X)
 
     def place_leaves(self, nodes: list[dict[str, Any]], x: int, y: int, parent: str | None, cols: int) -> None:
-        cell_w = _cell_w(nodes)
+        cw, ch = _cell(nodes)
         for i, n in enumerate(nodes):
-            cx, cy = x + (i % cols) * cell_w, y + (i // cols) * CELL_H
+            cx, cy = x + (i % cols) * cw, y + (i // cols) * ch
             if has_icon(shape(n)):
-                self.out_leaves.append(Icon(n["id"], _label(n), shape(n), cx + (cell_w - ICON) // 2, cy, parent))
+                self.out_leaves.append(Icon(n["id"], _label(n), shape(n), cx + (cw - ICON) // 2, cy, parent))
             else:
-                self.out_leaves.append(Box(n["id"], _label(n), cx + (cell_w - BOX_W) // 2,
-                                           cy + (ICON - BOX_H) // 2, parent=parent))
+                w, h = box_size(n)  # level with an icon's middle; a box taller than an icon starts at the cell top
+                self.out_leaves.append(Box(n["id"], _label(n), cx + (cw - w) // 2, cy + max(ICON - h, 0) // 2, w, h,
+                                           parent, kind=n.get("c4")))
 
     def place(self, bid: str, x: int, y: int, w: int) -> int:
         """Place a block at (x, y) with width w; return its height."""
@@ -124,7 +134,7 @@ class Blocks:
             cx += w + BLOCK_GAP
         used_w, used_h = max(cx - BLOCK_GAP - x, 0), max(col_h, default=0)
         if loose:
-            row_cols = max(used_w // _cell_w(loose), 1)
+            row_cols = max(used_w // _cell(loose)[0], 1)
             self.place_leaves(loose, x, y + used_h + (GAP if used_h else 0), parent, row_cols)
             loose_w, loose_h = _grid(loose, row_cols)
             used_h += (GAP if used_h else 0) + loose_h
