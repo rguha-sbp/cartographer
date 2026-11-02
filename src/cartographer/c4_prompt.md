@@ -58,8 +58,9 @@ Scenarios
 
 Deployment
 - With a facts file: `deployment` has the `environment` name (stated by the engineer, else the Terraform folder name),
-  nested `nodes` (frames cloud, region, account, vpc, subnet with a `tier`, and the infrastructure such as a Lambda
-  function or an ECS service, each with `tf` addresses copied exactly from the facts), and `instances` placing each
+  nested `nodes` (frames cloud, region, account, vpc, subnet with a `tier`, with `tf` only where the frame is a
+  resource in the facts; and the infrastructure such as a Lambda function or an ECS service, each with `tf`
+  addresses copied exactly from the facts), and `instances` placing each
   container on its node.
 - Every compute, store and queue resource in the facts (Lambda, ECS service, EC2 or autoscaling group, RDS or Aurora,
   DynamoDB, S3, SQS, SNS, Kinesis, ElastiCache) is a deployment node or is listed in `omitted` as

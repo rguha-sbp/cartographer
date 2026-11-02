@@ -152,6 +152,14 @@ def test_terraform_nodes_need_existing_addresses(tmp_path):
     assert "n1: aws_lambda_function.fn is not in the facts" in errs
 
 
+def test_frames_may_have_no_terraform_addresses(tmp_path):
+    m = _tf()
+    m["deployment"]["nodes"].insert(0, {"id": "aws", "name": "AWS", "technology": "eu-west-1", "frame": "region",
+                                         "evidence": [{"stated": "region from the provider block"}]})
+    facts = _facts("aws_lambda_function.fn", "aws_db_instance.db", edges=[_edge("aws_db_instance.db", "aws_lambda_function.fn")])
+    assert not any(e.startswith("aws:") for e in verify(m, facts, tmp_path))
+
+
 def test_compute_resource_missing_from_deployment_fails(tmp_path):
     m = _tf()
     facts = _facts("aws_lambda_function.fn", "aws_db_instance.db", "aws_lambda_function.other",

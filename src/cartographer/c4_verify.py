@@ -149,12 +149,12 @@ def _evidence_rules(model: Model, facts: dict | None, repo: Path) -> list[str]:
 
 
 def _deployment(model: Model, facts: dict | None) -> list[str]:
-    """Terraform sources: every deployment node names addresses that exist in the facts, and every compute or
-    storage resource is on a node or omitted."""
+    """Terraform sources: every infrastructure node (frames are optional) names addresses that exist in the facts,
+    and every compute or storage resource is on a node or omitted."""
     if model["source"] != "terraform" or facts is None:
         return []
     addresses = {r["address"] for r in facts["resources"]}
-    out = [f"{n['id']}: needs terraform addresses" for n in _nodes(model) if not n.get("tf")]
+    out = [f"{n['id']}: needs terraform addresses" for n in _nodes(model) if not n.get("tf") and "frame" not in n]
     out += [f"{n['id']}: {a} is not in the facts" for n in _nodes(model) for a in n.get("tf", []) if a not in addresses]
     placed = {a for n in _nodes(model) for a in n.get("tf", [])} | {o["tf"] for o in model.get("omitted", [])}
     out += [f"{r['address']}: not on any view and not omitted" for r in facts["resources"]
