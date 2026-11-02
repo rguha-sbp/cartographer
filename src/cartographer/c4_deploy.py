@@ -1,4 +1,5 @@
-"""The Deployment view: AWS frames and icons as in the layer 7 diagrams, with container instances in deployment nodes."""
+"""The Deployment view: cloud frames and icons as in the layer 7 diagrams, with container instances in deployment
+nodes."""
 
 from cartographer import icons
 from cartographer.c4_boxes import box_node, element_node
@@ -11,8 +12,8 @@ def _group(node: dict, kind: str, label: str) -> dict:
 
 
 def _frame(node: dict) -> dict:
-    kind = "network" if node["frame"] == "vpc" else node["frame"]
-    return _group(node, kind, node["name"]) | {"cloud": "aws"} | ({"tier": node["tier"]} if "tier" in node else {})
+    tier = {"tier": node["tier"]} if "tier" in node else {}
+    return _group(node, node["frame"], node["name"]) | {"cloud": node["cloud"]} | tier
 
 
 def _host(node: dict) -> dict:
@@ -20,8 +21,8 @@ def _host(node: dict) -> dict:
 
 
 def _leaf(node: dict) -> dict:
-    """Infrastructure that hosts no container: its AWS icon, else a C4 infrastructure node box."""
-    if icons.known(icon := f"aws:{node.get('service')}"):
+    """Infrastructure that hosts no container: its cloud icon, else a C4 infrastructure node box."""
+    if icons.known(icon := node.get("icon", "")):
         return {"id": node["id"], "label": node["name"], "icon": icon, "group": node.get("parent"),
                 "tf": node.get("tf", []), "multi": False}
     label = element_label(node["name"], f"[Infrastructure Node: {node['technology']}]", "")

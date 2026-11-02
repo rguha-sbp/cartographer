@@ -1,5 +1,7 @@
 import copy
 
+import pytest
+
 from cartographer import c4_views
 from cartographer.c4_verify import report, stated_only, verify
 
@@ -157,6 +159,7 @@ def test_terraform_nodes_need_existing_addresses(tmp_path):
 def test_frames_may_have_no_terraform_addresses(tmp_path):
     m = _tf()
     m["deployment"]["nodes"].insert(0, {"id": "aws", "name": "AWS", "technology": "eu-west-1", "frame": "region",
+                                         "cloud": "aws",
                                          "evidence": [{"stated": "region from the provider block"}]})
     facts = _facts("aws_lambda_function.fn", "aws_db_instance.db", edges=[_edge("aws_db_instance.db", "aws_lambda_function.fn")])
     assert not any(e.startswith("aws:") for e in verify(m, facts, tmp_path))
@@ -263,11 +266,20 @@ def test_missing_required_keys_are_errors_not_crashes(tmp_path):
     assert verify({"elements": []}, None, tmp_path) == ["model: missing 'relationships'", "model: missing 'source'"]
 
 
-def test_deployment_node_with_an_unknown_icon_fails(tmp_path):
+@pytest.mark.parametrize("icon", ["aws:application_load_balancer", "azure:nope"])
+def test_deployment_node_with_an_unknown_icon_fails(tmp_path, icon):
     m = _tf()
-    m["deployment"]["nodes"][0]["service"] = "application_load_balancer"
+    m["deployment"]["nodes"][0]["icon"] = icon
     facts = _facts("aws_lambda_function.fn", "aws_db_instance.db", edges=[_edge("aws_db_instance.db", "aws_lambda_function.fn")])
-    assert "n1: service 'application_load_balancer' is not a draw.io AWS icon, renders as a box" in verify(m, facts, tmp_path)
+    assert f"n1: icon {icon!r} is not a known icon, renders as a box" in verify(m, facts, tmp_path)
+
+
+@pytest.mark.parametrize("icon", ["aws:lambda", "azure:function_apps"])
+def test_deployment_node_with_a_known_icon_of_any_cloud_passes(tmp_path, icon):
+    m = _tf()
+    m["deployment"]["nodes"][0]["icon"] = icon
+    facts = _facts("aws_lambda_function.fn", "aws_db_instance.db", edges=[_edge("aws_db_instance.db", "aws_lambda_function.fn")])
+    assert verify(m, facts, tmp_path) == []
 
 
 def test_relationship_no_core_view_draws_fails(tmp_path, monkeypatch):

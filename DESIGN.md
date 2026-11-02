@@ -281,8 +281,8 @@ placement). Every number is a module constant
 ## C4 diagrams
 
 A second notation next to the AWS one. The curation writes `model.json` (schema `c4.schema.json`) in the cache folder;
-nothing curated is committed. A view's curated data uses the Layer 7 keys: an element's C4 kind (`person`,
-`container_store`, ...) is its node's `service` or its external's `icon`, and `c4_styles.C4` draws it. Modules:
+nothing curated is committed. A view's curated data uses the Layer 7 keys (format 2): an element's C4 kind
+(`person`, `container_store`, ...) is its `icon`, and `c4_styles.C4` draws it. Modules:
 
 | File | Role |
 |---|---|
@@ -290,7 +290,7 @@ nothing curated is committed. A view's curated data uses the Layer 7 keys: an el
 | `c4_verify.py` | structure and evidence checks; no `code` elements without the engineer's consent |
 | `c4_styles.py` | the C4 `Notation`: element boxes by shape, boundaries and deployment nodes, key, neutral lines |
 | `c4_views.py`, `c4_boxes.py` | one `Diagram` per view, boxes sized from their three text blocks |
-| `c4_deploy.py` | the Deployment view: nested nodes and container instances |
+| `c4_deploy.py` | the Deployment view: nested nodes and container instances; frames carry their `cloud` and are drawn in that cloud's frame styles, infrastructure keeps its qualified `icon` |
 
 Views, written as pages of `docs/architecture/diagrams/<name>-c4.drawio` (page id `<name>-<slug>`, in slug order)
 and drawn into `<name>-c4-<slug>.svg`:

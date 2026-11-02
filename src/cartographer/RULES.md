@@ -37,7 +37,7 @@ Each rule, where it is enforced, and where it comes from.
 | C4: every relationship is one arrow with a label; between containers it names the technology or protocol | `c4_verify` | C4 model notation |
 | C4: Context holds the system, people and external systems only; levels are never mixed | `c4_verify`, `c4_views` | C4 model notation |
 | C4: containers sit in a system boundary; a Component view draws everything outside its container outside the boundary | `c4_views` | C4 model notation |
-| C4: plain shapes in the standard palette, no AWS icons (Deployment keeps AWS frames for nodes), solid sync and dashed async | `c4_styles`, `c4_deploy` | C4 model notation |
+| C4: plain shapes in the standard palette, no cloud icons (Deployment keeps cloud frames and icons for its infrastructure), solid sync and dashed async | `c4_styles`, `c4_deploy` | C4 model notation |
 | C4: Code views hold type name and stereotype only, and exist only with the engineer's consent | `c4_verify` (no `code` elements without consent), `c4_views` | C4 model notation |
 | C4: Dynamic arrows carry their step number | `c4_views` | C4 model notation |
 | C4: every C4 view obeys the line, icon and caption rules above; nothing flashy or animated | `tf_check`, `tf_route`, `c4_styles` | libavoid/ELK routing principles |

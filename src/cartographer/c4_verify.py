@@ -5,6 +5,7 @@ from pathlib import Path
 
 from cartographer import c4_views, schema_check
 from cartographer.c4_model import SHAPE, Model, RollupError, ancestors, elements
+from cartographer.clouds import CLOUDS
 from cartographer.secret_patterns import contains_secret
 from cartographer.verify_shared import SECRET_REASON, code_hit, shape_warnings
 
@@ -82,8 +83,9 @@ def _structure(model: Model) -> list[str]:
             out.append(f"{r['id']}: needs a technology, both ends are inside the system")
     out += [f"{s['id']}: step {step} is not a relationship" for s in model.get("scenarios", []) for step in s["steps"]
             if step not in rels]
-    out += [w for n in _nodes(model) if "service" in n
-            for w in shape_warnings({"id": n["id"], "icon": f"aws:{n['service']}"})]
+    out += [w for n in _nodes(model) for w in shape_warnings(n)]
+    out += [f"{n['id']}: a frame needs a known cloud" for n in _nodes(model)
+            if "frame" in n and n.get("cloud") not in CLOUDS]
     out += [f"{n['id']}: a subnet frame needs a tier" for n in _nodes(model)
             if n.get("frame") == "subnet" and "tier" not in n]
     out += _links(_nodes(model))
@@ -130,9 +132,9 @@ def _hosts(model: Model, by_id: dict[str, dict], eid: str) -> set[str]:
 
 def _joins(fact: dict, ends: tuple[set[str], ...]) -> bool:
     """The fact lands on the Terraform addresses in `ends`. One end, a deployment node's own addresses or the hosts of
-    an element: the fact names one of them, as an edge end, a placed resource or a vpc. A relationship's two ends: the
-    fact's src and dst, in either order. An empty set is an end not deployed in this environment (or never deployed,
-    like a person), so there is nothing to land on and any address will do."""
+    an element: the fact names one of them, as an edge end, a placed resource or a network. A relationship's two ends:
+    the fact's src and dst, in either order. An empty set is an end not deployed in this environment (or never
+    deployed, like a person), so there is nothing to land on and any address will do."""
     if len(ends) == 1:
         return not ends[0] or not ends[0].isdisjoint(fact.get(k) for k in ("src", "dst", "resource", "address"))
     src, dst = fact.get("src"), fact.get("dst")
@@ -155,7 +157,8 @@ def _evidence(item: dict, known: dict[str, dict] | None, repo: Path, ends: tuple
 
 
 def _evidence_rules(model: Model, facts: dict | None, repo: Path) -> list[str]:
-    known = None if facts is None else {f["id"]: f for key in ("edges", "vpcs", "placements") for f in facts.get(key, [])}
+    known = None if facts is None else {f["id"]: f for key in ("edges", "networks", "placements")
+                                         for f in facts.get(key, [])}
     by_id = elements(model)
     hosts = {eid: _hosts(model, by_id, eid) for eid in by_id}
     out = [p for n in _nodes(model) for p in _evidence(n, known, repo, (set(n.get("tf", [])),))]

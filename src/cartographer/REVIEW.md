@@ -56,7 +56,7 @@ From the c4model.com notation page and review checklist. Fix [curation] findings
 - C4.3 [curation] Every element shows its name, its type and a short description.
 - C4.4 [curation] Containers and components also show their technology.
 - C4.5 [curation] Every arrow is one-directional and has a label. An arrow between containers also shows the technology or protocol.
-- C4.6 [tool] Plain shapes only: no AWS icons, no clip art, no decoration. Sync is solid, async is dashed.
+- C4.6 [tool] Plain shapes only: no cloud icons outside the Deployment view, no clip art, no decoration. Sync is solid, async is dashed.
 - C4.7 [curation] Abstraction levels are not mixed: nothing from another level appears on the view.
 
 ## System Context
