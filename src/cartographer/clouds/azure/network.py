@@ -111,12 +111,15 @@ class Network:
                 for ref in self.refs(r.inst, value) for s in self.subnet_of(r, ref, value)]
 
     def public_subnets(self, r: Res) -> list[Subnet]:
-        """The subnets `r` exposes: all of its own when it has a public ip, except those only a frontend without one uses."""
-        if not self.has_public_ip(r.block.body):
+        """The subnets `r` exposes: all it names when it has a public ip, except those only frontends without one name."""
+        body = r.block.body
+        if not self.has_public_ip(body):
             return []
-        frontends = r.block.body.get(FRONTEND) or []
-        internal = {s.address for f in (frontends if isinstance(frontends, list) else [frontends])
-                    if not self.has_public_ip(f) for s in self.direct_subnets(r, f)}
+        raw = body.get(FRONTEND) or []
+        frontends = raw if isinstance(raw, list) else [raw]
+        exposed = [{k: v for k, v in body.items() if k != FRONTEND}, *(f for f in frontends if self.has_public_ip(f))]
+        shared = {s.address for part in exposed for s in self.direct_subnets(r, part)}
+        internal = {s.address for f in frontends if not self.has_public_ip(f) for s in self.direct_subnets(r, f)} - shared
         return [s for s in self.subnet_refs(r) if s.address not in internal]
 
     def subnet_of(self, r: Res, ref: Ref, value: Any) -> list[Subnet]:

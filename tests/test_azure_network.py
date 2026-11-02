@@ -136,6 +136,15 @@ def test_an_internal_frontend_does_not_make_its_subnet_public_because_another_fr
     assert tier_of("lb_mixed_frontends", "azurerm_lb.mixed") == ("private", "azurerm_subnet.inner default")
 
 
+@pytest.mark.parametrize(("case", "resource", "tier"), [
+    ("dual_frontend_gateway", "azurerm_application_gateway.g", "public"),
+    ("nic_two_ip_configs", "azurerm_linux_virtual_machine.web", "public"),
+    ("lb_private_only", "azurerm_lb.internal", "private"),
+])
+def test_a_resource_with_a_public_frontend_is_public_in_every_subnet_a_private_frontend_shares(case, resource, tier):
+    assert tier_of(case, resource)[0] == tier
+
+
 def test_each_resource_body_is_scanned_for_references_once(monkeypatch):
     from cartographer.clouds.azure import network
 
