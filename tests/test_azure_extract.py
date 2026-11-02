@@ -53,6 +53,10 @@ def test_key_vault_access_policy_is_an_iam_edge_with_its_permissions():
         ("azurerm_linux_web_app.app", "azurerm_key_vault.kv", "key:Get,secret:Get,secret:List")}
 
 
+def test_key_vault_access_policy_set_as_an_expression_draws_no_iam_edge():
+    assert edges("key_vault_policy_expression", "iam") == set()
+
+
 def test_event_grid_subscription_is_a_trigger_from_its_source_to_the_function():
     assert ("azurerm_storage_account.sa", "azurerm_linux_function_app.fn", "azure_function_endpoint") in edges(
         "event_and_route_specs", "trigger")

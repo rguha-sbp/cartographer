@@ -64,6 +64,6 @@ def permission_edges(ex: Extractor) -> None:
             grant(ex, r, holders(ex, r, body.get("object_id"), by_identity), body.get("key_vault_id"), policy_permissions(body))
         elif r.type == "azurerm_key_vault":
             inline = body.get("access_policy") or []
-            for policy in inline if isinstance(inline, list) else [inline]:
+            for policy in (p for p in (inline if isinstance(inline, list) else [inline]) if isinstance(p, dict)):
                 for src in holders(ex, r, policy.get("object_id"), by_identity):
                     ex.add(src, r.address, "iam", policy_permissions(policy), r)
