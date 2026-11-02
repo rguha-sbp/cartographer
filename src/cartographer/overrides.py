@@ -44,8 +44,7 @@ def _refusal(o: Override, facts: dict | None) -> str | None:
     if facts is None:
         return "an address needs Terraform facts" if o.address else None
     resources = facts["resources"]
-    if o.address and any(r["type"] == o.type for r in resources) and not any(
-            r["address"] == o.address and r["type"] == o.type for r in resources):
+    if o.address and not any(r["address"] == o.address and r["type"] == o.type for r in resources):
         return f"{o.address} is not a {o.type} in the facts"
     return None
 

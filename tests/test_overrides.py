@@ -68,6 +68,12 @@ def test_an_address_override_skips_externals_that_carry_no_tf() -> None:
 
 
 def test_an_override_for_a_type_absent_from_this_diagram_is_skipped_not_refused() -> None:
-    lines = overrides.apply(_verified(), FACTS, [Override("aws", "aws_lambda_function", "lambda", "r", None),
-                                                 Override("aws", "aws_lambda_function", "lambda", "r", "aws_lambda_function.f")])
-    assert len(lines) == 2 and all(line.startswith("skipped") for line in lines)
+    lines = overrides.apply(_verified(), FACTS, [Override("aws", "aws_lambda_function", "lambda", "r", None)])
+    assert len(lines) == 1 and lines[0].startswith("skipped")
+
+
+def test_an_address_of_another_type_is_refused_even_when_no_resource_has_the_override_type() -> None:
+    verified = _verified()
+    lines = overrides.apply(verified, FACTS, [Override("aws", "aws_lambda_function", "lambda", "r", "aws_s3_bucket.a")])
+    assert lines == ["refused aws_lambda_function aws_s3_bucket.a: aws_s3_bucket.a is not a aws_lambda_function in the facts"]
+    assert verified["nodes"][0]["icon"] == "aws:s3"
