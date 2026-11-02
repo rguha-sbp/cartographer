@@ -163,7 +163,7 @@ def test_build_c4_model_without_a_required_key_fails_verify(tmp_path: Path, caps
     _model(model)
     assert _build(tmp_path) == 1
     out = capsys.readouterr().out
-    assert out.startswith("C4 model: 1 problems") and f"model: {key} is required" in out
+    assert out.startswith("C4 model: 1 problem") and f"model: {key} is required" in out
 
 
 def test_build_c4_without_model_exits_3(tmp_path: Path, cache: Path, capsys) -> None:
@@ -185,7 +185,7 @@ def test_build_c4_fails_on_verify_errors(tmp_path: Path, capsys) -> None:
     _model(model)
     assert _build(tmp_path) == 1
     out = capsys.readouterr().out
-    assert out.startswith("C4 model: 1 problems") and "api: container needs a technology" in out
+    assert out.startswith("C4 model: 1 problem") and "api: container needs a technology" in out
     assert not (tmp_path / "out").exists()
 
 

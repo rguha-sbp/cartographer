@@ -211,7 +211,7 @@ def stated_only(model: Model) -> list[str]:
 
 
 def report(errors: list[str], stated: list[str]) -> str:
-    lines = [f"C4 model: {len(errors)} problems" if errors else "C4 model: ok", *errors]
+    lines = [f"C4 model: {len(errors)} problem{'s' * (len(errors) > 1)}" if errors else "C4 model: ok", *errors]
     if stated:
         lines += ["", f"{STATED_HEADING} ({len(stated)})", *[f"  {i}" for i in stated]]
     return "\n".join(lines) + "\n"

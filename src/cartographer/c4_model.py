@@ -15,7 +15,7 @@ class RollupError(Exception):
     """Relationships that collapse onto one edge of a view but cannot share a label."""
 
     def __init__(self, pair: tuple[str, str], relationships: list[str]):
-        super().__init__(f"{pair[0]}->{pair[1]}: relationships {', '.join(relationships)} need a shared summary and technology")
+        super().__init__(f"{pair[0]}->{pair[1]}: relationships {', '.join(relationships)} need a shared summary")
         self.pair = pair
         self.relationships = relationships
 
@@ -59,13 +59,13 @@ def edge_text(label: str, technology: str | None) -> str:
 
 
 def _edge_label(pair: tuple[str, str], parts: list[dict]) -> str:
-    """One relationship keeps its own label; several need one text: their shared summary, else their shared label,
-    over their shared technology."""
-    texts = {edge_text(r["label"] if len(parts) == 1 else r.get("summary", r["label"]), r.get("technology"))
-             for r in parts}
+    """One relationship keeps its own label; several need one text, their shared summary (else their shared label),
+    over every technology behind them."""
+    texts = {r["label"] if len(parts) == 1 else r.get("summary", r["label"]) for r in parts}
     if len(texts) > 1:
         raise RollupError(pair, sorted(r["id"] for r in parts))
-    return texts.pop()
+    technologies = sorted({r["technology"] for r in parts if r.get("technology")})
+    return edge_text(texts.pop(), ", ".join(technologies) or None)
 
 
 def rollup(model: Model, shown: set[str]) -> list[dict]:

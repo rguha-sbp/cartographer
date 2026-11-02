@@ -193,7 +193,7 @@ def test_no_in_scope_system_is_an_error_not_a_crash(tmp_path):
 
 def test_report_first_line():
     assert report([], []).splitlines()[0] == "C4 model: ok"
-    assert report(["a: b"], []).splitlines()[0] == "C4 model: 1 problems"
+    assert report(["a: b"], []).splitlines()[0] == "C4 model: 1 problem"
 
 
 def test_report_lists_stated_only():
@@ -279,7 +279,7 @@ def test_rollup_conflict_is_a_verify_error(tmp_path):
     m = _valid()
     m["elements"].append(el("c1", "component", "api", technology="Py", evidence=STATED))
     m["relationships"].append(rel("r2", "c1", "db", "writes"))
-    assert verify(m, None, tmp_path) == ["api->db: relationships r1, r2 need a shared summary and technology"]
+    assert verify(m, None, tmp_path) == ["api->db: relationships r1, r2 need a shared summary"]
 
 
 def test_relationship_needs_a_label(tmp_path):

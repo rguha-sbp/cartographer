@@ -27,9 +27,8 @@ Step 2: propose the whole model
   required when both ends are containers, components or code elements (code `inherits` and `implements` links
   excepted), and welcome everywhere the code shows it.
 - Higher views roll relationships up. When several relationships roll up onto one arrow (two components of `api`
-  both reading `db`), give each of them the same short `summary` for that arrow and the same `technology`; the arrow
-  reads the summary over that technology. Relationships with different technologies cannot share an arrow: split
-  the summary or align the technology, else the build fails and names them.
+  both reading `db`), give each of them the same short `summary` for that arrow; the arrow reads the summary over
+  every technology behind it. Without one shared summary or label the build fails and names them.
 - Record relationships between people and external systems too ("Customer withdraws cash from ATM"): the Context
   and Container views draw them. The build fails on a relationship that no Context, Container, Component or Code
   view draws.
