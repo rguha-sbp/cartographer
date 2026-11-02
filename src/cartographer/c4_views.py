@@ -68,8 +68,6 @@ def _rolled_up(model: Model, title: str, group: dict | None, inside: list[dict],
     return _curated(model, title, group, inside, edges)
 
 
-
-
 def _dynamic(model: Model, system: dict, scenario: dict, title: str) -> dict:
     """The scenario's steps at container level: containers inside the system boundary, the rest outside."""
     containers = _children(model, system, "container")
@@ -100,7 +98,7 @@ def views(model: Model) -> list[View]:
         components = _children(model, container, "component")
         if components:
             title = f"Component diagram for {name}: {container['name']}"
-            siblings = [c for c in containers if c is not container]
+            siblings = [c for c in containers if c['id'] != container['id']]
             result.append(View(f"3-component-{container['id']}", title,
                                _rolled_up(model, title, container, components, siblings)))
     # 4-code-<component id> (code level) and 5-deployment go here, between the component and dynamic views

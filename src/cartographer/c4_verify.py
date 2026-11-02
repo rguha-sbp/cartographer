@@ -82,12 +82,29 @@ def _structure(model: Model) -> list[str]:
     return out
 
 
-def _nesting(model: Model) -> list[str]:
-    """Relationships between an element and its own ancestor; needs sound parent links."""
+def _container_of(model: Model, eid: str) -> str | None:
     by_id = elements(model)
-    return [f"{r['id']}: ends are ancestor and descendant" for r in model["relationships"]
-            if r["src"] in by_id and r["dst"] in by_id
-            and (r["dst"] in ancestors(model, r["src"]) or r["src"] in ancestors(model, r["dst"]))]
+    return next((e for e in [eid, *ancestors(model, eid)] if by_id[e]["type"] == "container"), None)
+
+
+def _nesting(model: Model) -> list[str]:
+    """Relationships a view could not draw: between an element and its own ancestor, ending at a system that has
+    containers, or (as a scenario step) staying inside one container; needs sound parent links."""
+    by_id = elements(model)
+    known = [r for r in model["relationships"] if r["src"] in by_id and r["dst"] in by_id]
+    out = [f"{r['id']}: ends are ancestor and descendant" for r in known
+           if r["dst"] in ancestors(model, r["src"]) or r["src"] in ancestors(model, r["dst"])]
+    systems = [e["id"] for e in model["elements"] if e["type"] == "system" and not e.get("external")]
+    split = {e["parent"] for e in model["elements"] if e["type"] == "container"} & set(systems)
+    out += [f"{r['id']}: ends at the system {end}; name the container it reaches"
+            for r in known for end in (r["src"], r["dst"]) if end in split]
+    steps = {r["id"]: r for r in known}
+    for s in model.get("scenarios", []):
+        for step in s["steps"]:
+            inner = {_container_of(model, steps[step][end]) for end in ("src", "dst")} if step in steps else set()
+            if len(inner) == 1 and None not in inner:
+                out.append(f"{s['id']}: step {step} stays inside container {inner.pop()}")
+    return out
 
 
 def _hosts(model: Model, eid: str) -> set[str]:

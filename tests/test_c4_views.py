@@ -2,6 +2,7 @@ import pytest
 
 from cartographer import tf_layout
 from cartographer.c4_styles import C4
+from cartographer.c4_verify import verify
 from cartographer.c4_views import views
 
 FACT = [{"fact": "x"}]
@@ -118,3 +119,12 @@ def test_dynamic_maps_steps_to_containers_and_keeps_dashes():
 @pytest.mark.parametrize("slug", ["1-context", "2-container", "3-component-api", "6-dynamic-buy"])
 def test_every_view_lays_out(slug):
     tf_layout.layout(_view(_shop(), slug).curated, notation=C4)
+
+
+def test_verified_dynamic_view_numbers_steps_without_gaps(tmp_path):
+    model = _shop()
+    model["relationships"] = [r for r in model["relationships"] if r["id"] != "r8"]
+    model["scenarios"] = [{"id": "mix", "name": "Mix", "steps": ["r1", "r7", "r3"]}]
+    assert [e for e in verify(model, None, tmp_path) if e.startswith("mix")] == []
+    labels = [e["label"].split(".")[0] for e in _view(model, "6-dynamic-mix").curated["edges"]]
+    assert labels == ["1", "2", "3"]

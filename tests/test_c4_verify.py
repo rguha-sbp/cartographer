@@ -195,3 +195,25 @@ def test_stated_only_lists_containers_without_repo_evidence():
     m = _valid()
     m["elements"][3]["evidence"] = STATED + FACT
     assert stated_only(m) == ["api"]
+
+
+def test_relationship_ending_at_a_system_with_containers_fails(tmp_path):
+    m = _valid()
+    m["relationships"].append(rel("r2", "u", "s", "uses"))
+    assert "r2: ends at the system s; name the container it reaches" in verify(m, None, tmp_path)
+
+
+def test_relationship_to_a_system_without_containers_passes(tmp_path):
+    m = _valid()
+    m["elements"] = [e for e in m["elements"] if e["type"] != "container"]
+    m["relationships"] = [rel("r2", "u", "s", "uses")]
+    assert verify(m, None, tmp_path) == []
+
+
+def test_scenario_step_inside_one_container_fails(tmp_path):
+    m = _valid()
+    m["elements"] += [el("c1", "component", "api", technology="Py", evidence=STATED),
+                      el("c2", "component", "api", technology="Py", evidence=STATED)]
+    m["relationships"].append(rel("r2", "c1", "c2", "calls"))
+    m["scenarios"] = [{"id": "sc", "name": "Sc", "steps": ["r1", "r2"]}]
+    assert verify(m, None, tmp_path) == ["sc: step r2 stays inside container api"]
