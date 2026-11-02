@@ -1,4 +1,6 @@
-from cartographer import tf_layout
+import pytest
+
+from cartographer import gen_drawio, tf_layout
 from cartographer.c4_styles import C4
 from cartographer.c4_views import views
 
@@ -29,7 +31,7 @@ def _model():
                       node("acct", "region", frame="account"), node("vpc", "acct", frame="vpc"),
                       node("priv", "vpc", frame="subnet", tier="private"),
                       node("fn", "priv", technology="Lambda"), node("tbl", "acct", technology="DynamoDB"),
-                      node("alb", "priv", service="application_load_balancer"), node("bare", "priv")],
+                      node("alb", "priv", service="elastic_load_balancing"), node("bare", "priv")],
             "instances": [{"container": "api", "node": "fn"}, {"container": "orders", "node": "tbl"}],
         },
     }
@@ -62,9 +64,20 @@ def test_frames_keep_aws_kinds():
 
 def test_infrastructure_without_instances_is_an_aws_icon():
     nodes = {n["id"]: n for n in _view().curated["nodes"]}
-    assert nodes["alb"]["service"] == "application_load_balancer"
+    assert nodes["alb"]["service"] == "elastic_load_balancing"
     assert nodes["alb"]["group"] == "priv"
-    assert nodes["bare"]["service"] == "other"
+
+
+@pytest.mark.parametrize("service", [None, "other", "key_management_typo"])
+def test_infrastructure_without_an_icon_is_an_infrastructure_node_box(service):
+    model = _model()
+    kms = {"id": "kms", "name": "Key", "technology": "AWS KMS", "evidence": [{"stated": "said so"}], "parent": "priv"}
+    model["deployment"]["nodes"].append(kms | ({"service": service} if service else {}))
+    view = next(v for v in views(model) if v.slug == "5-deployment")
+    box = next(n for n in view.curated["nodes"] if n["id"] == "kms")
+    assert (box["service"], box["label"], box["group"]) == ("infrastructure", "Key\n[Infrastructure Node: AWS KMS]", "priv")
+    xml = gen_drawio.render(tf_layout.layout(view.curated, notation=C4), page_id="p", page_name="t", notation=C4)
+    assert "Infrastructure node" in xml
 
 
 def test_relationships_join_instances():
@@ -87,5 +100,5 @@ def test_no_deployment_no_view():
     assert "5-deployment" not in [v.slug for v in views(model)]
 
 
-def test_deployment_view_lays_out():
-    tf_layout.layout(_view().curated, notation=C4)
+def test_deployment_view_renders():
+    gen_drawio.render(tf_layout.layout(_view().curated, notation=C4), page_id="p", page_name="t", notation=C4)

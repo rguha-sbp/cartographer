@@ -46,6 +46,8 @@ ELEMENTS = {
     "container_queue": Element("Queue", "a container that carries messages", QUEUE, "#438DD5", "#438DD5", WHITE),
     "component": Element("Component", "a part of a container", ROUNDED, "#85BBF0", "#85BBF0", DARK),
     "code": Element("Code element", "a class, interface or module", ROUNDED, WHITE, LINE, DARK),
+    "infrastructure": Element("Infrastructure node", "infrastructure no container runs on", "rounded=0;", WHITE, LINE,
+                              DARK),
 }
 
 HEAD_KEYS = {"inherits": "Hollow triangle: inherits", "implements": "Dashed line, hollow triangle: implements"}

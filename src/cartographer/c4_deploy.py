@@ -1,7 +1,9 @@
 """The Deployment view: AWS frames and icons as in the layer 7 diagrams, with container instances in deployment nodes."""
 
-from cartographer.c4_boxes import element_node
+from cartographer.c4_boxes import box_node, element_node
 from cartographer.c4_model import Model, elements, rollup
+from cartographer.c4_styles import element_label
+from cartographer.diagram_model import has_icon
 
 
 def _group(node: dict, kind: str, label: str) -> dict:
@@ -16,9 +18,13 @@ def _host(node: dict) -> dict:
     return _group(node, "deployment", f"{node['name']}\n[Deployment Node: {node['technology']}]")
 
 
-def _icon(node: dict) -> dict:
-    return {"id": node["id"], "label": node["name"], "service": node.get("service", "other"),
-            "group": node.get("parent"), "tf": node.get("tf", []), "multi": False}
+def _leaf(node: dict) -> dict:
+    """Infrastructure that hosts no container: its AWS icon, else a C4 infrastructure node box."""
+    if has_icon(service := node.get("service", "other")):
+        return {"id": node["id"], "label": node["name"], "service": service, "group": node.get("parent"),
+                "tf": node.get("tf", []), "multi": False}
+    label = element_label(node["name"], f"[Infrastructure Node: {node['technology']}]", "")
+    return box_node(node["id"], "infrastructure", label, node.get("parent"))
 
 
 def deployment(model: Model, title: str) -> dict:
@@ -28,7 +34,7 @@ def deployment(model: Model, title: str) -> dict:
     by_id = elements(model)
     occupied = {i["node"] for i in instances} | {n["parent"] for n in nodes if "parent" in n}
     groups = [_frame(n) if "frame" in n else _host(n) for n in nodes if "frame" in n or n["id"] in occupied]
-    icons = [_icon(n) for n in nodes if "frame" not in n and n["id"] not in occupied]
+    leaves = [_leaf(n) for n in nodes if "frame" not in n and n["id"] not in occupied]
     boxes = [{**element_node(by_id[i["container"]], i["node"]), "id": f"{i['node']}.{i['container']}"}
              for i in instances]
     hosted: dict[str, list[str]] = {}
@@ -36,4 +42,4 @@ def deployment(model: Model, title: str) -> dict:
         hosted.setdefault(i["container"], []).append(f"{i['node']}.{i['container']}")
     edges = [{**e, "src": src, "dst": dst, "evidence": []}
              for e in rollup(model, set(hosted)) for src in hosted[e["src"]] for dst in hosted[e["dst"]]]
-    return {"title": title, "groups": groups, "nodes": [*icons, *boxes], "externals": [], "edges": edges}
+    return {"title": title, "groups": groups, "nodes": [*leaves, *boxes], "externals": [], "edges": edges}
