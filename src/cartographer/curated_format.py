@@ -40,6 +40,8 @@ def _upgrade_external(external: dict[str, Any]) -> dict[str, Any]:
 def upgrade(curated: dict[str, Any]) -> dict[str, Any]:
     """The curated data in format 2; a file that already is format 2 is returned as it is."""
     if "format" in curated:
+        if curated["format"] != FORMAT:
+            raise ValueError(f"curated file is format {curated['format']}, this cartographer reads formats 1 and {FORMAT}")
         return curated
     old = copy.deepcopy(curated)
     return {**old, "format": FORMAT,

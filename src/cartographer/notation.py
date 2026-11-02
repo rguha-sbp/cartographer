@@ -33,6 +33,8 @@ def cloud_group(g: Group) -> Cell:
     """A frame in the style its cloud draws it, else a plain group in its purpose colour."""
     if g.kind:
         key = f"subnet-{g.tier}" if g.kind == "subnet" else g.kind
+        if g.cloud not in CLOUDS:
+            raise ValueError(f"group {g.id}: {g.kind} frame has cloud {g.cloud!r}, which is not a known cloud")
         return html_value(g.label), CLOUDS[g.cloud].frame_styles[key]
     return html_value(g.label), (
         f"rounded=0;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;fillColor={g.fill};"

@@ -16,7 +16,7 @@ class Cloud:
         self.label = label
         self.providers = providers
         self.icons = icons
-        self.frame_styles = frame_styles  # complete draw.io style per frame key: cloud, region, account, network, subnet-<tier>
+        self.frame_styles = frame_styles  # complete draw.io styles, keyed by frame kind
         self.managed_label = managed_label
 
     def icon_style(self, name: str) -> str:

@@ -94,3 +94,21 @@ def test_shape_warnings_name_an_unknown_icon() -> None:
     assert shape_warnings({"id": "a", "icon": "none"}) == []
     assert shape_warnings({"id": "a"}) == []
     assert shape_warnings({"id": "a", "icon": "aws:nope"}) == ["a: icon 'aws:nope' is not a known icon, renders as a box"]
+
+
+def test_a_frame_without_a_known_cloud_fails_to_render_with_a_clear_error() -> None:
+    import pytest
+
+    from cartographer.diagram_model import Group
+
+    with pytest.raises(ValueError, match="group g_x.*cloud None"):
+        gen_drawio._group_style(Group("g_x", "X", 0, 0, 10, 10, kind="region"))
+    with pytest.raises(ValueError, match="group g_x.*cloud 'nope'"):
+        gen_drawio._group_style(Group("g_x", "X", 0, 0, 10, 10, kind="region", cloud="nope"))
+
+
+def test_upgrade_rejects_an_unknown_format() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="format 3"):
+        upgrade({**F1, "format": 3})

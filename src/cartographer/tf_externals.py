@@ -28,5 +28,6 @@ def adopt(curated: dict[str, Any]) -> dict[str, Any]:
         groups.append({"id": block, "label": cloud.managed_label, "kind": None, "parent": region, "column": None})
         nodes += [{"id": x["id"], "label": x["label"], "icon": x["icon"], "group": block, "tf": [], "multi": False}
                   for x in managed]
-        externals = [x for x in externals if x not in managed]
+        taken = {x["id"] for x in managed}
+        externals = [x for x in externals if x["id"] not in taken]
     return {**curated, "groups": groups, "nodes": nodes, "externals": externals}
