@@ -1,3 +1,23 @@
 from cartographer.clouds.base import Cloud, load_json
+from cartographer.diagram_model import FRAME_TITLE_LEFT
 
-AWS = Cloud("aws", "AWS", ("aws",), load_json(__file__, "icons.json"))
+
+def _frame(gr_icon: str, stroke: str, font: str, dashed: int) -> str:
+    return (f"points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],"
+            f"[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;"
+            f"fontSize=12;fontStyle=1;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;"
+            f"shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.{gr_icon};strokeColor={stroke};fillColor=none;"
+            f"fontColor={font};dashed={dashed};verticalAlign=top;align=left;spacingLeft={FRAME_TITLE_LEFT};")
+
+
+FRAME_STYLES = {
+    "cloud": _frame("group_aws_cloud_alt", "#232F3E", "#232F3E", 0),
+    "region": _frame("group_region", "#00A4A6", "#147EBA", 1),
+    "account": _frame("group_account", "#CD2264", "#CD2264", 0),
+    "network": _frame("group_vpc2", "#8C4FFF", "#AAB7B8", 0),
+    "subnet-public": _frame("group_security_group", "#7AA116", "#248814", 0),
+    "subnet-private": _frame("group_security_group", "#00A4A6", "#147EBA", 0),
+    "subnet-isolated": _frame("group_security_group", "#00A4A6", "#147EBA", 1),
+}
+
+AWS = Cloud("aws", "AWS", ("aws",), load_json(__file__, "icons.json"), FRAME_STYLES, "AWS managed services")

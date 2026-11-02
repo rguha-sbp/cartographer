@@ -4,13 +4,14 @@ from pathlib import Path
 import pytest
 
 from cartographer import gen_drawio, tf_layout
+from cartographer.curated_format import upgrade
 
 GOLDEN = Path(__file__).parent / "golden"
 CASES = sorted(p.name.removesuffix(".curated.json") for p in GOLDEN.glob("*.curated.json"))
 
 
 def load_curated(path: Path) -> dict:
-    return json.loads(path.read_text())
+    return upgrade(json.loads(path.read_text()))
 
 
 def test_golden_cases_are_present() -> None:

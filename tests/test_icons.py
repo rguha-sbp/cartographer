@@ -1,8 +1,7 @@
 from cartographer import clouds, icons
-from cartographer.diagram_model import AWS_ICONS
 
 TODAY_LAMBDA_STYLE = (
-    f"sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor={AWS_ICONS['lambda']};"
+    f"sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor={clouds.CLOUDS['aws'].icons['lambda']['fill']};"
     "strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;"
     "fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;"
     "resIcon=mxgraph.aws4.lambda;"

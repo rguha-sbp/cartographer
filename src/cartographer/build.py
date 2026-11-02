@@ -19,6 +19,7 @@ from cartographer import (
     tfdiagram,
     verify_description,
 )
+from cartographer.curated_format import upgrade
 from cartographer.verify_shared import needs_attention
 from cartographer.workdir import cache_dir, write_json
 
@@ -103,7 +104,7 @@ def run(args: argparse.Namespace) -> int:
     curated_path = args.curated or out / f"{args.name}.curated.json"
     if not curated_path.is_file():
         raise Refusal(EXIT_STALE, f"no curated file at {curated_path}: run the curation (`cartographer prompt`)")
-    curated = json.loads(curated_path.read_text())
+    curated = upgrade(json.loads(curated_path.read_text()))
     verifier = VERIFIERS.get(curated.get("source"))
     if verifier is None:
         raise Refusal(EXIT_VERIFY, f"{curated_path}: source must be one of {', '.join(VERIFIERS)}")

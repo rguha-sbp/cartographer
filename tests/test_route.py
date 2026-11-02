@@ -104,7 +104,7 @@ def test_title_band_covers_every_line_of_a_group_title() -> None:
     x0, y0, x1, y1 = title_rect(plain)
     assert (x0, y0) == (100, 100)
     assert x1 - x0 >= 8 + 22 * GLYPH_W and y1 - y0 >= 2 * ICON_LINE_H
-    framed = title_rect(replace(plain, kind="vpc"))
+    framed = title_rect(replace(plain, kind="network"))
     assert framed[2] - x1 == 22  # frames start their title after the frame icon
 
 

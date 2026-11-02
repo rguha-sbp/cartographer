@@ -3,7 +3,8 @@
 import math
 from typing import Any
 
-from cartographer.diagram_model import BOX_H, BOX_W, GREY, ICON, Box, Group, Icon, has_icon
+from cartographer import icons
+from cartographer.diagram_model import BOX_H, BOX_W, GREY, ICON, Box, Group, Icon
 from cartographer.tf_colors import FRAMES, Colours
 from cartographer.tf_geom import GROUP_CLEAR, LINE_GAP, NODE_CLEAR, label_size
 
@@ -35,8 +36,8 @@ def cell_w(labels: list[str]) -> int:
 
 
 def shape(n: dict[str, Any]) -> str:
-    """What a node is drawn as: its `icon` (a generic or brand shape for a non-AWS node), else its AWS service."""
-    return n["icon"] if "icon" in n else n["service"]
+    """What a node is drawn as: its `icon`, a qualified icon name or, for a plain box, the shape its notation draws."""
+    return n.get("icon", "none")
 
 
 def box_size(n: dict[str, Any]) -> Size:
@@ -76,7 +77,7 @@ class Blocks:
     def _cell(self, nodes: list[dict[str, Any]]) -> Size:
         """Grids holding a plain box widen every cell to the widest box so neighbouring boxes cannot overlap, and
         heighten it to the tallest box with row_gap below."""
-        boxes = [box_size(n) for n in nodes if not has_icon(shape(n))]
+        boxes = [box_size(n) for n in nodes if not icons.known(shape(n))]
         if not boxes:
             return cell_w([_label(n) for n in nodes]), CELL_H
         return max(w for w, _ in boxes) + GAP, max(CELL_H, max(h for _, h in boxes) + self.row_gap)
@@ -99,7 +100,7 @@ class Blocks:
         cw, ch = self._cell(nodes)
         for i, n in enumerate(nodes):
             cx, cy = x + (i % cols) * cw, y + (i // cols) * ch
-            if has_icon(shape(n)):
+            if icons.known(shape(n)):
                 self.out_leaves.append(Icon(n["id"], _label(n), shape(n), cx + (cw - ICON) // 2, cy, parent))
             else:
                 w, h = box_size(n)  # level with an icon's middle; a box taller than an icon starts at the cell top
@@ -111,7 +112,7 @@ class Blocks:
         g = self.groups[bid]
         _, h = self.measure(bid)
         self.out_groups.append(Group(bid, group_label(g), x, y, w, h, g["parent"], g["kind"], g.get("tier"),
-                                     stroke=self.colours.group(bid) or GREY))
+                                     stroke=self.colours.group(bid) or GREY, cloud=g.get("cloud")))
         top = y + GROUP_PAD_TOP
         for c in self.children[bid]:
             top += self.place(c, x + GROUP_PAD_X, top, self.measure(c)[0]) + self.row_gap
@@ -169,5 +170,5 @@ class Blocks:
             g = self.groups[fid]
             self.out_frames.append(Group(fid, g["label"], x + depth * FRAME_PAD_X, y + depth * FRAME_PAD_TOP,
                                          w - 2 * depth * FRAME_PAD_X, h - depth * (FRAME_PAD_TOP + FRAME_PAD_X),
-                                         g["parent"], g["kind"]))
+                                         g["parent"], g["kind"], cloud=g.get("cloud")))
         return w, h

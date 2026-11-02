@@ -4,8 +4,6 @@ import hashlib
 import json
 from pathlib import Path
 
-from cartographer.diagram_model import AWS_ICONS, BRAND_ICONS, GENERIC_ICONS
-
 HERE = Path(__file__).parent
 SCHEMA = HERE / "curated.schema.json"
 PROMPT = HERE / "curate_prompt.md"
@@ -14,15 +12,8 @@ VIEW_NAMES = {"l7": "Layer 7"}
 
 
 def schema_text() -> str:
-    """The schema the curation must satisfy: the static file with the node `service` and the `icon` enums injected."""
-    schema = json.loads(SCHEMA.read_text())
-    service = schema["properties"]["nodes"]["items"]["properties"]["service"]
-    service["enum"] = [*sorted(AWS_ICONS), "other"]
-    icons = [*sorted(GENERIC_ICONS), *sorted(BRAND_ICONS), "none"]
-    for kind in ("nodes", "externals"):
-        schema["properties"][kind]["items"]["properties"]["icon"]["enum"] = icons
-    schema["properties"]["externals"]["items"]["properties"]["service"]["enum"] = sorted(AWS_ICONS)
-    return json.dumps(schema, indent=2, sort_keys=True)
+    """The schema the curation must satisfy: the static file, normalised."""
+    return json.dumps(json.loads(SCHEMA.read_text()), indent=2, sort_keys=True)
 
 
 def fill(template: Path, **fills: object) -> str:

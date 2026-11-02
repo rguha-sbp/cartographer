@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from cartographer import tf_extract, tf_verify, verify_description
+from cartographer.curated_format import FRAME_KINDS
 
 REPO = Path(__file__).parent / "fixtures" / "network"
 FACTS = tf_extract.extract(Path("infra"), REPO)
@@ -13,20 +14,22 @@ PLACED = {p["resource"]: p["id"] for p in FACTS["placements"]}
 
 
 def _group(gid: str, kind: str | None, parent: str | None, **extra: object) -> dict:
-    return {"id": gid, "label": gid, "kind": kind, "parent": parent, "column": 0, **extra}
+    cloud = {"cloud": "aws"} if kind in FRAME_KINDS else {}
+    return {"id": gid, "label": gid, "kind": kind, "parent": parent, "column": 0, **cloud, **extra}
 
 
 def _node(node_id: str, tf: str, group: str | None) -> dict:
-    return {"id": node_id, "tf": [tf], "service": "other", "group": group, "label": node_id}
+    return {"id": node_id, "tf": [tf], "group": group, "label": node_id}
 
 
 def _curated(**over: object) -> dict:
     curated = {
+        "format": 2,
         "source": "terraform",
         "title": "t",
         "groups": [
             _group("acct", "account", None),
-            _group("vpc", "vpc", "acct", cidrs=VPC["cidrs"], evidence=[{"fact": VPC["id"]}]),
+            _group("vpc", "network", "acct", cidrs=VPC["cidrs"], evidence=[{"fact": VPC["id"]}]),
             _group("pub", "subnet", "vpc", tier="public", evidence=[{"fact": PLACED["aws_lb.front"]}]),
             _group("shop", None, "pub"),
         ],
@@ -96,7 +99,7 @@ def test_a_subnet_group_needs_a_vpc_parent() -> None:
     verified, report = _verify(curated)
     assert _group_of(verified, "pub")["kind"] is None
     assert "tier" not in _group_of(verified, "pub")
-    assert "group pub: subnet parent acct is not a vpc group" in report
+    assert "group pub: subnet parent acct is not a network group" in report
     assert tf_verify.needs_attention(curated, verified)
 
 
@@ -108,7 +111,7 @@ def test_tier_on_a_plain_group_and_cidrs_on_a_non_vpc_group_are_dropped() -> Non
     assert "tier" not in _group_of(verified, "shop")
     assert "cidrs" not in _group_of(verified, "acct")
     assert "group shop: tier on a group that is not a subnet" in report
-    assert "group acct: cidrs on a group that is not a vpc" in report
+    assert "group acct: cidrs on a group that is not a network" in report
 
 
 def test_subnet_group_evidence_must_cite_a_placement_of_its_tier() -> None:
@@ -143,15 +146,16 @@ def test_edges_cannot_cite_network_facts() -> None:
 
 def _described(**over: object) -> dict:
     curated = {
+        "format": 2,
         "source": "description",
         "system": "Shop",
         "view": "l7",
         "groups": [
             _group("acct", "account", None),
-            _group("vpc", "vpc", "acct", cidrs=["10.0.0.0/16"], evidence=[{"stated": "the VPC is 10.0.0.0/16"}]),
+            _group("vpc", "network", "acct", cidrs=["10.0.0.0/16"], evidence=[{"stated": "the VPC is 10.0.0.0/16"}]),
             _group("priv", "subnet", "vpc", tier="private", evidence=[{"stated": "compute is private"}]),
         ],
-        "nodes": [{"id": "fn", "label": "fn", "service": "lambda", "group": "priv", "tf": [], "multi": False}],
+        "nodes": [{"id": "fn", "label": "fn", "icon": "aws:lambda", "group": "priv", "tf": [], "multi": False}],
         "externals": [],
         "edges": [],
     }

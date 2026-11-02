@@ -13,7 +13,8 @@ ASSUMPTION = "payments go through a queue nobody mentioned"
 
 
 def _node(node_id: str, label: str, service: str) -> dict:
-    return {"id": node_id, "label": label, "service": service, "group": None, "tf": [], "multi": False}
+    return {"id": node_id, "label": label, **({"icon": f"aws:{service}"} if service != "other" else {}),
+            "group": None, "tf": [], "multi": False}
 
 
 def _edge(src: str, dst: str, label: str, *, flow: str = "web", dashed: bool = False) -> dict:
@@ -23,7 +24,7 @@ def _edge(src: str, dst: str, label: str, *, flow: str = "web", dashed: bool = F
 
 def _shop() -> dict:
     return {
-        "source": "description",
+        "format": 2, "source": "description",
         "system": "Shop",
         "view": "l7",
         "groups": [],
@@ -143,7 +144,7 @@ def test_assumptions_name_a_node_an_external_or_an_edge() -> None:
 
 def _terraform() -> dict:
     return {
-        "source": "terraform", "system": "T", "view": "l7", "groups": [], "externals": [], "edges": [], "omitted": [],
+        "format": 2, "source": "terraform", "system": "T", "view": "l7", "groups": [], "externals": [], "edges": [], "omitted": [],
         "nodes": [{**_node("fn", "fn", "other"), "tf": ["aws_lambda_function.fn"]}],
     }
 

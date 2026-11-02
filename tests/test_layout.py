@@ -8,12 +8,13 @@ from cartographer.tf_geom import GROUP_CLEAR, LINE_GAP, groups, leaves
 from cartographer.tf_read import read
 
 CURATED = {
+    "format": 2,
     "title": "Mini architecture",
     "groups": [{"id": "app", "label": "Application", "kind": None, "parent": None, "column": 1}],
     "nodes": [
-        {"id": "fn", "label": "Worker", "service": "Lambda", "group": "app", "tf": ["aws_lambda_function.fn"],
+        {"id": "fn", "label": "Worker", "icon": "aws:lambda", "group": "app", "tf": ["aws_lambda_function.fn"],
          "multi": False},
-        {"id": "data", "label": "Data", "service": "S3", "group": "app", "tf": ["aws_s3_bucket.data"],
+        {"id": "data", "label": "Data", "icon": "aws:s3", "group": "app", "tf": ["aws_s3_bucket.data"],
          "multi": False},
     ],
     "externals": [{"id": "users", "label": "Users", "icon": "none", "evidence": []}],
@@ -36,7 +37,7 @@ def test_layout_renders_edges_between_existing_vertices() -> None:
 
 
 def test_non_aws_node_with_an_icon_renders_as_that_icon() -> None:
-    nodes = [*CURATED["nodes"], {"id": "mon", "label": "Datadog monitors\nalerts", "service": "other", "icon": "alert",
+    nodes = [*CURATED["nodes"], {"id": "mon", "label": "Datadog monitors\nalerts", "icon": "generic:alert",
                                  "group": "app", "tf": ["datadog_monitor.x"], "multi": False}]
     xml = gen_drawio.render(tf_layout.layout({**CURATED, "nodes": nodes}), page_id="m", page_name="m")
     style = next(c.get("style") for c in ET.fromstring(xml).iter("mxCell") if c.get("id") == "mon")
@@ -44,19 +45,18 @@ def test_non_aws_node_with_an_icon_renders_as_that_icon() -> None:
     assert isinstance(leaves(read(xml))["mon"], Icon)
 
 
-def test_schema_offers_node_icons_from_the_external_icon_enum() -> None:
-    props = json.loads(tfdiagram.schema_text())["properties"]
-    node_icon = props["nodes"]["items"]["properties"]["icon"]
-    assert node_icon["enum"] == props["externals"]["items"]["properties"]["icon"]["enum"]
-    assert "icon" not in props["nodes"]["items"]["required"]
+def test_schema_icon_is_an_optional_qualified_name() -> None:
+    node = json.loads(tfdiagram.schema_text())["properties"]["nodes"]["items"]
+    assert node["properties"]["icon"]["pattern"] == "^[a-z]+:[a-z0-9_]+$"
+    assert not {"icon", "service"} & set(node["required"])
 
 
 def test_gaps_between_blocks_hold_a_channel_of_lines_clear_of_both_blocks() -> None:
     blocks = [{"id": f"b{c}{r}", "label": f"B{c}{r}", "kind": None, "parent": None, "column": c}
               for c in range(2) for r in range(2)]
-    nodes = [{"id": f"n{b['id']}", "label": "n", "service": "lambda", "group": b["id"], "tf": ["x"], "multi": False}
+    nodes = [{"id": f"n{b['id']}", "label": "n", "icon": "aws:lambda", "group": b["id"], "tf": ["x"], "multi": False}
              for b in blocks]
-    placed = {g.id: g for g in groups(tf_layout.layout({"title": "T", "groups": blocks, "nodes": nodes,
+    placed = {g.id: g for g in groups(tf_layout.layout({"format": 2, "title": "T", "groups": blocks, "nodes": nodes,
                                                          "externals": [], "edges": []}))}
     channel = 2 * GROUP_CLEAR + (CHANNEL_TRACKS - 1) * LINE_GAP
     assert CHANNEL_TRACKS >= 4

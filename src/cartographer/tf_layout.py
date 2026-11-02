@@ -15,11 +15,12 @@ from pathlib import Path
 from typing import Any
 
 from cartographer import tf_lanes
+from cartographer.curated_format import upgrade
 from cartographer.diagram_model import ORIGIN, Diagram, Edge, Title, bounds
 from cartographer.notation import AWS, Notation
-from cartographer.tf_aws_externals import adopt
 from cartographer.tf_blocks import GAP, Blocks
 from cartographer.tf_check import defects, measure
+from cartographer.tf_externals import adopt
 from cartographer.tf_geom import leaves, polyline
 from cartographer.tf_labels import caption_rect
 from cartographer.tf_place import place
@@ -109,7 +110,7 @@ if __name__ == "__main__":
     ap.add_argument("output", type=Path)
     ap.add_argument("--edge-labels", choices=("on", "off"), default="on")
     args = ap.parse_args()
-    data = json.loads(args.curated.read_text(encoding="utf-8"))
+    data = upgrade(json.loads(args.curated.read_text(encoding="utf-8")))
     stack = args.curated.name.split(".")[0]
     start = time.perf_counter()
     diagram, widened = layout_report(data, edge_labels=args.edge_labels == "on")

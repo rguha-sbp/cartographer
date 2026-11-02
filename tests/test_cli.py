@@ -23,8 +23,9 @@ def _extract(capsys) -> list[str]:
 
 def _curated(facts: dict, key: str) -> dict:
     fact = next(e["id"] for e in facts["edges"] if e["kind"] == "iam")
-    node = {"group": None, "service": "other", "multi": False}
+    node = {"group": None, "multi": False}
     return {
+        "format": 2,
         "source": "terraform",
         "inputs_sha256": key,
         "system": "Mini",

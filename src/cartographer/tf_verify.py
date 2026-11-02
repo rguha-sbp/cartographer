@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from cartographer.curated_format import upgrade
 from cartographer.secret_patterns import contains_secret
 from cartographer.tf_hint_check import unaccounted
 from cartographer.tf_network_check import check_network
@@ -181,7 +182,7 @@ def main() -> int:
     ap.add_argument("--strict", action="store_true", help="exit 1 when anything was dropped or a node has no edge")
     args = ap.parse_args()
 
-    curated = json.loads(args.curated.read_text())
+    curated = upgrade(json.loads(args.curated.read_text()))
     verified, report = verify(json.loads(args.facts.read_text()), curated, args.repo_root)
     args.output.write_text(json.dumps(verified, indent=2, sort_keys=True) + "\n")
     sys.stdout.write(report)

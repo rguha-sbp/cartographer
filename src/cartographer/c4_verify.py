@@ -82,7 +82,8 @@ def _structure(model: Model) -> list[str]:
             out.append(f"{r['id']}: needs a technology, both ends are inside the system")
     out += [f"{s['id']}: step {step} is not a relationship" for s in model.get("scenarios", []) for step in s["steps"]
             if step not in rels]
-    out += [w for n in _nodes(model) for w in shape_warnings(n)]
+    out += [w for n in _nodes(model) if "service" in n
+            for w in shape_warnings({"id": n["id"], "icon": f"aws:{n['service']}"})]
     out += [f"{n['id']}: a subnet frame needs a tier" for n in _nodes(model)
             if n.get("frame") == "subnet" and "tier" not in n]
     out += _links(_nodes(model))

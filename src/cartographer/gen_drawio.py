@@ -4,11 +4,8 @@ them."""
 import html
 import xml.etree.ElementTree as ET
 
-from cartographer import files
+from cartographer import files, icons
 from cartographer.diagram_model import (
-    AWS_ICONS,
-    BRAND_ICONS,
-    GENERIC_ICONS,
     ICON,
     Box,
     Diagram,
@@ -19,7 +16,6 @@ from cartographer.diagram_model import (
     Point,
     Port,
     Title,
-    has_icon,
 )
 from cartographer.notation import AWS, Notation, html_value
 
@@ -47,19 +43,6 @@ def _port(kind: str, p: Port | None, off: Point, exact: bool) -> str:
     if not p:
         return ""
     return f"{kind}X={p[0]};{kind}Y={p[1]};{kind}Dx={off[0]};{kind}Dy={off[1]};" + (f"{kind}Perimeter=0;" if exact else "")
-
-
-def _icon_style(i: Icon) -> str:
-    if i.service in BRAND_ICONS:
-        return BRAND_ICONS[i.service]
-    if i.service in GENERIC_ICONS:
-        return (f"sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor={GENERIC_ICONS[i.service]};"
-                f"strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;"
-                f"fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.{i.service};")
-    return (f"sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor={AWS_ICONS[i.service]};"
-            f"strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;"
-            f"fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;"
-            f"resIcon=mxgraph.aws4.{i.service};")
 
 
 def _legend_html(lg: Legend) -> str:
@@ -90,9 +73,9 @@ class DrawioRenderer:
         match n:
             case Group():
                 self._vertex(n.id, *self.notation.group(n), n.x, n.y, n.w, n.h, n.parent)
-            case Icon() if has_icon(n.service):
-                self._vertex(n.id, html_value(n.label), _icon_style(n), n.x, n.y, ICON, ICON, n.parent)
-            case Icon():  # a service without an icon is a box of icon size
+            case Icon() if icons.known(n.icon):
+                self._vertex(n.id, html_value(n.label), icons.style(n.icon), n.x, n.y, ICON, ICON, n.parent)
+            case Icon():  # an icon name the registry does not know is a box of icon size
                 self.node(Box(n.id, n.label, n.x, n.y, ICON, ICON, n.parent))
             case Box():
                 self._vertex(n.id, *self.notation.box(n), n.x, n.y, n.w, n.h, n.parent)

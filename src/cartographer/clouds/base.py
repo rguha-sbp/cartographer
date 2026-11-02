@@ -10,11 +10,14 @@ def load_json(package_file: str, name: str) -> Any:
 
 
 class Cloud:
-    def __init__(self, name: str, label: str, providers: tuple[str, ...], icons: dict[str, dict]) -> None:
+    def __init__(self, name: str, label: str, providers: tuple[str, ...], icons: dict[str, dict],
+                 frame_styles: dict[str, str], managed_label: str) -> None:
         self.name = name
         self.label = label
         self.providers = providers
         self.icons = icons
+        self.frame_styles = frame_styles  # complete draw.io style per frame key: cloud, region, account, network, subnet-<tier>
+        self.managed_label = managed_label
 
     def icon_style(self, name: str) -> str:
         return (f"sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor={self.icons[name]['fill']};"

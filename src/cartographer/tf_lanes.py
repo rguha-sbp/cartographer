@@ -2,7 +2,8 @@
 
 from typing import Any
 
-from cartographer.diagram_model import ICON, Box, Icon, has_icon
+from cartographer import icons
+from cartographer.diagram_model import ICON, Box, Icon
 from cartographer.tf_blocks import CELL_H, GAP, box_size, cell_w
 
 BOX_PITCH = 100  # least lane pitch of a box; a taller box keeps row_gap below it
@@ -21,7 +22,7 @@ def split(curated: dict[str, Any]) -> tuple[Lane, Lane]:
 
 
 def _has_icon(x: dict[str, Any]) -> bool:
-    return has_icon(x.get("icon", "none"))
+    return icons.known(x.get("icon"))
 
 
 def _cell(lane: Lane, row_gap: int) -> tuple[int, int]:

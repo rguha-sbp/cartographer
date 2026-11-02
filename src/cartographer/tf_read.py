@@ -4,11 +4,10 @@ import html
 import re
 import xml.etree.ElementTree as ET
 
+from cartographer.clouds import CLOUDS
 from cartographer.diagram_model import Box, Diagram, Edge, Group, Icon, Legend, Title
-from cartographer.notation import FRAME_STYLES
 
 SKIP = {"title", "legend"}
-KINDS = {f"mxgraph.aws4.{style.split(';')[0]}": key.split("-")[0] for key, style in FRAME_STYLES.items()}
 
 
 def _text(value: str) -> str:
@@ -17,6 +16,9 @@ def _text(value: str) -> str:
 
 def _style(style: str) -> dict[str, str]:
     return dict(kv.split("=", 1) for kv in style.split(";") if "=" in kv)
+
+
+KINDS = {_style(style)["grIcon"]: key.split("-")[0] for cloud in CLOUDS.values() for key, style in cloud.frame_styles.items()}
 
 
 def _node(cell: ET.Element, x: int, y: int) -> Group | Icon | Box:

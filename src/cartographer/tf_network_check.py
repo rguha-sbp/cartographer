@@ -18,10 +18,10 @@ def _problem(group: dict, ev: dict, facts_by_id: dict, repo_root: Path) -> str |
     fact = facts_by_id.get(ev["fact"])
     if fact is None:
         return f"unknown fact {ev['fact']}"
-    if group["kind"] == "vpc":
+    if group["kind"] == "network":
         if set(fact.get("cidrs", [])) == set(group["cidrs"]) and fact.get("cidrs"):
             return None
-        return f"fact {ev['fact']} is not a vpc fact with the group's cidrs"
+        return f"fact {ev['fact']} is not a network fact with the group's cidrs"
     if fact.get("tier") == group["tier"]:
         return None
     return f"fact {ev['fact']} is not a placement with tier {group['tier']}"

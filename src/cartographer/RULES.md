@@ -18,7 +18,7 @@ Each rule, where it is enforced, and where it comes from.
 | Where a gap is too short for its lines, the diagram is widened by tracks x 12 + 2 x NODE_CLEAR (at most 3 rounds) | `tf_space` | Purchase graph readability studies |
 | A caption's position is draw.io's `mxGraphView.getPoint` of `at`, plus a small perpendicular nudge; one function for placing and checking | `tf_geom` point_at | draw.io |
 | An arrow takes the colour of its destination group (or external); the group border has the same colour | `tf_colors`; legend `tf_layout` | C4 model notation |
-| AWS managed services Terraform does not create are externals with `service` set, drawn in "AWS managed services" inside the region | `tf_aws_externals` | AWS Architecture Icons |
+| AWS managed services Terraform does not create are externals with an `aws:` icon, drawn in "AWS managed services" inside the region | `tf_externals` | AWS Architecture Icons |
 | Brand logos (GitHub, Okta, Atlassian family) come from draw.io's own libraries | `brand_icons.json`, `gen_drawio` | draw.io |
 | Fewest crossings, then fewest bends, then shortest | `tf_check` crossings and bends; `tf_grid` cost order | Purchase graph readability studies |
 | Nodes, blocks and externals are ordered so their lines cross least; a block with an open column (AWS managed services) sits by its callers | `tf_place`; `tf_layout` picks the placement with the fewest routed defects | Purchase graph readability studies |
