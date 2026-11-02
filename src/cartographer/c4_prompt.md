@@ -69,10 +69,10 @@ Scenarios
 
 Deployment
 - With a facts file: `deployment` has the `environment` name (stated by the engineer, else the Terraform folder name),
-  nested `nodes` (frames cloud, region, account, vpc, subnet with a `tier`, with `tf` only where the frame is a
-  resource in the facts; and the infrastructure such as a Lambda function or an ECS service, each with `tf`
-  addresses copied exactly from the facts), and `instances` placing each
-  container on its node.
+  nested `nodes` (frames cloud, region, account, vpc and subnet, with `tf` only where the frame is a resource in the
+  facts; and the infrastructure such as a Lambda function or an ECS service, each with `tf` addresses copied exactly
+  from the facts), and `instances` placing each container on its node. A subnet frame always has a `tier`. A node's
+  `parent` is the node it sits in; parents never form a loop. An instance's `container` is a `container` element.
 - Every compute, store and queue resource in the facts (Lambda, ECS service, EC2 or autoscaling group, RDS or Aurora,
   DynamoDB, S3, SQS, SNS, Kinesis, ElastiCache) is a deployment node or is listed in `omitted` as
   {"tf": <address>, "reason": <at most 80 characters>}.

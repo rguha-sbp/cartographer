@@ -114,7 +114,7 @@ def test_instance_and_node_parent_must_exist(tmp_path):
     m["deployment"]["instances"].append({"container": "ghost", "node": "n9"})
     m["deployment"]["nodes"][0]["parent"] = "nowhere"
     errs = verify(m, _facts("aws_lambda_function.fn", "aws_db_instance.db", edges=[_edge("aws_lambda_function.fn", "aws_db_instance.db")]), tmp_path)
-    assert "ghost: instance container does not exist" in errs
+    assert "ghost: instance names no container" in errs
     assert "ghost: instance node n9 does not exist" in errs
     assert "n1: parent nowhere does not exist" in errs
 

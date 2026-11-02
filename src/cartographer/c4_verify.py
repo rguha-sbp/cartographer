@@ -42,19 +42,23 @@ def _cyclic(by_id: dict[str, dict], eid: str) -> bool:
     return eid in seen
 
 
+def _links(items: list[dict]) -> list[str]:
+    """Parent links among items, elements or deployment nodes, that cannot be followed: to an id that is not among
+    them, or round a cycle."""
+    by_id = {i["id"]: i for i in items}
+    out = [f"{i['id']}: parent {i['parent']} does not exist" for i in items if i.get("parent") not in (None, *by_id)]
+    return out + [f"{i['id']}: parent cycle" for i in items if _cyclic(by_id, i["id"])]
+
+
 def _parents(model: Model) -> list[str]:
-    """Parent links that cannot be followed or are the wrong type; safe on any model."""
-    by_id, out = elements(model), []
+    """Element parent links that cannot be followed or are the wrong type."""
+    by_id, out = elements(model), _links(model["elements"])
     for e in model["elements"]:
         parent, want = e.get("parent"), PARENT_TYPE.get(e["type"])
-        if parent is not None and parent not in by_id:
-            out.append(f"{e['id']}: parent {parent} does not exist")
-        elif want and (parent is None or by_id[parent]["type"] != want):
+        if want and (parent is None or parent in by_id and by_id[parent]["type"] != want):
             out.append(f"{e['id']}: {e['type']} needs a {want} as parent")
         elif not want and parent is not None:
             out.append(f"{e['id']}: {e['type']} has no parent")
-        if _cyclic(by_id, e["id"]):
-            out.append(f"{e['id']}: parent cycle")
     return out
 
 
@@ -81,14 +85,16 @@ def _structure(model: Model) -> list[str]:
     out += [f"{s['id']}: step {step} is not a relationship" for s in model.get("scenarios", []) for step in s["steps"]
             if step not in rels]
     out += [w for n in _nodes(model) for w in shape_warnings(n)]
+    out += [f"{n['id']}: a subnet frame needs a tier" for n in _nodes(model)
+            if n.get("frame") == "subnet" and "tier" not in n]
+    out += _links(_nodes(model))
+    containers = {e["id"] for e in model["elements"] if e["type"] == "container"}
     node_ids = {n["id"] for n in _nodes(model)}
     for i in _instances(model):
-        if i["container"] not in by_id:
-            out.append(f"{i['container']}: instance container does not exist")
+        if i["container"] not in containers:
+            out.append(f"{i['container']}: instance names no container")
         if i["node"] not in node_ids:
             out.append(f"{i['container']}: instance node {i['node']} does not exist")
-    out += [f"{n['id']}: parent {n['parent']} does not exist" for n in _nodes(model)
-            if n.get("parent") not in (None, *node_ids)]
     return out
 
 
