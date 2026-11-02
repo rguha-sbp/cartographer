@@ -67,12 +67,12 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("infra_dir", type=Path, help="Terraform folder, relative to --repo")
     p = command("prompt", _prompt, "print the curation prompt for the cached facts, or the describe prompt")
     p.add_argument("--describe", action="store_true", help="describe a new solution: no facts needed")
-    # --c4 swaps the handler: add_argument copies the earlier set_defaults(handler=...) as the flag's default.
-    p.add_argument("--c4", dest="handler", action="store_const", help="print the C4 model curation prompt instead",
-                   const=partial(c4_commands.prompt, interview_path=DOCS["interview"]))
+    p.add_argument("--c4", dest="handler", action="store_const", default=_prompt,
+                   const=partial(c4_commands.prompt, interview_path=DOCS["interview"]),
+                   help="print the C4 model curation prompt instead")
     p = command("build", build.run, "verify the curated file and write the diagram")
     build.add_arguments(p)
-    p.add_argument("--c4", dest="handler", action="store_const", const=c4_commands.build,
+    p.add_argument("--c4", dest="handler", action="store_const", default=build.run, const=c4_commands.build,
                    help="verify the cached C4 model and write every view it supports instead")
     p = command("snapshot", snapshot.run, "screenshot a .drawio file in the bundled draw.io", named=False)
     snapshot.add_arguments(p)
