@@ -45,7 +45,7 @@ def _shop() -> dict:
             rel("r1", "user", "auth", "logs in", technology="HTTPS"),
             rel("r2", "cart", "db", "stores carts", technology="SQL"),
             rel("r3", "cart", "psp", "charges", technology="HTTPS"),
-            rel("r4", "cart", "auth", "checks"),
+            rel("r4", "cart", "auth", "checks", technology="Python call"),
         ],
         "scenarios": [{"id": "buy", "name": "Buy", "steps": ["r1", "r3", "r2"]}],
     }
@@ -183,7 +183,7 @@ def test_build_c4_fails_on_verify_errors(tmp_path: Path, capsys) -> None:
 
 def test_build_c4_rollup_conflict_exits_1(tmp_path: Path, capsys) -> None:
     model = _shop()
-    model["relationships"].append(rel("r5", "auth", "db", "reads"))
+    model["relationships"].append(rel("r5", "auth", "db", "reads", technology="SQL"))
     _model(model)
     assert _build(tmp_path) == 1
     assert "api->db: relationships r2, r5 need a shared summary" in capsys.readouterr().out

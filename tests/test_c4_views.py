@@ -39,7 +39,7 @@ def _shop(components=True):
         rel("r3", "api", "psp", "charges"),
         rel("r4", "api", "bus", "publishes", dashed=True),
         rel("r5", "boss", "psp", "audits"),
-        rel("r6", "user", "auth" if components else "api", "logs in", summary="uses shop"),
+        rel("r6", "user", "auth" if components else "api", "logs in", technology="HTTPS", summary="uses shop"),
         rel("r7", "cart", "db", "stores carts", summary="uses db"),
         rel("r8", "cart", "auth", "checks"),
     ]
@@ -72,6 +72,11 @@ def test_relationships_between_outside_elements_are_drawn(slug):
     model = json.loads(MINI.read_text())
     model["relationships"].append(rel("r8", "analyst", "mailer", "Reads report mails", technology="IMAP"))
     assert ("analyst", "mailer") in _pairs(_view(model, slug).curated)
+
+
+def test_rolled_up_arrow_keeps_the_shared_technology():
+    edges = _view(json.loads(MINI.read_text()), "2-container").curated["edges"]
+    assert {e["dst"]: e["label"] for e in edges}["mailer"] == "Sends reports\n[SMTP]"
 
 
 def test_component_view_draws_only_edges_that_touch_its_components():
@@ -142,7 +147,7 @@ def test_every_view_lays_out(slug):
 
 def test_verified_dynamic_view_numbers_steps_without_gaps(tmp_path):
     model = _shop()
-    model["relationships"] = [r for r in model["relationships"] if r["id"] != "r8"]
+    model["relationships"] = [r | {"technology": "HTTPS"} for r in model["relationships"] if r["id"] != "r8"]
     model["scenarios"] = [{"id": "mix", "name": "Mix", "steps": ["r1", "r7", "r3"]}]
     assert [e for e in verify(model, None, tmp_path) if e.startswith("mix")] == []
     labels = [e["label"].split(".")[0] for e in _view(model, "6-dynamic-mix").curated["edges"]]

@@ -67,6 +67,19 @@ def test_rollup_uses_shared_summary_for_several_relationships():
     assert rollup(m, {"a", "b"})[0]["label"] == "uses orders"
 
 
+def test_rollup_summary_carries_the_shared_technology():
+    m = _model([rel("r1", "a1", "b1", "reads", summary="uses orders", technology="SQL"),
+                rel("r2", "a2", "b1", "writes", summary="uses orders", technology="SQL")])
+    assert rollup(m, {"a", "b"})[0]["label"] == "uses orders\n[SQL]"
+
+
+def test_rollup_summary_over_different_technologies_fails():
+    m = _model([rel("r1", "a1", "b1", "reads", summary="uses orders", technology="SQL"),
+                rel("r2", "a2", "b1", "writes", summary="uses orders", technology="HTTPS")])
+    with pytest.raises(RollupError, match="a->b: relationships r1, r2 need a shared summary and technology"):
+        rollup(m, {"a", "b"})
+
+
 def test_rollup_merges_identical_relationships():
     m = _model([rel("r1", "a1", "b1", "reads"), rel("r2", "a2", "b1", "reads")])
     assert rollup(m, {"a", "b"})[0]["label"] == "reads"

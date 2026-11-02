@@ -153,7 +153,8 @@
         {
           "stated": "described by the engineer"
         }
-      ]
+      ],
+      "technology": "Python call"
     },
     {
       "id": "r5",
@@ -165,7 +166,8 @@
         {
           "stated": "described by the engineer"
         }
-      ]
+      ],
+      "technology": "Python call"
     },
     {
       "id": "r6",

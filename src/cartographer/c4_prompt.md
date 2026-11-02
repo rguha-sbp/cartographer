@@ -22,10 +22,14 @@ Step 2: propose the whole model
 - Every element has a short `name` and a `description` of at most 120 characters. Plain ASCII only: no em dashes,
   en dashes or smart quotes.
 - Relationships: record each one at the lowest level you know (component or container), never at the system that
-  has containers. Direction follows the request or data. `label` is a specific verb ("reads orders"), `technology`
-  the protocol where the code shows it, `dashed` true only for asynchronous paths.
+  has containers. Direction follows the request or data. `label` is a specific verb ("reads orders"), `dashed` true
+  only for asynchronous paths. `technology` is the protocol or mechanism ("HTTPS", "SQL", "Python call"); it is
+  required when both ends are containers, components or code elements (code `inherits` and `implements` links
+  excepted), and welcome everywhere the code shows it.
 - Higher views roll relationships up. When several relationships roll up onto one arrow (two components of `api`
-  both reading `db`), give each of them the same short `summary` for that arrow, else the build fails and names them.
+  both reading `db`), give each of them the same short `summary` for that arrow and the same `technology`; the arrow
+  reads the summary over that technology. Relationships with different technologies cannot share an arrow: split
+  the summary or align the technology, else the build fails and names them.
 - Record relationships between people and external systems too ("Customer withdraws cash from ATM"): the Context
   and Container views draw them. The build fails on a relationship that no Context, Container, Component or Code
   view draws.

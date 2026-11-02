@@ -15,6 +15,7 @@ COMPLETE_TYPES = (
     "aws_kinesis_stream", "aws_elasticache_cluster", "aws_elasticache_replication_group",
 )
 REQUIRED = json.loads(SCHEMA.read_text())["required"]
+INSIDE = {"container", "component", "code"}
 PARENT_TYPE = {"container": "system", "component": "container", "code": "component"}
 STATED_HEADING = "Stated by the engineer, not found in the repo"
 
@@ -69,9 +70,14 @@ def _structure(model: Model) -> list[str]:
         out += [f"{r['id']}: unknown end {end}" for end in (r["src"], r["dst"]) if end not in by_id]
         if r["src"] == r["dst"]:
             out.append(f"{r['id']}: ends are the same element")
-        kind = r.get("kind", "uses")
-        if kind != "uses" and not all(by_id.get(end, {}).get("type") == "code" for end in (r["src"], r["dst"])):
+        kind, types = r.get("kind", "uses"), {by_id.get(end, {}).get("type") for end in (r["src"], r["dst"])}
+        if kind != "uses" and types != {"code"}:
             out.append(f"{r['id']}: kind {kind} is only for code elements")
+        if not r.get("label", "").strip():
+            out.append(f"{r['id']}: needs a label")
+        # The technology or protocol of a call inside the system; an inheritance arrow states a type, not a call.
+        if kind == "uses" and types <= INSIDE and not r.get("technology"):
+            out.append(f"{r['id']}: needs a technology, both ends are inside the system")
     out += [f"{s['id']}: step {step} is not a relationship" for s in model.get("scenarios", []) for step in s["steps"]
             if step not in rels]
     out += [w for n in _nodes(model) for w in shape_warnings(n)]

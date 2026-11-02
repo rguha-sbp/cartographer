@@ -13,7 +13,8 @@ def el(eid, kind, parent=None, **extra):
 
 
 def rel(rid, src, dst, label, **extra):
-    return {"id": rid, "src": src, "dst": dst, "label": label, "dashed": False, "evidence": STATED} | extra
+    return {"id": rid, "src": src, "dst": dst, "label": label, "dashed": False, "technology": "SQL",
+            "evidence": STATED} | extra
 
 
 def _valid():
@@ -248,4 +249,31 @@ def test_rollup_conflict_is_a_verify_error(tmp_path):
     m = _valid()
     m["elements"].append(el("c1", "component", "api", technology="Py", evidence=STATED))
     m["relationships"].append(rel("r2", "c1", "db", "writes"))
-    assert verify(m, None, tmp_path) == ["api->db: relationships r1, r2 need a shared summary"]
+    assert verify(m, None, tmp_path) == ["api->db: relationships r1, r2 need a shared summary and technology"]
+
+
+def test_relationship_needs_a_label(tmp_path):
+    m = _valid()
+    m["relationships"][0]["label"] = " "
+    assert verify(m, None, tmp_path) == ["r1: needs a label"]
+
+
+def test_relationship_inside_the_system_needs_a_technology(tmp_path):
+    m = _valid()
+    del m["relationships"][0]["technology"]
+    assert verify(m, None, tmp_path) == ["r1: needs a technology, both ends are inside the system"]
+
+
+def test_relationship_from_a_person_needs_no_technology(tmp_path):
+    m = _valid()
+    m["relationships"].append({k: v for k, v in rel("r2", "u", "api", "uses").items() if k != "technology"})
+    assert verify(m, None, tmp_path) == []
+
+
+def test_code_inheritance_needs_no_technology(tmp_path):
+    m = _valid()
+    m["elements"] += [el("c1", "component", "api", technology="Py", evidence=STATED),
+                      el("k1", "code", "c1", evidence=STATED), el("k2", "code", "c1", evidence=STATED)]
+    m["relationships"].append({k: v for k, v in rel("r2", "k1", "k2", "extends", kind="inherits").items()
+                               if k != "technology"})
+    assert verify(m, None, tmp_path) == []
