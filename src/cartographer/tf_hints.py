@@ -19,14 +19,13 @@ TEST_FILE = re.compile(r"^(test_.*|.*_test\.\w+|.*\.test\.\w+|conftest\.py)$")
 INTEGRATION_DIRS = re.compile(r"^(integrations?|processors?|clients?|connectors?|event_processors?)$")
 URL = re.compile(r"https?://([A-Za-z0-9{}_.\-]+\.[A-Za-z]{2,})")
 NOT_EXTERNAL = re.compile(
-    r"(^|\.)(amazonaws\.com|amazonaws\.com\.cn|localhost|w3\.org|json-schema\.org|xmlsoap\.org|purl\.org)$"
+    r"(^|\.)(amazonaws\.com|amazonaws\.com\.cn|azure\.com|azure\.net|windows\.net|localhost|w3\.org|json-schema\.org|xmlsoap\.org|purl\.org)$"
     r"|^example\.(com|org|net)$"
 )
 PARAM_CONTEXT = re.compile(r"ssm|param|secret", re.IGNORECASE)
 QUOTED = re.compile(r"""["']([^"'\s]+)["']""")
 SSM_NAME = re.compile(r"/[\w.\-{}$]+(?:/[\w.\-{}$]+)+")
 SECRET_NAME = re.compile(r"(?!(?:application|text|image|multipart)/)[\w.\-]+(?:/[\w.\-{}$]+)+")
-PARAM_TYPES = {"aws_ssm_parameter", "aws_secretsmanager_secret"}
 TF_SUFFIXES = ("*.tf", "*.tfvars")
 
 Occurrence = tuple[str, str, str, int, str | None]
@@ -71,21 +70,21 @@ def _scan_root(root: Path, owner: str | None, repo_root: Path, budget: list[int]
     return out
 
 
-def _terraform(insts: list, resources: list, repo_root: Path) -> list[Occurrence]:
+def _terraform(insts: list, resources: list, repo_root: Path, param_types: frozenset[str]) -> list[Occurrence]:
     out: list[Occurrence] = []
     for directory in sorted({i.mod.directory for i in insts}):
         for pattern in TF_SUFFIXES:
             for path in sorted(directory.glob(pattern)):
                 out += _scan_text(path, path.relative_to(repo_root).as_posix(), None, hosts_only=True)
     for r in resources:
-        if r.type in PARAM_TYPES and "name" in r.block.body:
+        if r.type in param_types and "name" in r.block.body:
             out.append(("param", unq(r.block.body["name"]), r.block.file, r.block.line, r.address))
     return out
 
 
-def collect_hints(insts: list, resources: list, repo_root: Path) -> dict:
+def collect_hints(insts: list, resources: list, repo_root: Path, param_types: frozenset[str]) -> dict:
     budget = [MAX_FILES]
-    seen = _terraform(insts, resources, repo_root)
+    seen = _terraform(insts, resources, repo_root, param_types)
     for root, owner in code_roots(insts, repo_root):
         seen += _scan_root(root, owner, repo_root, budget)
     merged: dict[tuple[str, str], dict] = {}

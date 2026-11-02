@@ -12,8 +12,11 @@ BANNED = "—–‘’“”"
 def test_versions_agree() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
     plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
-    pins = set(re.findall(r"cartographer@v(\d+\.\d+\.\d+)", (ROOT / "README.md").read_text()))
-    assert pins == {pyproject} == {plugin["version"]}
+    assert pyproject == plugin["version"]
+
+
+def test_readme_pins_no_release_tag() -> None:
+    assert not re.search(r"@v\d|rev: v\d", (ROOT / "README.md").read_text())
 
 
 def test_marketplace_lists_the_plugin_at_the_repo_root() -> None:
@@ -54,3 +57,9 @@ def test_pre_commit_hook_runs_check_on_the_diagrams_folder() -> None:
     for line in ("- id: cartographer-check", "entry: cartographer check docs/architecture/diagrams", "language: python",
                  "files: ^docs/architecture/diagrams/", "pass_filenames: false"):
         assert line in hook
+
+
+def test_marketplace_description_covers_aws_and_azure() -> None:
+    market = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
+    description = market["plugins"][0]["description"]
+    assert "AWS" in description and "Azure" in description and not any(c in description for c in BANNED)

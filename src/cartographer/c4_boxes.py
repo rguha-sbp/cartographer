@@ -12,7 +12,7 @@ def kind(element: dict) -> str:
 
 def box_node(nid: str, shape: str, label: str, group: str | None) -> dict:
     """A curated node drawn as a C4 box of `shape`, sized for its label."""
-    return {"id": nid, "label": label, "service": shape, "group": group, "tf": [], "multi": False,
+    return {"id": nid, "label": label, "icon": shape, "group": group, "tf": [], "multi": False,
             "box": list(element_size(label, shape))}
 
 

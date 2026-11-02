@@ -13,7 +13,8 @@ ASSUMPTION = "payments go through a queue nobody mentioned"
 
 
 def _node(node_id: str, label: str, service: str) -> dict:
-    return {"id": node_id, "label": label, "service": service, "group": None, "tf": [], "multi": False}
+    return {"id": node_id, "label": label, **({"icon": f"aws:{service}"} if service != "other" else {}),
+            "group": None, "tf": [], "multi": False}
 
 
 def _edge(src: str, dst: str, label: str, *, flow: str = "web", dashed: bool = False) -> dict:
@@ -23,7 +24,7 @@ def _edge(src: str, dst: str, label: str, *, flow: str = "web", dashed: bool = F
 
 def _shop() -> dict:
     return {
-        "source": "description",
+        "format": 2, "source": "description",
         "system": "Shop",
         "view": "l7",
         "groups": [],
@@ -143,7 +144,7 @@ def test_assumptions_name_a_node_an_external_or_an_edge() -> None:
 
 def _terraform() -> dict:
     return {
-        "source": "terraform", "system": "T", "view": "l7", "groups": [], "externals": [], "edges": [], "omitted": [],
+        "format": 2, "source": "terraform", "system": "T", "view": "l7", "groups": [], "externals": [], "edges": [], "omitted": [],
         "nodes": [{**_node("fn", "fn", "other"), "tf": ["aws_lambda_function.fn"]}],
     }
 
@@ -223,6 +224,14 @@ def test_build_refuses_a_curated_file_without_a_valid_source(tmp_path: Path, cap
     _write(tmp_path, curated)
     assert cli.main(["build", "--name", "shop-l7", "--repo", str(tmp_path)]) == 1
     assert "source" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("format", [1, 3])
+def test_build_refuses_an_unsupported_curated_format_in_one_line(tmp_path: Path, capsys, format: int) -> None:
+    _write(tmp_path, {**_shop(), "format": format})
+    assert cli.main(["build", "--name", "shop-l7", "--repo", str(tmp_path)]) == 1
+    err = capsys.readouterr().err
+    assert f"format {format}" in err and "Traceback" not in err and "formats 1 and" not in err
 
 
 def test_terraform_build_still_needs_facts(tmp_path: Path, capsys) -> None:

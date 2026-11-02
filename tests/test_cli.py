@@ -23,8 +23,9 @@ def _extract(capsys) -> list[str]:
 
 def _curated(facts: dict, key: str) -> dict:
     fact = next(e["id"] for e in facts["edges"] if e["kind"] == "iam")
-    node = {"group": None, "service": "other", "multi": False}
+    node = {"group": None, "multi": False}
     return {
+        "format": 2,
         "source": "terraform",
         "inputs_sha256": key,
         "system": "Mini",
@@ -258,3 +259,53 @@ def test_snapshot_subcommand_delegates(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "a.drawio").write_text('<mxfile><diagram name="Container diagram for Shop"/></mxfile>')
     assert cli.main(["snapshot", str(tmp_path / "a.drawio"), "-o", str(tmp_path / "s")]) == 0
     assert seen[0][3] == "2x2"
+
+
+def test_icons_command_prints_at_most_20(capsys) -> None:
+    assert cli.main(["icons", "--cloud", "aws", "--search", "a"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert 0 < len(lines) <= 20 and all(len(line.split("\t")) == 2 for line in lines)
+
+
+def test_icons_command_finds_a_named_icon_and_is_silent_without_a_match(capsys) -> None:
+    assert cli.main(["icons", "--cloud", "aws", "--search", "lambda"]) == 0
+    assert capsys.readouterr().out.splitlines()[0].startswith("aws:lambda\t")
+    assert cli.main(["icons", "--cloud", "aws", "--search", "zzzzqq"]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_overrides_are_applied_reported_and_leave_the_cache_key_alone(
+    cache: Path, tmp_path: Path, capsys, renderer
+) -> None:
+    curated = _setup_build(tmp_path, capsys)
+    key = json.loads(curated.read_text())["inputs_sha256"]
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "icons.json").write_text(json.dumps({"overrides": [
+        {"cloud": "aws", "type": "aws_s3_bucket", "icon": "sqs", "reason": "test"},
+        {"cloud": "aws", "type": "aws_s3_bucket", "icon": "no_such_icon", "reason": "test"}]}))
+    assert _build(tmp_path, curated) == 0
+    report = capsys.readouterr().out
+    assert "Overrides (2)" in report and "refused" in report
+    assert "mxgraph.aws4.sqs" in (out / "mini.drawio").read_text()
+    assert tfdiagram.inputs_sha256(cache / "facts.json") == key
+    assert (cache / "review.json").is_file()
+    (out / "icons.json").write_text("{bad")
+    assert _build(tmp_path, curated) == 0
+    assert "Overrides (1)" in capsys.readouterr().out
+    assert "mxgraph.aws4.sqs" not in (out / "mini.drawio").read_text()
+
+
+def test_build_over_a_malformed_old_drawio_treats_it_as_having_no_icons(tmp_path: Path, capsys, renderer) -> None:
+    curated = _built(tmp_path, capsys)
+    out = tmp_path / "out"
+    (out / "mini.drawio").write_text("<mxfile><broken")
+    assert _build(tmp_path, curated, "--replace") == 0
+    assert ElementTree.parse(out / "mini.drawio").getroot().tag == "mxfile"
+    assert "Icon changes (0)" in capsys.readouterr().out
+
+
+def test_extract_of_an_infra_dir_without_terraform_files_is_one_line_and_exit_1(capsys) -> None:
+    assert cli.main(["extract", "nope", "--repo", str(FIXTURES), "--name", "mini"]) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("no .tf files in") and err.count("\n") == 1 and "Traceback" not in err

@@ -25,7 +25,7 @@ def _hard(xml: str) -> dict[str, int]:
 
 
 def test_parallel_segments_of_two_edges_keep_line_gap() -> None:
-    nodes = (Icon("a", "A", "s3", 0, 100), Icon("b", "B", "s3", 500, 40), Icon("c", "C", "s3", 500, 200))
+    nodes = (Icon("a", "A", "aws:s3", 0, 100), Icon("b", "B", "aws:s3", 500, 40), Icon("c", "C", "aws:s3", 500, 200))
     routed = route(_scene(nodes, (Edge("a", "b"), Edge("a", "c"))))
     polys = [segments(polyline(e, leaves(routed))) for e in routed.edges]
     gaps = [parallel_gap(s, t) for s in polys[0] for t in polys[1]]
@@ -38,7 +38,7 @@ def test_hub_with_twelve_edges_is_clear_everywhere() -> None:
 
 
 def test_caption_with_one_spot_near_an_icon_stays_on_its_line() -> None:
-    nodes = (Icon("a", "A", "s3", 0, 100), Icon("b", "B", "s3", 460, 100), Icon("c", "Centre label", "s3", 230, 60))
+    nodes = (Icon("a", "A", "aws:s3", 0, 100), Icon("b", "B", "aws:s3", 460, 100), Icon("c", "Centre label", "aws:s3", 230, 60))
     xml = gen_drawio.render(route(_scene(nodes, (Edge("a", "b", "a fairly long caption"),))), page_id="t",
                             page_name="t")
     assert (measure(xml).caption_crowding, measure(xml).caption_far) == (0, 0)
@@ -59,16 +59,16 @@ def test_every_edge_is_axis_aligned_with_explicit_points() -> None:
 
 
 def test_aligned_ports_still_get_stub_points() -> None:
-    nodes = (Icon("a", "A", "s3", 0, 100), Icon("b", "B", "s3", 300, 100))
+    nodes = (Icon("a", "A", "aws:s3", 0, 100), Icon("b", "B", "aws:s3", 300, 100))
     edge = route(_scene(nodes, (Edge("a", "b"),))).edges[0]
     assert len(edge.points) >= 2
 
 
 def test_hub_spreads_over_sides_and_groups_ports_by_flow() -> None:
-    hub = Icon("hub", "Hub", "lambda", 600, 400)
-    targets = [Icon(f"r{i}", f"R{i}", "s3", 1100, 150 + i * 160) for i in range(4)]
-    targets += [Icon(f"u{i}", f"U{i}", "s3", 300 + i * 220, 60) for i in range(4)]
-    targets += [Icon(f"d{i}", f"D{i}", "s3", 300 + i * 220, 760) for i in range(4)]
+    hub = Icon("hub", "Hub", "aws:lambda", 600, 400)
+    targets = [Icon(f"r{i}", f"R{i}", "aws:s3", 1100, 150 + i * 160) for i in range(4)]
+    targets += [Icon(f"u{i}", f"U{i}", "aws:s3", 300 + i * 220, 60) for i in range(4)]
+    targets += [Icon(f"d{i}", f"D{i}", "aws:s3", 300 + i * 220, 760) for i in range(4)]
     colours = ["#147EBA", "#1D8102"]
     edges = tuple(Edge("hub", t.id, color=colours[i % 2]) for i, t in enumerate(targets))
     routed = route(_scene((hub, *targets), edges))
@@ -89,7 +89,7 @@ def test_hub_spreads_over_sides_and_groups_ports_by_flow() -> None:
 
 
 def test_node_without_room_reports_ports_too_close() -> None:
-    nodes = [Icon("hub", "Hub", "lambda", 400, 300), *(Icon(f"t{i}", f"T{i}", "s3", 800, i * 100) for i in range(20))]
+    nodes = [Icon("hub", "Hub", "aws:lambda", 400, 300), *(Icon(f"t{i}", f"T{i}", "aws:s3", 800, i * 100) for i in range(20))]
     routed = route(_scene(tuple(nodes), tuple(Edge("hub", f"t{i}") for i in range(20))))
     assert measure(gen_drawio.render(routed, page_id="t", page_name="t")).ports_too_close > 0
 
@@ -106,14 +106,14 @@ def test_line_colour_is_the_destination_group_colour() -> None:
 
 
 def test_checker_counts_a_line_running_along_a_frame_border() -> None:
-    nodes = (Group("g", "G", 100, 100, 300, 300), Icon("o", "O", "s3", 0, 0), Icon("i", "I", "s3", 130, 300, "g"))
+    nodes = (Group("g", "G", 100, 100, 300, 300), Icon("o", "O", "aws:s3", 0, 0), Icon("i", "I", "aws:s3", 130, 300, "g"))
     along = Edge("o", "i", points=((60, 30), (106, 30), (106, 330)), out=(1, 0.5), into=(0, 0.5), exact=True)
     assert measure(gen_drawio.render(_scene(nodes, (along,)), page_id="t", page_name="t")).line_on_frame == 1
 
 
 def test_line_keeps_line_gap_from_frame_borders_it_runs_beside() -> None:
     for ox, ix in ((60, 130), (68, 110)):
-        nodes = (Group("g", "G", 100, 100, 300, 300), Icon("o", "O", "s3", ox, -40), Icon("i", "I", "s3", ix, 300, "g"))
+        nodes = (Group("g", "G", 100, 100, 300, 300), Icon("o", "O", "aws:s3", ox, -40), Icon("i", "I", "aws:s3", ix, 300, "g"))
         xml = gen_drawio.render(route(_scene(nodes, (Edge("o", "i"),))), page_id="t", page_name="t")
         assert (measure(xml).line_on_frame, _hard(xml)) == (0, dict.fromkeys(HARD, 0))
 
@@ -121,7 +121,7 @@ def test_line_keeps_line_gap_from_frame_borders_it_runs_beside() -> None:
 def test_ports_on_a_side_are_ordered_by_the_way_their_routes_turn() -> None:
     frames = (Group("data", "Storage\nSPA and access logs", 1296, 220, 421, 246),
               Group("platform", "Platform\ndeploy, maps, monitoring", 1811, 220, 540, 402))
-    nodes = tuple(Icon(i, f"{i}\nsecond line", "s3", x, 286) for i, x in (
+    nodes = tuple(Icon(i, f"{i}\nsecond line", "aws:s3", x, 286) for i, x in (
         ("proxy", 1064), ("cdn", 870), ("deploy", 2171), ("bucket", 1381), ("tiles", 1931), ("logs", 1571)))
     edges = (Edge("cdn", "proxy", "/als/map origin"), Edge("cdn", "bucket", "SPA origin"),
              Edge("cdn", "tiles", "map tiles"), Edge("cdn", "logs", "access logs"),
@@ -132,6 +132,6 @@ def test_ports_on_a_side_are_ordered_by_the_way_their_routes_turn() -> None:
 
 def test_ports_keep_off_a_side_whose_stub_would_run_into_a_group_title() -> None:
     nodes = (Group("g", "Triggers and schedules\nmachine invokes", 100, 400, 500, 300),
-             Icon("bus", "Bus", "s3", 215, 450, "g"), Icon("a", "A", "s3", 215, 0), Icon("b", "B", "s3", 215, 200))
+             Icon("bus", "Bus", "aws:s3", 215, 450, "g"), Icon("a", "A", "aws:s3", 215, 0), Icon("b", "B", "aws:s3", 215, 200))
     routed = route(_scene(nodes, (Edge("a", "bus", "run now"), Edge("b", "bus", "trigger event"))))
     assert {side_of(e.into) for e in routed.edges}.isdisjoint("T")

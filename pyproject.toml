@@ -1,7 +1,7 @@
 [project]
 name = "cartographer"
 version = "0.3.2"
-description = "Terraform folder or described solution to Lucid-compatible draw.io AWS architecture and C4 diagrams"
+description = "AWS or Azure Terraform, or a described solution, to verified draw.io architecture diagrams and C4 diagram sets"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = ["python-hcl2"]

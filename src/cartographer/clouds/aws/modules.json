@@ -1,0 +1,15 @@
+{
+  "terraform-aws-modules/vpc/aws": "vpc",
+  "terraform-aws-modules/eks/aws": "eks",
+  "terraform-aws-modules/rds/aws": "rds",
+  "terraform-aws-modules/rds-aurora/aws": "aurora",
+  "terraform-aws-modules/lambda/aws": "lambda",
+  "terraform-aws-modules/s3-bucket/aws": "s3",
+  "terraform-aws-modules/alb/aws": "elastic_load_balancing",
+  "terraform-aws-modules/sqs/aws": "sqs",
+  "terraform-aws-modules/sns/aws": "sns",
+  "terraform-aws-modules/dynamodb-table/aws": "dynamodb",
+  "terraform-aws-modules/ecs/aws": "ecs",
+  "terraform-aws-modules/cloudfront/aws": "cloudfront",
+  "terraform-aws-modules/apigateway-v2/aws": "api_gateway"
+}

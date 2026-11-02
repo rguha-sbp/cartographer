@@ -1,0 +1,70 @@
+{
+  "title": "Mini architecture",
+  "groups": [
+    {
+      "id": "app",
+      "label": "Application",
+      "kind": null,
+      "parent": null,
+      "column": 1
+    }
+  ],
+  "nodes": [
+    {
+      "id": "fn",
+      "label": "Worker",
+      "service": "Lambda",
+      "group": "app",
+      "tf": [
+        "aws_lambda_function.fn"
+      ],
+      "multi": false
+    },
+    {
+      "id": "data",
+      "label": "Data",
+      "service": "S3",
+      "group": "app",
+      "tf": [
+        "aws_s3_bucket.data"
+      ],
+      "multi": false
+    },
+    {
+      "id": "mon",
+      "label": "Datadog monitors\nalerts",
+      "service": "other",
+      "group": "app",
+      "tf": [
+        "datadog_monitor.x"
+      ],
+      "multi": false
+    }
+  ],
+  "externals": [
+    {
+      "id": "users",
+      "label": "Users",
+      "icon": "none",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "src": "users",
+      "dst": "fn",
+      "label": "invoke",
+      "flow": "web",
+      "dashed": false,
+      "evidence": []
+    },
+    {
+      "src": "fn",
+      "dst": "data",
+      "label": "read objects",
+      "flow": "data",
+      "dashed": false,
+      "evidence": []
+    }
+  ]
+}

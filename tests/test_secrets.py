@@ -37,11 +37,12 @@ FACTS = {
 
 
 def _node(node_id: str, tf: str, label: str) -> dict:
-    return {"id": node_id, "tf": [tf], "service": "other", "group": None, "label": label}
+    return {"id": node_id, "tf": [tf], "group": None, "label": label}
 
 
 def _curated(node_label: str = "fn", edge_label: str = "reads, SQL", contains: str = "x = 1") -> dict:
     return {
+        "format": 2,
         "source": "terraform",
         "title": "t",
         "groups": [],

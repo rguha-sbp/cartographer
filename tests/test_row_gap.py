@@ -5,7 +5,7 @@ from itertools import permutations
 from cartographer import tf_layout
 from cartographer.c4_styles import C4
 from cartographer.diagram_model import bounds
-from cartographer.notation import AWS, Notation
+from cartographer.notation import LAYER7, Notation
 from cartographer.tf_blocks import GAP
 
 BOX = [260, 112]
@@ -39,5 +39,5 @@ def test_c4_stacks_boxes_at_least_its_row_gap_apart() -> None:
 
 
 def test_l7_row_gap_is_unchanged() -> None:
-    assert AWS.row_gap == GAP == 40
-    assert _least_vertical_gap(AWS) == GAP
+    assert LAYER7.row_gap == GAP == 40
+    assert _least_vertical_gap(LAYER7) == GAP

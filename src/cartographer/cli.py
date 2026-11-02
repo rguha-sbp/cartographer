@@ -1,11 +1,11 @@
-"""The `cartographer` command: extract, prompt, build, image, check, snapshot, view, docs."""
+"""The `cartographer` command: extract, prompt, build, image, check, snapshot, view, icons, docs."""
 
 import argparse
 import sys
 from functools import partial
 from pathlib import Path
 
-from cartographer import build, c4_commands, drift, snapshot, svg_export, tf_extract, tfdiagram, view
+from cartographer import build, c4_commands, drift, icons, snapshot, svg_export, tf_extract, tfdiagram, view
 from cartographer.workdir import cache_dir, write_json
 
 HERE = Path(__file__).parent
@@ -15,7 +15,12 @@ DOCS = {"review": HERE / "REVIEW.md", "rules": HERE / "RULES.md", "interview": H
 def _extract(args: argparse.Namespace) -> int:
     repo = args.repo.resolve()
     facts_path = cache_dir(args.name) / "facts.json"
-    write_json(facts_path, tf_extract.extract(repo / args.infra_dir, repo))
+    try:
+        facts = tf_extract.extract(repo / args.infra_dir, repo)
+    except FileNotFoundError as err:
+        print(err, file=sys.stderr)
+        return 1
+    write_json(facts_path, facts)
     print(f"facts: {facts_path}")
     print(f"inputs key: {tfdiagram.inputs_sha256(facts_path)}")
     return 0
@@ -44,6 +49,12 @@ def _image(args: argparse.Namespace) -> int:
 
 def _docs(args: argparse.Namespace) -> int:
     print(DOCS[args.name])
+    return 0
+
+
+def _icons(args: argparse.Namespace) -> int:
+    for qualified, title in icons.search(args.cloud, args.search):
+        print(f"{qualified}\t{title}")
     return 0
 
 
@@ -80,6 +91,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--drawio-url", default=None, help="your own local draw.io (never a public host)")
     p = command("check", drift.run, "fail when a .drawio has no image or a stale one (offline)", named=False)
     p.add_argument("folder", type=Path, help="diagrams folder, searched recursively")
+    p = command("icons", _icons, "find icon names by words in the name or title", named=False)
+    p.add_argument("--cloud", required=True, choices=icons.namespaces(), help="icon namespace to search")
+    p.add_argument("--search", required=True, help="words that must all appear in the icon name or title")
     p = command("docs", _docs, "print the path of a packaged document (review, rules, interview)", named=False)
     p.add_argument("name", choices=sorted(DOCS))
     return ap

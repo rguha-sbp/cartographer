@@ -1,0 +1,91 @@
+{
+  "title": "T",
+  "groups": [
+    {
+      "id": "g_cloud",
+      "label": "g_cloud",
+      "kind": "cloud",
+      "parent": null,
+      "column": 0
+    },
+    {
+      "id": "g_region",
+      "label": "g_region",
+      "kind": "region",
+      "parent": "g_cloud",
+      "column": 0
+    },
+    {
+      "id": "g_account",
+      "label": "g_account",
+      "kind": "account",
+      "parent": "g_region",
+      "column": 0
+    },
+    {
+      "id": "g_app",
+      "label": "App",
+      "kind": null,
+      "parent": "g_account",
+      "column": 0
+    }
+  ],
+  "nodes": [
+    {
+      "id": "app",
+      "label": "App",
+      "service": "lambda",
+      "group": "g_app",
+      "tf": [
+        "x"
+      ],
+      "multi": false
+    }
+  ],
+  "externals": [
+    {
+      "id": "x_mcp",
+      "label": "MCP servers\nremote tools",
+      "icon": "external_toolkit",
+      "evidence": []
+    },
+    {
+      "id": "x_hub",
+      "label": "GitHub",
+      "icon": "github",
+      "evidence": []
+    },
+    {
+      "id": "x_user",
+      "label": "Users",
+      "icon": "user",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "src": "app",
+      "dst": "x_mcp",
+      "label": "",
+      "flow": "runtime",
+      "dashed": false,
+      "evidence": []
+    },
+    {
+      "src": "app",
+      "dst": "x_hub",
+      "label": "",
+      "flow": "runtime",
+      "dashed": false,
+      "evidence": []
+    },
+    {
+      "src": "app",
+      "dst": "x_user",
+      "label": "",
+      "flow": "runtime",
+      "dashed": false,
+      "evidence": []
+    }
+  ]
+}

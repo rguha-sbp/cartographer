@@ -1,9 +1,16 @@
 # Visual review checklist
 
+For a Layer 7 diagram, Read `review.json` in the diagram's cache folder before looking at any image (`cartographer build` writes it; `cartographer snapshot` adds the tiles). Say which diagram you are reviewing: `view_name` and `view` name its kind, and `clouds` lists the clouds drawn.
+
+Then read `tiles.json` beside the PNGs (in the snapshot folder). It lists, per tile file, the ids of the icons that fall in it, and each entry of `icons` in `review.json` repeats its `tiles`. Tie every icon you see to its entry by its label and tile: the entry says which resource it stands for (`tf` addresses, types, file and line), `icon_title` (the icon's name in words), `frame` (where it must sit), and why the icon is what it is (`decided_by`, `marked`, `override`). Review the `marked` entries first and judge each icon against its `tf` types and `icon_title`, in words: is this resource what that icon says it is? A node with no `tf` is an external or a described node: judge it by its label.
+
+An icon fix is `cartographer icons --cloud X --search Y` (at most 20 results) to find the right name, then an override with a reason in `icons.json` beside the diagrams (`{"overrides": [{"cloud": "azure", "type": "azurerm_x", "icon": "name", "reason": "why", "address": "optional"}]}`; an `address` limits it to one resource), then `cartographer build`; never re-curate for an icon. The build report lists `Marked icons`, `Overrides` (refused ones with the reason) and `Icon changes` since the last build.
+
 What Claude checks on the `cartographer snapshot` PNGs (full image and every tile) before calling a diagram ready.
 One line per rule. A finding names the view, the rule, the tile and the element. The tag says how a finding is fixed:
 
 - [curation]: edit `docs/architecture/diagrams/<name>.curated.json` (a C4 set: the `model.json` in the cache folder), then rebuild. The evidence rules in the `cartographer prompt` output still apply; never invent evidence. For a Terraform diagram the Terraform and code decide the fix. For a described diagram (`source` is `description`) change the curated file from the engineer's answers, or ask the engineer.
+- [override]: a wrong icon on a Layer 7 diagram. Write an override in `icons.json` with a reason, then rebuild; do not edit the curated file.
 - [tool]: a cartographer defect. Report it with the tile it appears in; do not patch the .drawio or the curated file by hand.
 
 Drawing rules the tool already enforces are in `RULES.md` (`cartographer docs rules` prints its path); this list is what a human eye still has to confirm on the rendered result.
@@ -14,7 +21,7 @@ Drawing rules the tool already enforces are in `RULES.md` (`cartographer docs ru
 page name starts with the view type:
 
 - `System Context diagram for ...`, `Container diagram for ...`, `Component diagram for ...`, `Code diagram for ...`, `Deployment diagram for ...`, `Dynamic diagram for ...`: a C4 view. Apply "Every diagram", "C4: every view" and the section named like the page.
-- Anything else: an AWS Layer 7 diagram. Apply "Every diagram" and "Layer 7".
+- Anything else: a Layer 7 diagram. Apply "Every diagram" and "Layer 7".
 
 The numbers of the Layer 7 rules did not change when the list was split, so a finding can still be quoted as "rule 10".
 
@@ -31,11 +38,11 @@ The numbers of the Layer 7 rules did not change when the list was split, so a fi
 
 ## Layer 7
 
-2. [curation] Every icon is a real icon: no empty box, and not the generic four-squares icon when a brand or AWS icon fits (`brand_icons.json`, `aws_icons.json`).
+2. [override] Every icon is a real icon that fits its `review.json` entry: no empty box, and not the generic four-squares icon when a brand or cloud icon fits. Fix: find it with `cartographer icons`, write an override, rebuild.
 5. [tool] Lines in a bundle are distinguishable by colour (RULES.md: an arrow takes the colour of its destination).
-7. [curation] AWS services sit inside the AWS Cloud frame; third parties (brands, SaaS, users) sit outside it (RULES.md: AWS managed services are externals with `service` set).
+7. [curation] Cloud services sit inside their own cloud's frame; third parties (brands, SaaS, users) sit outside it (RULES.md: managed services are externals with a cloud `icon`). A diagram of two clouds has one frame per cloud, and no node sits in the other cloud's frame.
 9. [tool] The legend matches what is drawn: colour meaning and solid versus dashed (RULES.md: line style is explained in words).
-11. [curation] Every VPC-attached node (load balancer, compute, database, endpoint) sits in a subnet frame inside its VPC; regional services (S3, DynamoDB, SQS) sit outside the VPC. Fix: add the `subnet` group and move the node.
+11. [curation] Every network-attached node (load balancer, compute, database, endpoint) sits in a subnet frame inside its VPC or virtual network; regional services (S3, DynamoDB, SQS, Azure Storage, Key Vault) sit outside the network. On Azure a private endpoint sits in its subnet, and an app with VNet integration stays outside it. Fix: add the `subnet` group and move the node.
 12. [curation] Workloads are visually separate: each application or service boundary has its own frame, and unrelated services do not share one. Fix: split or merge role groups.
 13. [curation] No frame holds a single node only because nesting allows it. Fix: drop the frame and put the node in its parent.
 14. [curation] No Availability Zone is drawn on L7: one icon per service, never one per AZ or subnet.
@@ -49,7 +56,7 @@ From the c4model.com notation page and review checklist. Fix [curation] findings
 - C4.3 [curation] Every element shows its name, its type and a short description.
 - C4.4 [curation] Containers and components also show their technology.
 - C4.5 [curation] Every arrow is one-directional and has a label. An arrow between containers also shows the technology or protocol.
-- C4.6 [tool] Plain shapes only: no AWS icons, no clip art, no decoration. Sync is solid, async is dashed.
+- C4.6 [tool] Plain shapes only: no cloud icons outside the Deployment view, no clip art, no decoration. Sync is solid, async is dashed.
 - C4.7 [curation] Abstraction levels are not mixed: nothing from another level appears on the view.
 
 ## System Context

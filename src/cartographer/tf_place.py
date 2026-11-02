@@ -4,7 +4,7 @@ The objective of a placement is the number of proper crossings between the strai
 edges plus their total length, weighed at a given number of pixels per crossing. Barycentric sweeps (`tf_order`) give
 a start; a greedy local search then tries every swap of two nodes in one block, two blocks in one column slot and two
 externals in one lane, every move of an external to the other lane, and every slot for a block whose column is open
-(`column` None, see `tf_aws_externals`), keeping each change that lowers the objective, until a whole sweep finds
+(`column` None, see `tf_externals`), keeping each change that lowers the objective, until a whole sweep finds
 none. Every candidate is a full placement by the caller's `build`, so the objective sees the real grid.
 """
 

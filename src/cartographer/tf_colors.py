@@ -7,7 +7,7 @@ from cartographer.diagram_model import EDGE_DEFAULT
 PALETTE = ("#1F77B4", "#D62728", "#2CA02C", "#9467BD", "#FF7F0E", "#8C564B", "#E377C2", "#008B8B", "#B8860B",
            "#6B8E23")
 FRAMES = ("cloud", "region", "account")
-CONTAINERS = (*FRAMES, "vpc", "subnet")  # frames drawn in AWS colours; only the role groups inside get a palette entry
+CONTAINERS = (*FRAMES, "network", "subnet")  # frames drawn in their cloud's colours; only the role groups inside get a palette entry
 
 
 class Colours:

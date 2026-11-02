@@ -2,6 +2,7 @@ import json
 import xml.etree.ElementTree as ET
 
 from cartographer import gen_drawio, tf_layout, tfdiagram
+from cartographer.curated_format import FRAME_KINDS
 from cartographer.diagram_model import GREY
 from cartographer.tf_check import measure
 from cartographer.tf_colors import PALETTE, Colours
@@ -9,11 +10,12 @@ from cartographer.tf_geom import groups, leaves
 
 
 def _group(gid: str, label: str, kind: str | None, parent: str | None, column: int = 0, **extra) -> dict:
-    return {"id": gid, "label": label, "kind": kind, "parent": parent, "column": column, **extra}
+    cloud = {"cloud": "aws"} if kind in FRAME_KINDS else {}
+    return {"id": gid, "label": label, "kind": kind, "parent": parent, "column": column, **cloud, **extra}
 
 
 def _node(nid: str, label: str, service: str, group: str | None) -> dict:
-    return {"id": nid, "label": label, "service": service, "group": group, "tf": [], "multi": False}
+    return {"id": nid, "label": label, "icon": f"aws:{service}", "group": group, "tf": [], "multi": False}
 
 
 def _edge(src: str, dst: str, label: str, flow: str = "runtime") -> dict:
@@ -22,12 +24,13 @@ def _edge(src: str, dst: str, label: str, flow: str = "runtime") -> dict:
 
 def _shop() -> dict:
     return {
+        "format": 2,
         "title": "Layer 7 diagram for Shop",
         "groups": [
             _group("cloud", "AWS Cloud", "cloud", None),
             _group("region", "eu-west-1", "region", "cloud"),
             _group("acct", "Shop account", "account", "region"),
-            _group("vpc", "shop-vpc", "vpc", "acct", cidrs=["10.0.0.0/16"]),
+            _group("vpc", "shop-vpc", "network", "acct", cidrs=["10.0.0.0/16"]),
             _group("pub", "Public subnets", "subnet", "vpc", tier="public"),
             _group("priv", "Private subnets", "subnet", "vpc", tier="private"),
             _group("store", "Storefront", None, "pub"),
@@ -40,7 +43,7 @@ def _shop() -> dict:
             _node("db", "Orders database", "rds", "orders"),
             _node("s3", "Media bucket", "s3", "media"),
         ],
-        "externals": [{"id": "user", "label": "Shopper", "icon": "user", "evidence": []}],
+        "externals": [{"id": "user", "label": "Shopper", "icon": "generic:user", "evidence": []}],
         "edges": [_edge("user", "alb", "browse, HTTPS", "web"), _edge("alb", "ecs", "forward, HTTP"),
                   _edge("ecs", "db", "query, SQL", "data"), _edge("ecs", "s3", "store images", "data")],
     }
@@ -131,7 +134,7 @@ def test_palette_goes_to_outermost_workloads_only() -> None:
 
 def test_vpc_and_subnet_frames_use_the_aws_colour_not_a_palette_stroke() -> None:
     diagram = tf_layout.layout(_shop())
-    assert all(g.stroke == GREY for g in diagram.nodes if getattr(g, "kind", None) in ("vpc", "subnet"))
+    assert all(g.stroke == GREY for g in diagram.nodes if getattr(g, "kind", None) in ("network", "subnet"))
 
 
 def test_a_workload_split_across_frames_shares_one_colour() -> None:

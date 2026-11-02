@@ -1,0 +1,58 @@
+from cartographer import clouds, icons
+
+TODAY_LAMBDA_STYLE = (
+    f"sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor={clouds.CLOUDS['aws'].icons['lambda']['fill']};"
+    "strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;"
+    "fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;"
+    "resIcon=mxgraph.aws4.lambda;"
+)
+TODAY_USERS_STYLE = (
+    "sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3D;"
+    "strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;"
+    "fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.users;"
+)
+
+
+def test_style_of_an_aws_icon_is_todays_style():
+    assert icons.style("aws:lambda") == TODAY_LAMBDA_STYLE
+
+
+def test_generic_and_brand_styles_unchanged():
+    assert icons.style("generic:users") == TODAY_USERS_STYLE
+    assert icons.style("brand:github").startswith("shape=mxgraph.webicons.github;")
+
+
+def test_unknown_and_unqualified_names_are_not_known():
+    assert not icons.known("lambda") and not icons.known("aws:nope") and not icons.known(None)
+    assert icons.known("aws:lambda") and icons.known("generic:users") and icons.known("brand:github")
+
+
+def test_title_uses_drawio_title():
+    assert icons.title("aws:elasticsearch_service") == "OpenSearch Service"
+    assert icons.title("generic:users") == "Users"
+
+
+def test_search_is_capped_and_ranked():
+    hits = icons.search("aws", "s")
+    assert len(hits) == 20
+    assert icons.search("aws", "opensearch")[0] == ("aws:elasticsearch_service", "OpenSearch Service")
+    assert icons.search("aws", "lambda")[0] == ("aws:lambda", "Lambda")
+
+
+def test_namespaces_and_cloud_of():
+    assert icons.namespaces() == ("aws", "azure", "generic", "brand")
+    assert icons.cloud_of("aws:lambda") == "aws" and icons.cloud_of("generic:users") is None
+
+
+def test_cloud_of_type():
+    assert clouds.cloud_of_type("aws_lambda_function").name == "aws" and clouds.cloud_of_type("random_id") is None
+
+
+def test_known_looks_a_name_up_without_listing_the_catalog(monkeypatch) -> None:
+    class Unlistable(dict):
+        def __iter__(self):
+            raise AssertionError("known() must not enumerate icons")
+
+    monkeypatch.setattr(icons, "_GENERIC", Unlistable({"users": "#232F3D"}))
+    monkeypatch.setattr(clouds.CLOUDS["aws"], "icons", Unlistable(clouds.CLOUDS["aws"].icons))
+    assert icons.known("generic:users") and icons.known("aws:lambda") and not icons.known("aws:nope")

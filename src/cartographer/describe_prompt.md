@@ -1,7 +1,8 @@
-You are drawing an AWS Layer 7 architecture diagram from what an engineer tells you, not from Terraform.
+You are drawing a Layer 7 cloud architecture diagram (AWS, Azure or both) from what an engineer tells you, not from Terraform.
 
 Inputs
-- Schema file: {schema_path}. Read it: it lists every allowed field and enum value.
+- Schema file: {schema_path}. Read it: it lists every allowed field. It has no list of icons: find names with
+  `cartographer icons --cloud <aws|azure|generic|brand> --search <words>` (at most 20 results).
 - Output file: {output_path}. Write one JSON object there that validates against the schema. Write a draft as soon as
   you have one, and keep every draft valid: the build is as strict for drafts as for the final diagram. If the file
   already exists, start from it and change only what the engineer's answers changed. Leave `drawio_sha256` as it is
@@ -11,23 +12,29 @@ Inputs
 
 Fields for a described diagram
 - `"source": "description"`. Never write `inputs_sha256`, `omitted` or a title.
-- `system` is the display name of the system (for example "Shop") and `view` is "l7".
-- Every node has `"tf": []`. A node is an AWS service the engineer named or that the described flow clearly needs;
-  `service` is its draw.io AWS icon name. A named non-AWS system is an external with an `icon`.
-- Groups: always nest the AWS nodes in frames, one group of kind `cloud` (AWS Cloud), inside it `region`, inside it
-  `account`. Users and third-party systems are externals and sit outside the frames. If the engineer did not name the
+- `format` is 2. `system` is the display name of the system (for example "Shop") and `view` is "l7".
+- Every node has `"tf": []`. A node is a cloud service the engineer named or that the described flow clearly needs;
+  its `tf_type` is the Terraform resource type that stands for it (for example `aws_lambda_function` or
+  `azurerm_key_vault`), with `attributes` when the type needs them to choose its icon, and the tool resolves the icon.
+  Set a qualified `icon` (for example `aws:lambda`) only when no type fits. A named third-party system is an external
+  with a `brand:` or `generic:` icon; a cloud managed service outside the solution is an external with `tf_type`.
+- Cloud: ask which cloud or clouds the solution runs on. Draw one top-level frame per cloud.
+- Groups: always nest the cloud nodes in frames, one group of kind `cloud`, inside it `region`, inside it
+  `account` (an Azure subscription is the account). Every frame group (`cloud`, `region`, `account`, `network`, `subnet`)
+  carries `cloud` (`aws` or `azure`). Users and third-party systems are externals and sit outside the frames. If the engineer did not name the
   region or account, label them with your best guess and record it in `assumptions`.
-- VPC and subnets: a `vpc` group (parent the account) holds what runs in a VPC. Inside it, one `subnet` group per
+- Networks and subnets: a `network` group (the VPC or virtual network, parent the account) holds what runs in it. Inside it, one `subnet` group per
   tier that holds a node, with `tier` `public`, `private` or `isolated` and the label "Public subnets", "Private
-  subnets" or "Isolated subnets". Never draw Availability Zones. Only VPC-attached services go in a subnet group;
-  regional services (S3, DynamoDB, Bedrock, SQS) sit under the account.
-- Tier: from what the engineer said. When they did not say: load balancers public, compute and data private. Record
-  each such default in `assumptions`; the tier is never marked on the diagram. A subnet group's `evidence` is a
+  subnets" or "Isolated subnets". Never draw Availability Zones or resource groups. Only network-attached services go in a subnet group;
+  regional services (S3, DynamoDB, Bedrock, SQS, Azure Storage, Key Vault) sit under the account. On Azure a private
+  endpoint sits in its subnet and the service it exposes stays outside; an app with VNet integration stays outside too.
+- Tier: from what the engineer said. When they did not say: gateways and public load balancers public, compute and data
+  private (on Azure too). Record each such default in `assumptions`; the tier is never marked on the diagram. A subnet group's `evidence` is a
   `stated` item when the engineer named the tier.
-- CIDR: set `cidrs` on the `vpc` group only when the engineer stated the address range, with a `stated` or `file`
+- CIDR: set `cidrs` on the `network` group only when the engineer stated the address range, with a `stated` or `file`
   item in the group's `evidence`. Never guess or invent an address range; leave `cidrs` out instead.
 - Workloads: role groups (`kind` null, for example "Storefront" or "Orders") are the application or service
-  boundaries the engineer named. Each has `parent` set to the subnet group where its VPC-attached services run, or to
+  boundaries the engineer named. Each has `parent` set to the subnet group where its network-attached services run, or to
   the account for its regional services. A workload that has both gets one frame in each place, with the same label.
   Without a workload split, use plain role groups ("Edge", "Data stores") under the same parents.
 - Label: short name, a newline, then a 2 to 4 word role. Plain ASCII, no em dashes, en dashes or smart quotes.

@@ -9,10 +9,10 @@ from cartographer.diagram_model import B, Box, Diagram, Edge, Group, Icon, L, Le
 
 def _diagram() -> Diagram:
     nodes = (
-        Group("acct", "Shop account", 0, 100, 700, 300, kind="account"),
-        Icon("cdn", "CloudFront\nCDN", "cloudfront", 40, 160, parent="acct"),
-        Icon("api", "orders API\norder handling", "lambda", 240, 160, parent="acct"),
-        Icon("ddb", "orders table\ncustomer's orders", "dynamodb", 440, 160, parent="acct"),
+        Group("acct", "Shop account", 0, 100, 700, 300, kind="account", cloud="aws"),
+        Icon("cdn", "CloudFront\nCDN", "aws:cloudfront", 40, 160, parent="acct"),
+        Icon("api", "orders API\norder handling", "aws:lambda", 240, 160, parent="acct"),
+        Icon("ddb", "orders table\ncustomer's orders", "aws:dynamodb", 440, 160, parent="acct"),
         Box("stripe", "Stripe\npayments", 800, 180),
     )
     edges = (
