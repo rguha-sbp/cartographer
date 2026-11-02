@@ -7,7 +7,7 @@
     {
       "name": "cartographer",
       "source": "./",
-      "description": "Terraform folder or described solution to a verified AWS architecture diagram or C4 diagram set, curated in your own Claude session."
+      "description": "AWS or Azure Terraform, or a described solution, to a verified architecture diagram or C4 diagram set (draw.io and svg), curated in your own Claude session."
     }
   ]
 }

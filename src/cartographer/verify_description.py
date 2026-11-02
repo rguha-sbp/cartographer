@@ -9,7 +9,9 @@ from cartographer.verify_shared import (
     check_assumptions,
     check_claims,
     claim_id,
+    cloud_warnings,
     code_hit,
+    declared_icon,
     edge_name,
     fix_groups,
     isolated_ids,
@@ -60,11 +62,13 @@ def verify(curated: dict, repo_root: Path) -> tuple[dict, str]:
             dropped["nodes"].append(f"{n['id']}: {problem}")
         else:
             kept_nodes.append(n)
+            declared_icon(n)
             warnings += shape_warnings(n)
     out["nodes"] = kept_nodes
 
     kept_externals = []
     for x in out["externals"]:
+        declared_icon(x)
         good, why = _supported(x["evidence"], repo_root)
         problem = SECRET_REASON if contains_secret(x) else claim_id(seen, x["id"]) or "; ".join(why)
         if problem:
@@ -93,6 +97,7 @@ def verify(curated: dict, repo_root: Path) -> tuple[dict, str]:
 
     notes: list[str] = []
     fix_groups(out, notes)
+    warnings += cloud_warnings(out)
     check_claims(out, notes, lambda group, evidence: _supported(evidence, repo_root))
     out["assumptions"], bad_assumptions = check_assumptions(curated, ends, kept_edges)
     isolated = [f"{i}: no edge connects it" for i in isolated_ids(out)]

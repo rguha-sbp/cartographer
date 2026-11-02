@@ -1,4 +1,5 @@
 import base64
+import json
 import subprocess
 import urllib.parse
 import zlib
@@ -164,3 +165,50 @@ def test_find_chrome_prefers_install_path_over_path(monkeypatch):
     monkeypatch.setattr(snapshot.Path, "exists", lambda self: self == mac)
     monkeypatch.setattr(snapshot.shutil, "which", lambda n: "/usr/bin/chromium")
     assert snapshot.find_chrome() == str(mac)
+
+
+def test_tiles_json_maps_icons_to_tiles() -> None:
+    xml = """<mxfile><diagram><mxGraphModel><root>
+<mxCell id="0"/><mxCell id="1" parent="0"/>
+<mxCell id="left" parent="1" vertex="1"><mxGeometry x="0" y="0" width="60" height="60" as="geometry"/></mxCell>
+<mxCell id="right" parent="1" vertex="1"><mxGeometry x="940" y="440" width="60" height="60" as="geometry"/></mxCell>
+<mxCell id="frame" parent="1" vertex="1"><mxGeometry x="0" y="0" width="1000" height="500" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram></mxfile>"""
+    size = snapshot.window_size(xml)
+    assert snapshot.tile_map(xml, "a", size, 2, 2) == {"a.tile-r0c0.png": ["left"], "a.tile-r1c1.png": ["right"]}
+
+
+def test_a_1x1_snapshot_names_the_full_image_in_tiles_json(tmp_path, monkeypatch, bundled_app):
+    d = tmp_path / "a.drawio"
+    d.write_text(XML)
+    out = tmp_path / "out"
+
+    def fake_run(cmd, **kw):
+        Path(next(a for a in cmd if a.startswith("--screenshot=")).split("=", 1)[1]).write_bytes(b"png")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
+    monkeypatch.setattr(snapshot, "find_chrome", lambda: "/bin/chrome")
+    monkeypatch.setattr(snapshot.subprocess, "run", fake_run)
+    [(_, shots)] = snapshot.snapshot(d, out, "http://localhost:8080", "1x1")
+    assert shots == [out / "a.png"]
+    assert set(json.loads((out / "tiles.json").read_text())) == {"a.png"}
+
+
+def test_a_side_file_snapshot_fills_the_sheet_of_the_diagram_it_was_built_from(tmp_path, monkeypatch, bundled_app):
+    monkeypatch.setenv("CARTOGRAPHER_HOME", str(tmp_path / "home"))
+    sheet = tmp_path / "home" / "a" / "review.json"
+    sheet.parent.mkdir(parents=True)
+    sheet.write_text(json.dumps({"icons": [{"id": "n", "tiles": []}]}))
+    d = tmp_path / "a.generated.drawio"
+    d.write_text(XML)
+
+    def fake_run(cmd, **kw):
+        Path(next(a for a in cmd if a.startswith("--screenshot=")).split("=", 1)[1]).write_bytes(b"png")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
+    monkeypatch.setattr(snapshot, "find_chrome", lambda: "/bin/chrome")
+    monkeypatch.setattr(snapshot.subprocess, "run", fake_run)
+    snapshot.snapshot(d, tmp_path / "out", "http://localhost:8080", "1x1")
+    assert json.loads(sheet.read_text())["icons"][0]["tiles"] == ["a.generated.png"]

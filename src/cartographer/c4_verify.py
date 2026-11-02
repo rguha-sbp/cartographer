@@ -5,14 +5,10 @@ from pathlib import Path
 
 from cartographer import c4_views, schema_check
 from cartographer.c4_model import SHAPE, Model, RollupError, ancestors, elements
+from cartographer.clouds import CLOUDS
 from cartographer.secret_patterns import contains_secret
 from cartographer.verify_shared import SECRET_REASON, code_hit, shape_warnings
 
-COMPLETE_TYPES = (
-    "aws_lambda_function", "aws_ecs_service", "aws_instance", "aws_autoscaling_group", "aws_db_instance",
-    "aws_rds_cluster", "aws_dynamodb_table", "aws_s3_bucket", "aws_sqs_queue", "aws_sns_topic",
-    "aws_kinesis_stream", "aws_elasticache_cluster", "aws_elasticache_replication_group",
-)
 INSIDE = {"container", "component", "code"}
 PARENT_TYPE = {"container": "system", "component": "container", "code": "component"}
 STATED_HEADING = "Stated by the engineer, not found in the repo"
@@ -83,6 +79,8 @@ def _structure(model: Model) -> list[str]:
     out += [f"{s['id']}: step {step} is not a relationship" for s in model.get("scenarios", []) for step in s["steps"]
             if step not in rels]
     out += [w for n in _nodes(model) for w in shape_warnings(n)]
+    out += [f"{n['id']}: a frame needs a known cloud" for n in _nodes(model)
+            if "frame" in n and n.get("cloud") not in CLOUDS]
     out += [f"{n['id']}: a subnet frame needs a tier" for n in _nodes(model)
             if n.get("frame") == "subnet" and "tier" not in n]
     out += _links(_nodes(model))
@@ -129,9 +127,9 @@ def _hosts(model: Model, by_id: dict[str, dict], eid: str) -> set[str]:
 
 def _joins(fact: dict, ends: tuple[set[str], ...]) -> bool:
     """The fact lands on the Terraform addresses in `ends`. One end, a deployment node's own addresses or the hosts of
-    an element: the fact names one of them, as an edge end, a placed resource or a vpc. A relationship's two ends: the
-    fact's src and dst, in either order. An empty set is an end not deployed in this environment (or never deployed,
-    like a person), so there is nothing to land on and any address will do."""
+    an element: the fact names one of them, as an edge end, a placed resource or a network. A relationship's two ends:
+    the fact's src and dst, in either order. An empty set is an end not deployed in this environment (or never
+    deployed, like a person), so there is nothing to land on and any address will do."""
     if len(ends) == 1:
         return not ends[0] or not ends[0].isdisjoint(fact.get(k) for k in ("src", "dst", "resource", "address"))
     src, dst = fact.get("src"), fact.get("dst")
@@ -154,7 +152,8 @@ def _evidence(item: dict, known: dict[str, dict] | None, repo: Path, ends: tuple
 
 
 def _evidence_rules(model: Model, facts: dict | None, repo: Path) -> list[str]:
-    known = None if facts is None else {f["id"]: f for key in ("edges", "vpcs", "placements") for f in facts.get(key, [])}
+    known = None if facts is None else {f["id"]: f for key in ("edges", "networks", "placements")
+                                         for f in facts.get(key, [])}
     by_id = elements(model)
     hosts = {eid: _hosts(model, by_id, eid) for eid in by_id}
     out = [p for n in _nodes(model) for p in _evidence(n, known, repo, (set(n.get("tf", [])),))]
@@ -173,8 +172,9 @@ def _deployment(model: Model, facts: dict | None) -> list[str]:
     out = [f"{n['id']}: needs terraform addresses" for n in _nodes(model) if not n.get("tf") and "frame" not in n]
     out += [f"{n['id']}: {a} is not in the facts" for n in _nodes(model) for a in n.get("tf", []) if a not in addresses]
     placed = {a for n in _nodes(model) for a in n.get("tf", [])} | {o["tf"] for o in model.get("omitted", [])}
+    deployed = {t for cloud in CLOUDS.values() for t in cloud.deployed_types}
     out += [f"{r['address']}: not on any view and not omitted" for r in facts["resources"]
-            if r["type"] in COMPLETE_TYPES and r["address"] not in placed]
+            if r["type"] in deployed and r["address"] not in placed]
     return out
 
 

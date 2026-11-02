@@ -1,8 +1,7 @@
 import math
 import xml.etree.ElementTree as ET
 
-from cartographer import gen_drawio, tf_layout
-from cartographer.diagram_model import BRAND_ICONS
+from cartographer import gen_drawio, icons, tf_externals, tf_layout
 from cartographer.tf_geom import (
     GLYPH_W,
     ICON_LABEL_PAD,
@@ -19,14 +18,14 @@ from cartographer.tf_read import read
 
 def _curated() -> dict:
     frames = [("g_cloud", "cloud", None), ("g_region", "region", "g_cloud"), ("g_account", "account", "g_region")]
-    groups_ = [{"id": i, "label": i, "kind": k, "parent": p, "column": 0} for i, k, p in frames]
+    groups_ = [{"id": i, "label": i, "kind": k, "cloud": "aws", "parent": p, "column": 0} for i, k, p in frames]
     groups_.append({"id": "g_app", "label": "App", "kind": None, "parent": "g_account", "column": 0})
-    nodes = [{"id": "app", "label": "App", "service": "lambda", "group": "g_app", "tf": ["x"], "multi": False}]
-    externals = [{"id": "x_model", "label": "Models", "icon": "none", "service": "bedrock", "evidence": []},
-                 {"id": "x_hub", "label": "GitHub", "icon": "github", "evidence": []}]
+    nodes = [{"id": "app", "label": "App", "icon": "aws:lambda", "group": "g_app", "tf": ["x"], "multi": False}]
+    externals = [{"id": "x_model", "label": "Models", "icon": "aws:bedrock", "evidence": []},
+                 {"id": "x_hub", "label": "GitHub", "icon": "brand:github", "evidence": []}]
     edges = [{"src": "app", "dst": d, "label": "", "flow": "runtime", "dashed": False, "evidence": []}
              for d in ("x_model", "x_hub")]
-    return {"title": "T", "groups": groups_, "nodes": nodes, "externals": externals, "edges": edges}
+    return {"format": 2, "title": "T", "groups": groups_, "nodes": nodes, "externals": externals, "edges": edges}
 
 
 def _render() -> tuple[str, dict]:
@@ -47,7 +46,7 @@ def test_aws_service_external_sits_inside_the_region_frame_with_a_resource_icon(
 def test_brand_icon_renders_with_its_exact_style() -> None:
     xml, _ = _render()
     style = next(c.get("style") for c in ET.fromstring(xml).iter("mxCell") if c.get("id") == "x_hub")
-    assert style == BRAND_ICONS["github"]
+    assert style == icons.style("brand:github")
 
 
 def _style_of(xml: str, cid: str) -> str:
@@ -56,7 +55,7 @@ def _style_of(xml: str, cid: str) -> str:
 
 def test_generic_icon_label_is_not_wrapped_and_reads_back_at_its_true_size() -> None:
     curated = _curated()
-    curated["externals"][1] = {"id": "x_mcp", "label": "MCP servers\nremote tools", "icon": "external_toolkit",
+    curated["externals"][1] = {"id": "x_mcp", "label": "MCP servers\nremote tools", "icon": "generic:external_toolkit",
                                "evidence": []}
     curated["edges"][1]["dst"] = "x_mcp"
     xml = gen_drawio.render(tf_layout.layout(curated), page_id="t", page_name="t")
@@ -65,3 +64,16 @@ def test_generic_icon_label_is_not_wrapped_and_reads_back_at_its_true_size() -> 
     x0, y0, x1, y1 = label_rect(drawn)
     assert (x1 - x0, y1 - y0) == label_size("MCP servers\nremote tools") == (math.ceil(12 * GLYPH_W + TEXT_PAD),
                                                                                2 * ICON_LINE_H + ICON_LABEL_PAD)
+
+
+def test_managed_services_reuse_the_cloud_frame_when_the_curation_has_no_region() -> None:
+    curated = _curated()
+    curated["groups"] = [g for g in curated["groups"] if g["kind"] != "region"]
+    curated["groups"][1]["parent"] = "g_cloud"
+    for g in curated["groups"]:
+        g["cloud"] = "azure"
+    curated["externals"] = [{"id": "x_kv", "label": "Vault", "icon": "azure:key_vault", "evidence": []}]
+    curated["edges"] = []
+    out = tf_externals.adopt(curated)
+    assert [g["id"] for g in out["groups"] if g["kind"] == "cloud"] == ["g_cloud"]
+    assert next(g for g in out["groups"] if g["id"] == tf_externals.block_id("azure"))["parent"] == "g_cloud"

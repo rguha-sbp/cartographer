@@ -1,0 +1,149 @@
+{
+  "title": "Layer 7 diagram for Shop",
+  "groups": [
+    {
+      "id": "cloud",
+      "label": "AWS Cloud",
+      "kind": "cloud",
+      "parent": null,
+      "column": 0
+    },
+    {
+      "id": "region",
+      "label": "eu-west-1",
+      "kind": "region",
+      "parent": "cloud",
+      "column": 0
+    },
+    {
+      "id": "acct",
+      "label": "Shop account",
+      "kind": "account",
+      "parent": "region",
+      "column": 0
+    },
+    {
+      "id": "vpc",
+      "label": "shop-vpc",
+      "kind": "vpc",
+      "parent": "acct",
+      "column": 0,
+      "cidrs": [
+        "10.0.0.0/16"
+      ]
+    },
+    {
+      "id": "pub",
+      "label": "Public subnets",
+      "kind": "subnet",
+      "parent": "vpc",
+      "column": 0,
+      "tier": "public"
+    },
+    {
+      "id": "priv",
+      "label": "Private subnets",
+      "kind": "subnet",
+      "parent": "vpc",
+      "column": 0,
+      "tier": "private"
+    },
+    {
+      "id": "store",
+      "label": "Storefront",
+      "kind": null,
+      "parent": "pub",
+      "column": 0
+    },
+    {
+      "id": "orders",
+      "label": "Orders",
+      "kind": null,
+      "parent": "priv",
+      "column": 0
+    },
+    {
+      "id": "media",
+      "label": "Media",
+      "kind": null,
+      "parent": "acct",
+      "column": 1
+    }
+  ],
+  "nodes": [
+    {
+      "id": "alb",
+      "label": "Load balancer",
+      "service": "elastic_load_balancing",
+      "group": "store",
+      "tf": [],
+      "multi": false
+    },
+    {
+      "id": "ecs",
+      "label": "Order service",
+      "service": "ecs",
+      "group": "orders",
+      "tf": [],
+      "multi": false
+    },
+    {
+      "id": "db",
+      "label": "Orders database",
+      "service": "rds",
+      "group": "orders",
+      "tf": [],
+      "multi": false
+    },
+    {
+      "id": "s3",
+      "label": "Media bucket",
+      "service": "s3",
+      "group": "media",
+      "tf": [],
+      "multi": false
+    }
+  ],
+  "externals": [
+    {
+      "id": "user",
+      "label": "Shopper",
+      "icon": "user",
+      "evidence": []
+    }
+  ],
+  "edges": [
+    {
+      "src": "user",
+      "dst": "alb",
+      "label": "browse, HTTPS",
+      "flow": "web",
+      "dashed": false,
+      "evidence": []
+    },
+    {
+      "src": "alb",
+      "dst": "ecs",
+      "label": "forward, HTTP",
+      "flow": "runtime",
+      "dashed": false,
+      "evidence": []
+    },
+    {
+      "src": "ecs",
+      "dst": "db",
+      "label": "query, SQL",
+      "flow": "data",
+      "dashed": false,
+      "evidence": []
+    },
+    {
+      "src": "ecs",
+      "dst": "s3",
+      "label": "store images",
+      "flow": "data",
+      "dashed": false,
+      "evidence": []
+    }
+  ]
+}

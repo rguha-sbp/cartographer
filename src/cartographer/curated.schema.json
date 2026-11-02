@@ -132,6 +132,13 @@
       "items": {
         "additionalProperties": false,
         "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Attributes of that Terraform resource type that choose among its icons, for described nodes and managed-service externals.",
+            "type": "object"
+          },
           "evidence": {
             "items": {
               "$ref": "#/$defs/evidence"
@@ -139,8 +146,16 @@
             "type": "array"
           },
           "icon": {
-            "description": "draw.io generic icon shape, brand logo or none. The enum is injected at run time by tfdiagram.py from generic_icons.json and brand_icons.json.",
-            "type": "string"
+            "description": "Qualified icon name such as brand:github or aws:bedrock, or none. Find names with `cartographer icons`.",
+            "oneOf": [
+              {
+                "pattern": "^[a-z]+:[a-z0-9_]+$",
+                "type": "string"
+              },
+              {
+                "const": "none"
+              }
+            ]
           },
           "id": {
             "type": "string"
@@ -148,33 +163,40 @@
           "label": {
             "type": "string"
           },
-          "service": {
-            "description": "draw.io AWS icon name for an AWS managed service the stack calls but Terraform does not create. The enum is injected at run time by tfdiagram.py from aws_icons.json. Leave unset for third-party systems.",
+          "tf_type": {
+            "description": "A Terraform resource type the catalog resolves the icon from, for described nodes and managed-service externals.",
             "type": "string"
           }
         },
         "required": [
           "id",
           "label",
-          "icon",
           "evidence"
         ],
         "type": "object"
       },
       "type": "array"
     },
+    "format": {
+      "const": 2,
+      "description": "Curated file format version."
+    },
     "groups": {
       "items": {
         "additionalProperties": false,
         "properties": {
           "cidrs": {
-            "description": "VPC frame only: its IPv4 CIDR blocks, only when the Terraform or the engineer gave them.",
+            "description": "Network frame only: its IPv4 CIDR blocks, only when the Terraform or the engineer gave them.",
             "items": {
               "pattern": "^(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}/(3[0-2]|[12]?[0-9])$",
               "type": "string"
             },
             "minItems": 1,
             "type": "array"
+          },
+          "cloud": {
+            "description": "The cloud a cloud, region, account, network or subnet frame belongs to, for example aws. Leave unset for plain groups.",
+            "type": "string"
           },
           "column": {
             "maximum": 3,
@@ -195,7 +217,7 @@
               "cloud",
               "region",
               "account",
-              "vpc",
+              "network",
               "subnet",
               null
             ]
@@ -238,6 +260,13 @@
       "items": {
         "additionalProperties": false,
         "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Attributes of that Terraform resource type that choose among its icons, for described nodes and managed-service externals.",
+            "type": "object"
+          },
           "group": {
             "type": [
               "string",
@@ -245,7 +274,8 @@
             ]
           },
           "icon": {
-            "description": "For a non-AWS node (service other): the draw.io generic icon shape or brand logo it is drawn as. Same enum as the external icon, injected at run time by tfdiagram.py. Leave unset for AWS resources.",
+            "description": "Qualified icon name such as aws:s3. Set only when the node's Terraform resources resolve to no icon (a non-cloud provider) or for a described node with no fitting tf_type. Find names with `cartographer icons`.",
+            "pattern": "^[a-z]+:[a-z0-9_]+$",
             "type": "string"
           },
           "id": {
@@ -257,22 +287,21 @@
           "multi": {
             "type": "boolean"
           },
-          "service": {
-            "description": "draw.io AWS icon name or other. The enum is injected at run time by tfdiagram.py from aws_icons.json.",
-            "type": "string"
-          },
           "tf": {
             "description": "Terraform resource addresses. At least one for source terraform, empty for source description.",
             "items": {
               "type": "string"
             },
             "type": "array"
+          },
+          "tf_type": {
+            "description": "A Terraform resource type the catalog resolves the icon from, for described nodes and managed-service externals.",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "label",
-          "service",
           "group",
           "tf",
           "multi"
@@ -324,6 +353,7 @@
   "required": [
     "edges",
     "externals",
+    "format",
     "groups",
     "nodes",
     "source",

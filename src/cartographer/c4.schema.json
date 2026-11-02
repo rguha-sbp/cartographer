@@ -125,6 +125,10 @@
     "node": {
       "additionalProperties": false,
       "properties": {
+        "cloud": {
+          "description": "The cloud a cloud, region, account, network or subnet frame belongs to, for example aws or azure.",
+          "type": "string"
+        },
         "evidence": {
           "items": {
             "$ref": "#/$defs/evidence"
@@ -137,9 +141,14 @@
             "cloud",
             "region",
             "account",
-            "vpc",
+            "network",
             "subnet"
           ]
+        },
+        "icon": {
+          "description": "Qualified icon name of an infrastructure node, for example aws:lambda or azure:function_apps. Find names with `cartographer icons`.",
+          "pattern": "^[a-z]+:[a-z0-9_]+$",
+          "type": "string"
         },
         "id": {
           "$ref": "#/$defs/id"
@@ -148,10 +157,6 @@
           "type": "string"
         },
         "parent": {
-          "type": "string"
-        },
-        "service": {
-          "description": "AWS icon name",
           "type": "string"
         },
         "technology": {

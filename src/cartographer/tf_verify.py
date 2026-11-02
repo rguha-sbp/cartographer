@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+from cartographer import icons
+from cartographer.curated_format import upgrade
 from cartographer.secret_patterns import contains_secret
 from cartographer.tf_hint_check import unaccounted
 from cartographer.tf_network_check import check_network
@@ -12,11 +14,14 @@ from cartographer.verify_shared import (
     SECRET_REASON,
     check_assumptions,
     claim_id,
+    cloud_warnings,
     code_hit,
+    declared_icon,
     fix_groups,
     isolated_ids,
     needs_attention,
     render_report,
+    set_reason,
     shape_warnings,
 )
 
@@ -87,9 +92,24 @@ def _mismatches(edges: list[dict], facts_by_id: dict) -> list[str]:
     return sorted(out)
 
 
+def _facts_icon(node: dict, resources: dict[str, dict]) -> list[str]:
+    """The node's icon from the first of its resources that resolves to a cloud icon, else to any icon (a resource
+    group's generic folder never beats a service); warnings for what the curator set."""
+    found = [resources[a] for a in node["tf"]]
+    iconed = [r for r in found if "icon" in r]
+    if resolved := next((r for r in iconed if icons.cloud_of(r["icon"])), next(iter(iconed), None)):
+        overridden = "icon" in node
+        node.update(icon=resolved["icon"], decided_by=resolved.get("decided_by", ""), marked=resolved["marked"])
+        set_reason(node, resolved.get("reason") if resolved["marked"] else None)
+        return [f"{node['id']}: curator icon is set but the resources resolve, resolved icon wins"] if overridden else []
+    declared_icon(node)
+    return [f"{node['id']}: built only from folded resources"] if all("fold" in r for r in found) else []
+
+
 def verify(facts: dict, curated: dict, repo_root: Path) -> tuple[dict, str]:
     addresses = {r["address"] for r in facts["resources"]}
-    facts_by_id = {f["id"]: f for key in ("edges", "vpcs", "placements") for f in facts.get(key, [])}
+    resources = {r["address"]: r for r in facts["resources"]}
+    facts_by_id = {f["id"]: f for key in ("edges", "networks", "placements") for f in facts.get(key, [])}
     out = json.loads(json.dumps(curated))
     notes: list[str] = []
     warnings: list[str] = []
@@ -108,6 +128,7 @@ def verify(facts: dict, curated: dict, repo_root: Path) -> tuple[dict, str]:
             dropped_nodes.append(f"{n['id']}: {reason}")
         else:
             kept_nodes.append(n)
+            warnings += _facts_icon(n, resources)
             warnings += shape_warnings(n)
     out["nodes"] = kept_nodes
 
@@ -116,6 +137,7 @@ def verify(facts: dict, curated: dict, repo_root: Path) -> tuple[dict, str]:
         if contains_secret(x):
             dropped_externals.append(f"{x['id']}: {SECRET_REASON}")
             continue
+        declared_icon(x)
         warnings += shape_warnings(x)
         good, why = _check_evidence(x["evidence"], facts_by_id, repo_root, set(), set())
         if reason := claim_id(seen, x["id"]):
@@ -145,6 +167,7 @@ def verify(facts: dict, curated: dict, repo_root: Path) -> tuple[dict, str]:
     out["edges"] = kept_edges
 
     fix_groups(out, notes)
+    warnings += cloud_warnings(out)
     check_network(out, facts, facts_by_id, repo_root, notes)
     out["assumptions"], bad_assumptions = check_assumptions(curated, set(tf_of), kept_edges)
     covered = {frozenset((e["src"], e["dst"])) for e in kept_edges}
@@ -181,7 +204,7 @@ def main() -> int:
     ap.add_argument("--strict", action="store_true", help="exit 1 when anything was dropped or a node has no edge")
     args = ap.parse_args()
 
-    curated = json.loads(args.curated.read_text())
+    curated = upgrade(json.loads(args.curated.read_text()))
     verified, report = verify(json.loads(args.facts.read_text()), curated, args.repo_root)
     args.output.write_text(json.dumps(verified, indent=2, sort_keys=True) + "\n")
     sys.stdout.write(report)

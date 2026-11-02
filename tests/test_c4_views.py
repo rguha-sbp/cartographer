@@ -58,7 +58,7 @@ def _ids(items):
 
 def test_context_shows_no_containers():
     ctx = _view(_shop(), "1-context").curated
-    assert {n["service"] for n in ctx["nodes"]} == {"system"} and not ctx["groups"]
+    assert {n["icon"] for n in ctx["nodes"]} == {"system"} and not ctx["groups"]
     assert _ids(ctx["externals"]) == {"user", "boss", "psp"}
     assert {e["icon"] for e in ctx["externals"]} == {"person", "person_ext", "system_ext"}
 
@@ -88,14 +88,14 @@ def test_container_view_has_the_system_boundary():
     assert cv["groups"] == [{"id": "shop", "label": "Shop\n[Software System]", "kind": "boundary", "parent": None,
                              "column": 0}]
     assert {n["group"] for n in cv["nodes"]} == {"shop"}
-    assert {n["service"] for n in cv["nodes"]} == {"container", "container_store", "container_queue"}
+    assert {n["icon"] for n in cv["nodes"]} == {"container", "container_store", "container_queue"}
     assert _ids(cv["externals"]) == {"user", "boss", "psp"}
 
 
 def test_nodes_have_the_curated_shape():
     node = next(n for n in _view(_shop(), "2-container").curated["nodes"] if n["id"] == "api")
     assert node["label"] == "Api\n[Container: Python]\nDoes things"
-    assert (node["service"], node["tf"], node["multi"]) == ("container", [], False) and "c4" not in node
+    assert (node["icon"], node["tf"], node["multi"]) == ("container", [], False) and "c4" not in node
     assert node["box"][0] >= 200 and node["box"][1] > 0
 
 
@@ -177,7 +177,7 @@ def test_code_view_shows_type_names_and_stereotypes_only():
     v = _view(_shop_with_code(), "4-code-auth")
     assert {n["label"] for n in v.curated["nodes"]} == {
         "OrderService\n<<class>>", "Repository\n<<interface>>", "BaseService\n<<class>>"}
-    assert {n["service"] for n in v.curated["nodes"]} == {"code"}
+    assert {n["icon"] for n in v.curated["nodes"]} == {"code"}
     assert v.curated["groups"][0]["label"] == "Auth\n[Component]"
 
 

@@ -3,14 +3,15 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from cartographer.diagram_model import AWS_ICONS, BRAND_ICONS, GENERIC_ICONS
+from cartographer import icons
+from cartographer.clouds import CLOUDS, resolve_declared
+from cartographer.curated_format import FRAME_KINDS
 from cartographer.secret_patterns import contains_secret
 from cartographer.tf_blocks import empty_blocks
 
 CODE_WINDOW = 3
 SECRET_REASON = "looks like a secret"
-SHAPES = (*GENERIC_ICONS, *BRAND_ICONS, "none")
-NETWORK_KINDS = ("vpc", "subnet")
+NETWORK_KINDS = ("network", "subnet")
 UNKNOWN_TARGET = "unknown node, external or edge"
 
 
@@ -35,11 +36,51 @@ def claim_id(seen: set[str], item_id: str) -> str | None:
 
 
 def shape_warnings(item: dict) -> list[str]:
+    icon = item.get("icon", "none")
+    if icon == "none" or icons.known(icon):
+        return []
+    return [f"{item['id']}: icon {icon!r} is not a known icon, renders as a box"]
+
+
+def set_reason(item: dict, reason: str | None) -> None:
+    """Keep `reason` only on a marked item, so a re-verified item never carries a stale one."""
+    if reason:
+        item["reason"] = reason
+    else:
+        item.pop("reason", None)
+
+
+def declared_icon(item: dict) -> None:
+    """Set `icon`, `decided_by`, `marked` and a marked item's `reason` from the catalog when the item names a
+    `tf_type`; an item that names a cloud icon directly is marked as the curator's choice."""
+    if tf_type := item.get("tf_type"):
+        res = resolve_declared(tf_type, item.get("attributes", {}))
+        if res.icon:
+            item.update(icon=res.icon, decided_by=res.decided_by, marked=res.marked)
+            set_reason(item, res.reason if res.marked else None)
+            return
+    if icons.cloud_of(item.get("icon", "")):
+        item.update(decided_by="curator", marked=True)
+
+
+def frame_cloud(groups: dict[str, dict], gid: str | None) -> str | None:
+    """The cloud of the nearest enclosing frame."""
+    seen: set[str] = set()
+    while gid in groups and gid not in seen:
+        seen.add(gid)
+        if groups[gid]["kind"] in FRAME_KINDS:
+            return groups[gid].get("cloud")
+        gid = groups[gid]["parent"]
+    return None
+
+
+def cloud_warnings(diagram: dict) -> list[str]:
+    groups = {g["id"]: g for g in diagram["groups"]}
     out = []
-    if item.get("service", "other") not in (*AWS_ICONS, "other"):
-        out.append(f"{item['id']}: service {item['service']!r} is not a draw.io AWS icon, renders as a box")
-    if item.get("icon", "none") not in SHAPES:
-        out.append(f"{item['id']}: icon {item['icon']!r} is not a draw.io generic or brand shape, renders as a box")
+    for n in (*diagram["nodes"], *diagram["externals"]):
+        icon_cloud, frame = icons.cloud_of(n.get("icon", "")), frame_cloud(groups, n.get("group"))
+        if icon_cloud and frame and icon_cloud != frame:
+            out.append(f"{n['id']}: icon {n['icon']} belongs to {icon_cloud}, its frame to {frame}")
     return out
 
 
@@ -73,7 +114,7 @@ def enclosing_subnet(groups: dict[str, dict], gid: str | None) -> dict | None:
 
 
 def outside_network(groups: dict[str, dict], subnet: dict) -> str | None:
-    """The nearest ancestor of a subnet group that is not a vpc or subnet frame."""
+    """The nearest ancestor of a subnet group that is not a network or subnet frame."""
     gid = subnet["parent"]
     while gid in groups and groups[gid]["kind"] in NETWORK_KINDS:
         gid = groups[gid]["parent"]
@@ -85,21 +126,29 @@ def _demote(group: dict) -> None:
     group.pop("tier", None)
 
 
+def fix_clouds(curated: dict, notes: list[str]) -> None:
+    """A frame needs the cloud whose styles draw it; without a known one it is a plain group."""
+    for g in curated["groups"]:
+        if g["kind"] in FRAME_KINDS and g.get("cloud") not in CLOUDS:
+            notes.append(f"group {g['id']}: {g['kind']} frame without a known cloud, now a plain group")
+            _demote(g)
+
+
 def fix_network_groups(curated: dict, notes: list[str]) -> None:
-    """Drop `tier` and `cidrs` from groups they do not belong to; a subnet group needs a tier and a vpc parent."""
+    """Drop `tier` and `cidrs` from groups they do not belong to; a subnet group needs a tier and a network parent."""
     groups = {g["id"]: g for g in curated["groups"]}
     for g in curated["groups"]:
         if g["kind"] != "subnet" and "tier" in g:
             notes.append(f"group {g['id']}: tier on a group that is not a subnet, dropped")
             del g["tier"]
-        if g["kind"] != "vpc" and "cidrs" in g:
-            notes.append(f"group {g['id']}: cidrs on a group that is not a vpc, dropped")
+        if g["kind"] != "network" and "cidrs" in g:
+            notes.append(f"group {g['id']}: cidrs on a group that is not a network, dropped")
             del g["cidrs"]
         if g["kind"] == "subnet" and "tier" not in g:
             notes.append(f"group {g['id']}: subnet without a tier, now a plain group")
             _demote(g)
-        elif g["kind"] == "subnet" and groups.get(g["parent"], {}).get("kind") != "vpc":
-            notes.append(f"group {g['id']}: subnet parent {g['parent']} is not a vpc group, now a plain group")
+        elif g["kind"] == "subnet" and groups.get(g["parent"], {}).get("kind") != "network":
+            notes.append(f"group {g['id']}: subnet parent {g['parent']} is not a network group, now a plain group")
             _demote(g)
 
 
@@ -107,16 +156,16 @@ Supported = Callable[[dict, list[dict]], tuple[list[dict], list[str]]]
 
 
 def check_claims(curated: dict, notes: list[str], supported: Supported) -> None:
-    """Keep a vpc group's `cidrs` and a subnet group's tier only while `supported(group, evidence)` finds evidence."""
+    """Keep a network group's `cidrs` and a subnet group's tier only while `supported(group, evidence)` finds evidence."""
     for g in curated["groups"]:
-        if g["kind"] == "vpc" and not g.get("cidrs") or g["kind"] not in NETWORK_KINDS:
+        if g["kind"] == "network" and not g.get("cidrs") or g["kind"] not in NETWORK_KINDS:
             continue
         good, why = supported(g, g.get("evidence", []))
         if contains_secret(g):
             good, why = [], [SECRET_REASON]
         if good:
             g["evidence"] = good
-        elif g["kind"] == "vpc":
+        elif g["kind"] == "network":
             notes.append(f"group {g['id']}: cidrs dropped, {'; '.join(why) or 'no evidence'}")
             del g["cidrs"]
             g.pop("evidence", None)
@@ -127,7 +176,7 @@ def check_claims(curated: dict, notes: list[str], supported: Supported) -> None:
 
 
 def group_claims(diagram: dict) -> set[tuple]:
-    """Network claims the diagram makes: vpc cidrs, subnet tiers and parents, nodes inside a subnet."""
+    """Network claims the diagram makes: network cidrs, subnet tiers and parents, nodes inside a subnet."""
     groups = {g["id"]: g for g in diagram["groups"]}
     claims = {("cidrs", g["id"], tuple(g["cidrs"])) for g in diagram["groups"] if g.get("cidrs")}
     claims |= {("subnet", g["id"], g.get("tier"), g["parent"]) for g in diagram["groups"] if g["kind"] == "subnet"}
@@ -145,6 +194,7 @@ def fix_groups(curated: dict, notes: list[str]) -> None:
         if item["group"] is not None and item["group"] not in ids:
             notes.append(f"{item['id']}: unknown group {item['group']}, ungrouped")
             item["group"] = None
+    fix_clouds(curated, notes)
     fix_network_groups(curated, notes)
     notes += [f"group {gid}: no nodes, the layout drops it" for gid in empty_blocks(curated)]
 

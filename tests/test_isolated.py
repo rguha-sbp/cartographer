@@ -12,11 +12,12 @@ FACTS = {
 
 
 def _node(node_id: str, tf: str) -> dict:
-    return {"id": node_id, "tf": [tf], "service": "other", "group": None, "label": node_id}
+    return {"id": node_id, "tf": [tf], "group": None, "label": node_id}
 
 
 def _curated() -> dict:
     return {
+        "format": 2,
         "source": "terraform",
         "title": "t",
         "groups": [],

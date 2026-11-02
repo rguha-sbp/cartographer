@@ -10,7 +10,7 @@ def _facts() -> dict:
 
 
 def _vpcs() -> dict[str, dict]:
-    return {v["address"]: v for v in _facts()["vpcs"]}
+    return {v["address"]: v for v in _facts()["networks"]}
 
 
 def _placements() -> dict[str, dict]:
@@ -45,15 +45,25 @@ def test_local_subnet_tiers() -> None:
     assert placements["aws_instance.orders"]["tier"] == "private"
     assert placements["aws_db_instance.ledger"]["tier"] == "isolated"
     assert placements["aws_instance.misc"]["tier"] == "private"
-    vpcs = {v["id"]: v["address"] for v in _facts()["vpcs"]}
-    assert vpcs[placements["aws_lb.front"]["vpc"]] == "aws_vpc.main"
+    vpcs = {v["id"]: v["address"] for v in _facts()["networks"]}
+    assert vpcs[placements["aws_lb.front"]["network"]] == "aws_vpc.main"
+
+
+def test_interpolated_subnet_names_still_inform_the_tier(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'variable "env" { default = "dev" }\n'
+        'resource "aws_vpc" "v" { cidr_block = "10.0.0.0/16" }\n'
+        'resource "aws_subnet" "a" {\n  vpc_id = aws_vpc.v.id\n  tags = { Name = "${var.env}-public" }\n}\n'
+        'resource "aws_instance" "i" { subnet_id = aws_subnet.a.id }\n')
+    placed = {p["resource"]: p for p in tf_extract.extract(Path("."), tmp_path)["placements"]}
+    assert placed["aws_instance.i"]["tier"] == "public"
 
 
 def test_remote_tier_from_output_name_through_module_variable() -> None:
     placement = _placements()["module.worker.aws_lambda_function.fn"]
     assert placement["tier"] == "private"
-    vpcs = {v["id"]: v["name"] for v in _facts()["vpcs"]}
-    assert vpcs[placement["vpc"]] == "shared-vpc"
+    vpcs = {v["id"]: v["name"] for v in _facts()["networks"]}
+    assert vpcs[placement["network"]] == "shared-vpc"
     assert placement["file"] == "infra/modules/worker/main.tf"
 
 
@@ -67,5 +77,12 @@ def test_undecidable_or_unmatched_placements_are_skipped() -> None:
 
 def test_fact_ids_do_not_clash() -> None:
     facts = _facts()
-    ids = [f["id"] for key in ("edges", "hints", "vpcs", "placements") for f in facts[key]]
+    ids = [f["id"] for key in ("edges", "hints", "networks", "placements") for f in facts[key]]
     assert len(ids) == len(set(ids))
+
+
+def test_networks_replace_vpcs() -> None:
+    facts = _facts()
+    assert "vpcs" not in facts and facts["networks"][0]["cloud"] == "aws"
+    assert [n["id"] for n in facts["networks"]] == [f"n{i}" for i in range(1, len(facts["networks"]) + 1)]
+    assert all(p["cloud"] == "aws" for p in facts["placements"])

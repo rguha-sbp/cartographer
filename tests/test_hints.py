@@ -68,3 +68,10 @@ def test_verify_accepts_omitted_and_cited() -> None:
     assert "host example.okta.com" not in report
     assert "module okta" not in report
     assert "param /app/okta/token" in report
+
+
+def test_azure_hosts_are_the_cloud_not_externals() -> None:
+    from cartographer.tf_hints import _line_hints
+
+    line = 'urls = ["https://kv.vault.azure.net", "https://st.blob.core.windows.net", "https://management.azure.com", "https://api.vendor.io"]'
+    assert _line_hints(line) == [("host", "api.vendor.io")]

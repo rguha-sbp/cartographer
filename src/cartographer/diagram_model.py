@@ -1,15 +1,13 @@
 """Renderer-neutral diagram types shared by hand-made models, the Terraform layout and the renderers."""
 
-import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal
 
 ICON = 60
 ICON_LABEL = 34
 BOX_W, BOX_H = 200, 56
 ORIGIN = (40, 100)  # top-left of the drawing below the title; the legend starts at the same x
-FRAME_TITLE_LEFT, GROUP_TITLE_LEFT = 30, 8  # a group title starts this far in: after the AWS frame icon, or plain
+FRAME_TITLE_LEFT, GROUP_TITLE_LEFT = 30, 8  # a group title starts this far in: after the cloud frame icon, or plain
 
 BLUE, RED, GREEN, PURPLE, GREY = "#147EBA", "#DD344C", "#1D8102", "#8C4FFF", "#879196"
 EDGE_DEFAULT = "#545B64"
@@ -22,25 +20,11 @@ FLOW_MEANINGS = {
     "data": ("Grey", "data plumbing, audit, egress, delivery"),
 }
 
-# draw.io resIcon name -> category fill colour, vendored from draw.io by vendor_aws_icons.py.
-AWS_ICONS: dict[str, str] = json.loads(Path(__file__).with_name("aws_icons.json").read_text(encoding="utf-8"))
-# draw.io General Resources shape name (users, client, internet, ...) -> fill colour; disjoint from AWS_ICONS.
-GENERIC_ICONS: dict[str, str] = json.loads(Path(__file__).with_name("generic_icons.json").read_text(encoding="utf-8"))
-
-# Brand name (github, okta, jira, ...) -> the complete draw.io style of its logo, vendored from draw.io's libraries.
-BRAND_ICONS: dict[str, str] = json.loads(Path(__file__).with_name("brand_icons.json").read_text(encoding="utf-8"))
-
-
-def has_icon(service: str) -> bool:
-    """Whether a service renders as an icon; anything else renders as a plain box."""
-    return service in AWS_ICONS or service in GENERIC_ICONS or service in BRAND_ICONS
-
-
 L, R, T, B = (0, 0.5), (1, 0.5), (0.5, 0), (0.5, 1)
 
 Port = tuple[float, float]
 Point = tuple[int, int]
-Kind = Literal["cloud", "region", "account", "vpc", "subnet", "boundary", "deployment"]
+Kind = Literal["cloud", "region", "account", "network", "subnet", "boundary", "deployment"]
 Head = Literal["open", "inherits", "implements"]
 
 
@@ -57,13 +41,14 @@ class Group:
     tier: str | None = None
     fill: str = "none"
     stroke: str = GREY
+    cloud: str | None = None
 
 
 @dataclass(frozen=True)
 class Icon:
     id: str
     label: str
-    service: str
+    icon: str
     x: int
     y: int
     parent: str | None = None

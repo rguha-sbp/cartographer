@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+import json
 import os
 import shutil
 import subprocess
@@ -15,6 +16,8 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 from cartographer import drawio_app, files
+from cartographer.diagram_model import ICON
+from cartographer.workdir import cache_root, write_json
 
 MARGIN = 120
 SCALE = 2
@@ -54,8 +57,8 @@ def viewer_url(drawio_url: str, xml: str) -> str:
     return f"{drawio_url}/?lightbox=1&nav=0&toolbar=0#R{payload}"
 
 
-def window_size(xml: str) -> tuple[int, int]:
-    """Bounding box of all vertices (parent offsets resolved) plus MARGIN on each side."""
+def _vertex_boxes(xml: str) -> dict[str, tuple[float, float, float, float]]:
+    """Id -> absolute (left, top, right, bottom) of every vertex, parent offsets resolved."""
     cells = {c.get("id"): c for c in ElementTree.fromstring(xml).iter("mxCell")}
 
     def origin(cell: ElementTree.Element | None) -> tuple[float, float]:
@@ -68,17 +71,40 @@ def window_size(xml: str) -> tuple[int, int]:
             cell = cells.get(cell.get("parent"))
         return x, y
 
-    boxes = []
-    for cell in cells.values():
+    boxes = {}
+    for cid, cell in cells.items():
         geo = cell.find("mxGeometry")
         if cell.get("vertex") == "1" and geo is not None:
             x, y = origin(cell)
-            boxes.append((x, y, x + float(geo.get("width", 0)), y + float(geo.get("height", 0))))
+            boxes[cid] = (x, y, x + float(geo.get("width", 0)), y + float(geo.get("height", 0)))
+    return boxes
+
+
+def window_size(xml: str) -> tuple[int, int]:
+    """Bounding box of all vertices (parent offsets resolved) plus MARGIN on each side."""
+    boxes = list(_vertex_boxes(xml).values())
     if not boxes:
         raise SnapshotError("no vertices in the diagram")
     width = max(b[2] for b in boxes) - min(b[0] for b in boxes)
     height = max(b[3] for b in boxes) - min(b[1] for b in boxes)
     return round(width + 2 * MARGIN), round(height + 2 * MARGIN)
+
+
+def tile_map(xml: str, stem: str, size: tuple[int, int], rows: int, cols: int) -> dict[str, list[str]]:
+    """Tile png name -> ids of the icon cells (ICON x ICON vertices) whose rectangle intersects that tile; the one
+    full image when there is a single tile."""
+    boxes = _vertex_boxes(xml)
+    left = min(b[0] for b in boxes.values()) - MARGIN
+    top = min(b[1] for b in boxes.values()) - MARGIN
+    icons = {cid: b for cid, b in boxes.items() if (b[2] - b[0], b[3] - b[1]) == (ICON, ICON)}
+    tiles = {}
+    for tile in tile_rects(*size, rows, cols):
+        hit = [cid for cid, b in icons.items()
+               if b[0] < left + tile.x + tile.w and b[2] > left + tile.x
+               and b[1] < top + tile.y + tile.h and b[3] > top + tile.y]
+        if hit:
+            tiles[f"{stem}.png" if rows * cols == 1 else f"{stem}.tile-r{tile.row}c{tile.col}.png"] = sorted(hit)
+    return tiles
 
 
 def parse_tiles(spec: str) -> tuple[int, int]:
@@ -150,6 +176,17 @@ def _tile_html(png: Path, size: tuple[int, int], tile: Tile) -> str:
     )
 
 
+def _write_tiles(tiles: dict[str, list[str]], diagram: str, out_dir: Path) -> None:
+    """`tiles.json` beside the PNGs; also fills the `tiles` of each icon in the review sheet of `diagram`."""
+    write_json(out_dir / "tiles.json", tiles)
+    sheet_path = cache_root() / diagram.removesuffix(".generated") / "review.json"
+    if sheet_path.is_file():
+        sheet = json.loads(sheet_path.read_text())
+        for entry in sheet["icons"]:
+            entry["tiles"] = [name for name, ids in tiles.items() if entry["id"] in ids]
+        write_json(sheet_path, sheet)
+
+
 def _shots(chrome: str, page: files.Page, size: tuple[int, int], out_dir: Path, drawio_url: str,
            rows: int, cols: int) -> list[Path]:
     """The full PNG of the page, named for its image, then its tiles when there are several."""
@@ -179,7 +216,12 @@ def snapshot(drawio: Path, out_dir: Path, drawio_url: str, tiles: str) -> list[t
         raise SnapshotError(DRAWIO_DOWN)
     chrome = find_chrome()
     out_dir.mkdir(parents=True, exist_ok=True)
-    return [(page, _shots(chrome, page, size, out_dir, drawio_url, rows, cols)) for page, size in zip(pages, sizes, strict=True)]
+    shot = [(page, _shots(chrome, page, size, out_dir, drawio_url, rows, cols))
+            for page, size in zip(pages, sizes, strict=True)]
+    _write_tiles({tile: ids for page, size in zip(pages, sizes, strict=True)
+                  for tile, ids in tile_map(page.mxfile, page.image.stem, size, rows, cols).items()},
+                 drawio.stem, out_dir)
+    return shot
 
 
 def add_arguments(ap: argparse.ArgumentParser) -> None:

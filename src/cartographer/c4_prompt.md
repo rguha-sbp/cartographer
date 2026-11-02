@@ -4,7 +4,7 @@ Container, Component, Deployment and Dynamic views, and Code views when the engi
 Inputs
 - Schema file: {schema_path}. Read it first: it lists every allowed field and enum value.
 - Facts file: {facts_path}. When it is not none, it holds the Terraform facts (JSON: resources, edges with ids like
-  f12, vpcs, placements). Read it fully. When it is none, there is no Terraform: the engineer describes the system.
+  f12, networks, placements). Read it fully. When it is none, there is no Terraform: the engineer describes the system.
 - Repo root: {repo_root}. Read the application code here. Read only files inside it; never guess a path, search for it.
 - Interview playbook: {interview_path}. Follow its interview rules whenever you ask the engineer something.
 - Model file: {model_path}. Write one JSON object there that validates against the schema. Write nothing else.
@@ -39,7 +39,7 @@ Evidence
 - Every element, relationship and deployment node needs at least one evidence item; an empty `evidence` list fails
   the build:
   {"fact": "f12"}: a facts id. For a deployment node, the fact must name one of the node's own `tf` addresses (an
-  edge end, a placement's resource or a vpc's address); for an element, one of the addresses of the deployment nodes
+  edge end, a placement's resource or a network's address); for an element, one of the addresses of the deployment nodes
   that host its container (an edge end or a placement's resource); for a relationship, the fact must join the
   deployment nodes that host its two ends.
   {"file": "src/x/y.py", "line": 88, "contains": ".query("}: the line in the repo; `line` is 1-based and `contains` a
@@ -71,12 +71,16 @@ Scenarios
 
 Deployment
 - With a facts file: `deployment` has the `environment` name (stated by the engineer, else the Terraform folder name),
-  nested `nodes` (frames cloud, region, account, vpc and subnet, with `tf` only where the frame is a resource in the
-  facts; and the infrastructure such as a Lambda function or an ECS service, each with `tf` addresses copied exactly
-  from the facts), and `instances` placing each container on its node. A subnet frame always has a `tier`. A node's
+  nested `nodes` (frames cloud, region, account, network and subnet, with `tf` only where the frame is a resource in
+  the facts; and the infrastructure such as a Lambda function or an Azure Function App, each with `tf` addresses
+  copied exactly from the facts), and `instances` placing each container on its node. Every frame has the `cloud` it
+  belongs to (aws or azure); a subnet frame always has a `tier`. Infrastructure that hosts no container may have an
+  `icon`, a qualified name found with `cartographer icons --cloud <aws|azure|generic|brand> --search <words>`. A node's
   `parent` is the node it sits in; parents never form a loop. An instance's `container` is a `container` element.
-- Every compute, store and queue resource in the facts (Lambda, ECS service, EC2 or autoscaling group, RDS or Aurora,
-  DynamoDB, S3, SQS, SNS, Kinesis, ElastiCache) is a deployment node or is listed in `omitted` as
+- Every compute, store and queue resource in the facts (AWS: Lambda, ECS service, EC2 or autoscaling group, RDS or
+  Aurora, DynamoDB, S3, SQS, SNS, Kinesis, ElastiCache; Azure: Function and Web Apps, Container Apps, AKS, virtual
+  machines and scale sets, SQL Database, PostgreSQL and MySQL flexible servers, Cosmos DB, storage accounts, Service
+  Bus, Event Hubs, Redis) is a deployment node or is listed in `omitted` as
   {"tf": <address>, "reason": <at most 80 characters>}.
 
 Before finishing, re-check: ids are unique, every parent and relationship end exists, every `tf` address is in the

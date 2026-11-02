@@ -6,12 +6,15 @@ import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from xml.etree import ElementTree
 
 from cartographer import (
     drawio_app,
     files,
     gen_drawio,
     index,
+    overrides,
+    review_sheet,
     snapshot,
     svg_export,
     tf_layout,
@@ -19,7 +22,8 @@ from cartographer import (
     tfdiagram,
     verify_description,
 )
-from cartographer.verify_shared import needs_attention
+from cartographer.curated_format import upgrade
+from cartographer.verify_shared import needs_attention, render_report
 from cartographer.workdir import cache_dir, write_json
 
 EXIT_VERIFY = 1
@@ -28,6 +32,7 @@ EXIT_STALE = 3
 EXIT_HAND_EDITED = 4
 EXIT_NO_RENDERER = 5
 STALE = "Terraform changed since curation: rerun the curation"
+ICON_KEYS = ("resIcon", "shape", "image")
 
 
 class Refusal(Exception):
@@ -84,6 +89,35 @@ def _verify_description(name: str, curated: dict, repo: Path) -> tuple[dict, str
     return verify_description.verify(curated, repo)
 
 
+def _icon_styles(mxfile: str) -> dict[str, str]:
+    """Cell id -> its resIcon, shape and image style values, for the cells that have any."""
+    found = {}
+    for cell in ElementTree.fromstring(mxfile).iter("mxCell"):
+        style = dict(p.split("=", 1) for p in cell.get("style", "").split(";") if "=" in p)
+        if shown := [f"{k}={style[k]}" for k in ICON_KEYS if k in style]:
+            found[cell.get("id")] = " ".join(shown)
+    return found
+
+
+def _previous_icons(target: Path) -> dict[str, str]:
+    """The icons of the diagram about to be replaced; none when there is none or a hand edit left it unparseable."""
+    try:
+        return _icon_styles(target.read_text()) if target.is_file() else {}
+    except ElementTree.ParseError:
+        return {}
+
+
+def icon_changes(before: dict[str, str], new: str) -> list[str]:
+    after = _icon_styles(new)
+    return [f"{cid}: {before[cid]} -> {after[cid]}" for cid in sorted(before.keys() & after.keys())
+            if before[cid] != after[cid]]
+
+
+def _marked(verified: dict) -> list[str]:
+    return [f"{i['id']}: {i['icon']} ({i.get('decided_by', '')}) {i.get('reason', '')}".rstrip()
+            for i in (*verified["nodes"], *verified["externals"]) if i.get("marked") and "override" not in i]
+
+
 VERIFIERS = {"terraform": _verify_terraform, "description": _verify_description}
 
 
@@ -103,7 +137,10 @@ def run(args: argparse.Namespace) -> int:
     curated_path = args.curated or out / f"{args.name}.curated.json"
     if not curated_path.is_file():
         raise Refusal(EXIT_STALE, f"no curated file at {curated_path}: run the curation (`cartographer prompt`)")
-    curated = json.loads(curated_path.read_text())
+    try:
+        curated = upgrade(json.loads(curated_path.read_text()))
+    except ValueError as err:
+        raise Refusal(EXIT_VERIFY, f"{curated_path}: {err}") from err
     verifier = VERIFIERS.get(curated.get("source"))
     if verifier is None:
         raise Refusal(EXIT_VERIFY, f"{curated_path}: source must be one of {', '.join(VERIFIERS)}")
@@ -125,11 +162,20 @@ def run(args: argparse.Namespace) -> int:
             "rerun with --replace to overwrite it or --side-file to write a .generated.drawio beside it",
         )
 
+    facts = json.loads((cache / "facts.json").read_text()) if curated["source"] == "terraform" else None
+    found, problems = overrides.load(out / "icons.json")
+    applied = overrides.apply(verified, facts, found)
     title = tfdiagram.diagram_title(verified)
     diagram = tf_layout.layout({**verified, "title": title}, edge_labels=args.edge_labels == "on")
     mxfile = gen_drawio.render(diagram, page_id=f"{args.name}-architecture", page_name=title)
     target = out / f"{args.name}.generated.drawio" if args.side_file else drawio_path
-    publish(target, mxfile, render_images(target, mxfile, args.drawio_url))
+    before = _previous_icons(target)
+    images = render_images(target, mxfile, args.drawio_url)
+    review_sheet.write(cache, verified, facts, diagram)
+    sections = [("Marked icons", _marked(verified)), ("Overrides", [*problems, *applied]),
+                ("Icon changes", icon_changes(before, mxfile))]
+    print(render_report("", sections).removeprefix("\n"), end="")
+    publish(target, mxfile, images)
     if not args.side_file:
         files.record_sha256(curated_path, files.sha256_text(mxfile))
     return 0

@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from cartographer.diagram_model import GROUP_TITLE_LEFT, ORIGIN, Box, Group, Legend, LegendEntry
-from cartographer.notation import LEGEND_LINE, LEGEND_W, Cell, Curated, Notation, aws_group, html_value
+from cartographer.notation import LEGEND_LINE, LEGEND_W, Cell, Curated, Notation, cloud_group, html_value
 from cartographer.tf_blocks import shape
 from cartographer.tf_geom import GLYPH_W
 
@@ -90,9 +90,9 @@ def _box(b: Box) -> Cell:
 
 
 def _group(g: Group) -> Cell:
-    """A boundary or deployment node in C4 grey; a cloud, region or network frame as AWS draws it."""
+    """A boundary or deployment node in C4 grey; a cloud, region or network frame as its cloud draws it."""
     if g.kind not in GROUP_KINDS:
-        return aws_group(g)
+        return cloud_group(g)
     f = GROUP_KINDS[g.kind]
     return html_value(g.label), (
         f"rounded=0;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;fillColor={f.fill};"
