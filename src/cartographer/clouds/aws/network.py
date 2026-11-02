@@ -2,46 +2,20 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from cartographer.clouds.refs import CIDR, Ref, derive, sources, tier_in, token
 from cartographer.tf_policies import unq
 from cartographer.tf_values import find
 
 if TYPE_CHECKING:
     from cartographer.tf_extract import Extractor
-    from cartographer.tf_modules import Inst, Res
+    from cartographer.tf_modules import Res
 
-TIERS = ("isolated", "private", "public")
-CIDR = re.compile(r"\d{1,3}(\.\d{1,3}){3}/\d{1,2}")
 VPC_KEY = re.compile(r"(\w*_)?vpc_id")
 SUBNET_KEY = re.compile(r"(\w*_)?subnets?(_ids?)?")
 NOT_PLACED = {"aws_subnet", "aws_route_table_association", "aws_network_acl_association"}
-TOKEN = re.compile(
-    r"(?<![\w.\-])(?:(?P<remote>data\.(?:tfe_outputs|terraform_remote_state)\.\w+"
-    r"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.aws_(?:vpc|subnets?)\.(?P<ds>\w+))"
-    r"|(?P<head>var|local|module|aws_subnet|aws_vpc)\.(?P<second>[\w-]+)(?:\[[^\]]*\])?(?:\.(?P<third>[\w-]+))?)"
-)
-
-
-@dataclass(frozen=True)
-class Ref:
-    """A local aws_subnet or aws_vpc (`name` None) or a reference to another stack (`name` is its output or data name)."""
-
-    address: str
-    name: str | None = None
-
-    @property
-    def remote(self) -> bool:
-        return self.name is not None
-
-
-def _derive(name: str) -> str:
-    return re.sub(r"_ids?$", "", name).replace("_", "-")
-
-
-def _tier_in(name: str) -> str | None:
-    return next((t for t in TIERS if t in name.lower()), None)
+TOKEN = token("aws_subnet|aws_vpc", "aws_(?:vpc|subnets?)")
 
 
 def _local_tier(res: Res) -> tuple[str, str]:
@@ -50,7 +24,7 @@ def _local_tier(res: Res) -> tuple[str, str]:
         return "public", "map_public_ip_on_launch"
     tags = body.get("tags")
     tagged = [v for k, v in tags.items() if unq(k) == "Name"] if isinstance(tags, dict) else []
-    named = _tier_in(" ".join(map(str, [body.get("name", ""), *tagged])))
+    named = tier_in(" ".join(map(str, [body.get("name", ""), *tagged])))
     return (named, "name") if named else ("private", "default")
 
 
@@ -60,36 +34,12 @@ class Network:
         self.by_address = {r.address: r for r in ex.res}
         self.vpcs: dict[str, dict] = {}
 
-    def sources(self, inst: Inst, obj: Any, seen: set | None = None) -> dict[Ref, None]:
-        """Subnets, VPCs and remote references `obj` points at, followed through locals and module variables."""
-        seen = set() if seen is None else seen
-        out: dict[Ref, None] = {}
-        for m in TOKEN.finditer(obj if isinstance(obj, str) else str(obj)):
-            if (key := (id(inst), m[0])) in seen:
-                continue
-            seen.add(key)
-            head, second, third = m["head"], m["second"], m["third"]
-            if m["remote"]:
-                out[Ref(m["remote"], m["out"] or m["ds"])] = None
-            elif head == "var" and inst.parent is not None:
-                for args in inst.args:
-                    if second in args:
-                        out |= self.sources(inst.parent, args[second], seen)
-            elif head == "local" and second in inst.mod.locals:
-                out |= self.sources(inst, inst.mod.locals[second], seen)
-            elif head == "module" and second in inst.children and third in inst.children[second].mod.outputs:
-                child = inst.children[second]
-                out |= self.sources(child, child.mod.outputs[third], seen)
-            elif (head, second) in inst.mod.resources:
-                out[Ref(f"{inst.prefix}{head}.{second}")] = None
-        return out
-
     def cidrs(self, vpc: Res) -> list[str]:
         """Every CIDR of a local VPC, or none when any of them is not a literal."""
         blocks = [(vpc.inst, vpc.block.body.get("cidr_block"))]
         for r in self.ex.res:
-            if r.type == "aws_vpc_ipv4_cidr_block_association" and Ref(vpc.address) in self.sources(
-                r.inst, r.block.body.get("vpc_id")
+            if r.type == "aws_vpc_ipv4_cidr_block_association" and Ref(vpc.address) in sources(
+                r.inst, r.block.body.get("vpc_id"), TOKEN
             ):
                 blocks.append((r.inst, r.block.body.get("cidr_block")))
         found = [self.ex.value(inst, value) for inst, value in blocks]
@@ -103,9 +53,9 @@ class Network:
                 self.vpcs[r.address] = self._vpc(r.address, r.address.rsplit(".", 1)[1], self.cidrs(r), False, r)
         for r in self.ex.res:
             for value in find(r.block.body, VPC_KEY):
-                for ref in self.sources(r.inst, value):
+                for ref in sources(r.inst, value, TOKEN):
                     if ref.remote and ref.address not in self.vpcs:
-                        self.vpcs[ref.address] = self._vpc(ref.address, _derive(ref.name or ""), [], True, r)
+                        self.vpcs[ref.address] = self._vpc(ref.address, derive(ref.name or ""), [], True, r)
 
     @staticmethod
     def _vpc(address: str, name: str, cidrs: list[str], remote: bool, res: Res) -> dict:
@@ -114,20 +64,20 @@ class Network:
 
     def remote_vpc(self, name: str) -> str | None:
         """Address of the remote VPC whose name prefixes an output name (`shared_vpc_private_subnet_ids`)."""
-        hyphenated = _derive(name)
+        hyphenated = derive(name)
         named = [(len(v["name"]), a) for a, v in self.vpcs.items() if v["remote"] and hyphenated.startswith(v["name"] + "-")]
         return max(named)[1] if named else None
 
     def place(self, ref: Ref) -> tuple[str, str, str] | None:
         """(vpc address, tier, what decided the tier) for a subnet reference, None when either is unknown."""
         if ref.remote:
-            tier, vpc = _tier_in(ref.name or ""), self.remote_vpc(ref.name or "")
+            tier, vpc = tier_in(ref.name or ""), self.remote_vpc(ref.name or "")
             return (vpc, tier, ref.name or "") if vpc and tier else None
         subnet = self.by_address[ref.address]
         if subnet.type != "aws_subnet":
             return None
         tier, how = _local_tier(subnet)
-        vpc = next((r.address for r in self.sources(subnet.inst, subnet.block.body.get("vpc_id")) if r.address in self.vpcs), None)
+        vpc = next((r.address for r in sources(subnet.inst, subnet.block.body.get("vpc_id"), TOKEN) if r.address in self.vpcs), None)
         return (vpc, tier, f"{ref.address} {how}") if vpc else None
 
     def placements(self) -> list[dict]:
@@ -136,7 +86,7 @@ class Network:
             if r.type in NOT_PLACED:
                 continue
             for value in find(r.block.body, SUBNET_KEY):
-                for ref in self.sources(r.inst, value):
+                for ref in sources(r.inst, value, TOKEN):
                     if placed := self.place(ref):
                         found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
         return [{"resource": address, "network": vpc, "tier": tier, "via": via, "file": r.block.file, "line": r.block.line}
