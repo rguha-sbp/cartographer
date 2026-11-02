@@ -10,6 +10,7 @@ import argparse
 import json
 import math
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,8 @@ from cartographer.notation import AWS, Notation
 from cartographer.tf_aws_externals import adopt
 from cartographer.tf_blocks import GAP, Blocks
 from cartographer.tf_check import defects, measure
+from cartographer.tf_geom import leaves, polyline
+from cartographer.tf_labels import caption_rect
 from cartographer.tf_place import place
 from cartographer.tf_space import Widening, fit
 
@@ -60,6 +63,15 @@ def _defects(fitted: tuple[Diagram, list[Widening]]) -> tuple[int, int]:
     return defects(fitted[0])
 
 
+def clear_legend(diagram: Diagram) -> Diagram:
+    """The legend moved down, when a line or caption routed under the last row would otherwise run into it."""
+    nodes = leaves(diagram)
+    lowest = max([*(y for e in diagram.edges for _, y in polyline(e, nodes)),
+                  *(caption_rect(e, nodes)[3] for e in diagram.edges if e.label)], default=0)
+    legend = diagram.legend
+    return diagram if lowest + GAP <= legend.y else replace(diagram, legend=replace(legend, y=lowest + GAP))
+
+
 def extent(diagram: Diagram) -> tuple[int, int]:
     """Width and height of everything drawn except the title: frames, leaves and the legend."""
     boxes = [bounds(n) for n in (*diagram.nodes, diagram.legend)]
@@ -80,7 +92,8 @@ def layout_report(curated: Curated, *, edge_labels: bool = True,
     by_cols = {cols: _arrange(curated, cols, edge_labels, notation, first) for cols in GRID_CHOICES}
     cols = min(GRID_CHOICES, key=lambda c: _off_a4(by_cols[c]))
     candidates = [by_cols[cols], *(_arrange(curated, cols, edge_labels, notation, px) for px in rest)]
-    return min(map(fit, candidates), key=_defects)
+    diagram, widened = min(map(fit, candidates), key=_defects)
+    return clear_legend(diagram), widened
 
 
 def layout(curated: Curated, *, edge_labels: bool = True, notation: Notation = AWS) -> Diagram:
