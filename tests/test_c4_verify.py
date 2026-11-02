@@ -217,3 +217,7 @@ def test_scenario_step_inside_one_container_fails(tmp_path):
     m["relationships"].append(rel("r2", "c1", "c2", "calls"))
     m["scenarios"] = [{"id": "sc", "name": "Sc", "steps": ["r1", "r2"]}]
     assert verify(m, None, tmp_path) == ["sc: step r2 stays inside container api"]
+
+
+def test_missing_required_keys_are_errors_not_crashes(tmp_path):
+    assert verify({"elements": []}, None, tmp_path) == ["model: relationships is required", "model: source is required"]

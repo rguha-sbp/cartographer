@@ -7,8 +7,6 @@ from xml.etree import ElementTree
 from cartographer import files
 from cartographer.svg_export import SOURCE_SHA_ATTR
 
-SIDE_FILE_SUFFIX = ".generated.drawio"
-
 
 def _problem(drawio: Path) -> str | None:
     image = files.image_path(drawio)
@@ -24,7 +22,7 @@ def _problem(drawio: Path) -> str | None:
 
 
 def problems(folder: Path) -> list[str]:
-    drawios = (p for p in sorted(folder.rglob("*.drawio")) if not p.name.endswith(SIDE_FILE_SUFFIX))
+    drawios = (p for p in sorted(folder.rglob("*.drawio")) if not files.is_side_file(p))
     return [found for drawio in drawios if (found := _problem(drawio))]
 
 

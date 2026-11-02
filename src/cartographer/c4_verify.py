@@ -1,9 +1,10 @@
 """Check a C4 model against its structure, its evidence and the Terraform facts before any diagram is drawn."""
 
+import json
 from collections import Counter
 from pathlib import Path
 
-from cartographer.c4_model import Model, ancestors, elements
+from cartographer.c4_model import SCHEMA, Model, ancestors, elements
 from cartographer.secret_patterns import contains_secret
 from cartographer.verify_shared import SECRET_REASON, code_hit
 
@@ -12,6 +13,7 @@ COMPLETE_TYPES = (
     "aws_rds_cluster", "aws_dynamodb_table", "aws_s3_bucket", "aws_sqs_queue", "aws_sns_topic",
     "aws_kinesis_stream", "aws_elasticache_cluster", "aws_elasticache_replication_group",
 )
+REQUIRED = json.loads(SCHEMA.read_text())["required"]
 PARENT_TYPE = {"container": "system", "component": "container", "code": "component"}
 STATED_HEADING = "Stated by the engineer, not found in the repo"
 
@@ -168,6 +170,9 @@ def _secrets(model: Model) -> list[str]:
 
 def verify(model: Model, facts: dict | None, repo: Path) -> list[str]:
     """Every problem found, sorted; empty means the model passes. facts is None for source description."""
+    missing = [f"model: {key} is required" for key in REQUIRED if key not in model]
+    if missing:
+        return sorted(missing)
     parents = _parents(model)
     # Ancestor walks loop or raise on broken parent links, so the later rules wait until the parents are sound.
     errors = _ids(model) + parents + _structure(model) + _secrets(model)
@@ -177,8 +182,8 @@ def verify(model: Model, facts: dict | None, repo: Path) -> list[str]:
 
 
 def stated_only(model: Model) -> list[str]:
-    """Containers, components and code elements whose only evidence is what the engineer said."""
-    return sorted(e["id"] for e in model["elements"]
+    """Containers, components and code elements whose only evidence is what the engineer said; safe on any model."""
+    return sorted(e["id"] for e in model.get("elements", [])
                   if e["type"] in ("container", "component", "code") and all("stated" in ev for ev in e["evidence"]))
 
 

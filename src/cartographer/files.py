@@ -4,6 +4,8 @@ import hashlib
 import json
 from pathlib import Path
 
+SIDE_FILE_SUFFIX = ".generated.drawio"
+
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
@@ -15,6 +17,11 @@ def sha256_file(path: Path) -> str:
 
 def image_path(drawio: Path) -> Path:
     return drawio.with_suffix(".svg")
+
+
+def is_side_file(drawio: Path) -> bool:
+    """A .generated.drawio written beside a hand-edited diagram: never indexed, checked or deleted."""
+    return drawio.name.endswith(SIDE_FILE_SUFFIX)
 
 
 def hand_edited(drawio: Path, curated: dict) -> bool:

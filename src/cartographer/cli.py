@@ -2,14 +2,14 @@
 
 import argparse
 import sys
+from functools import partial
 from pathlib import Path
 
-from cartographer import build, drawio_app, drift, snapshot, svg_export, tf_extract, tfdiagram, view
+from cartographer import build, c4_commands, drawio_app, drift, snapshot, svg_export, tf_extract, tfdiagram, view
 from cartographer.workdir import cache_dir, write_json
 
 HERE = Path(__file__).parent
 DOCS = {"review": HERE / "REVIEW.md", "rules": HERE / "RULES.md", "interview": HERE / "INTERVIEW.md"}
-EXIT_NO_FACTS = 2
 
 
 def _extract(args: argparse.Namespace) -> int:
@@ -30,10 +30,7 @@ def _prompt(args: argparse.Namespace) -> int:
         schema_path.write_text(tfdiagram.schema_text())
         print(tfdiagram.render_describe_prompt(schema_path, output, DOCS["interview"]))
         return 0
-    facts_path = cache / "facts.json"
-    if not facts_path.is_file():
-        print(f"no facts for diagram {args.name}: run `cartographer extract` first", file=sys.stderr)
-        return EXIT_NO_FACTS
+    facts_path = build.cached_facts(args.name)
     schema_path.write_text(tfdiagram.schema_text())
     print(tfdiagram.render_prompt(facts_path, repo, schema_path, output, tfdiagram.inputs_sha256(facts_path)))
     return 0
@@ -70,7 +67,13 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("infra_dir", type=Path, help="Terraform folder, relative to --repo")
     p = command("prompt", _prompt, "print the curation prompt for the cached facts, or the describe prompt")
     p.add_argument("--describe", action="store_true", help="describe a new solution: no facts needed")
-    build.add_arguments(command("build", build.run, "verify the curated file and write the diagram"))
+    # --c4 swaps the handler: add_argument copies the earlier set_defaults(handler=...) as the flag's default.
+    p.add_argument("--c4", dest="handler", action="store_const", help="print the C4 model curation prompt instead",
+                   const=partial(c4_commands.prompt, interview_path=DOCS["interview"]))
+    p = command("build", build.run, "verify the curated file and write the diagram")
+    build.add_arguments(p)
+    p.add_argument("--c4", dest="handler", action="store_const", const=c4_commands.build,
+                   help="verify the cached C4 model and write every view it supports instead")
     p = command("snapshot", snapshot.run, "screenshot a .drawio file in the bundled draw.io", named=False)
     snapshot.add_arguments(p)
     p = command("view", view.run, "edit a .drawio in the bundled draw.io until the tab is closed", named=False)
@@ -88,7 +91,11 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    return args.handler(args)
+    try:
+        return args.handler(args)
+    except build.Refusal as refusal:
+        print(refusal, file=sys.stderr)
+        return refusal.code
 
 
 if __name__ == "__main__":

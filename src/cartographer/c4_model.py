@@ -15,7 +15,7 @@ class RollupError(Exception):
     """Relationships that collapse onto one edge of a view but cannot share a label."""
 
     def __init__(self, pair: tuple[str, str], relationships: list[str]):
-        super().__init__(f"{pair[0]} -> {pair[1]}: relationships {', '.join(relationships)} need one shared summary")
+        super().__init__(f"{pair[0]}->{pair[1]}: relationships {', '.join(relationships)} need a shared summary")
         self.pair = pair
         self.relationships = relationships
 
