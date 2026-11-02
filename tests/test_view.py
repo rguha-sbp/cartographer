@@ -106,6 +106,15 @@ def test_save_rejects_a_foreign_origin_a_missing_origin_and_a_foreign_host(serve
     assert drawio.read_text() == MXFILE and renders == []
 
 
+@pytest.mark.parametrize(("path", "origin", "code"), [("/save", "http://evil.example", 403), ("/nope", "", 404)])
+def test_a_rejected_post_still_delivers_its_reply(served, path: str, origin: str, code: int) -> None:
+    # A body left unread when the socket closes resets the connection, and the client loses the reply.
+    base, _, drawio, _ = served
+    for _ in range(20):
+        assert _request(base, f"{view.PREFIX}{path}", body="x" * (4 << 20), origin=origin)[0] == code
+    assert drawio.read_text() == MXFILE
+
+
 def test_save_rejects_something_that_is_not_a_drawio_file(served) -> None:
     base, _, drawio, _ = served
     assert _request(base, f"{view.PREFIX}/save", body="<html/>")[0] == 400

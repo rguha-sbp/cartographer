@@ -10,7 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  suite:
+    name: test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -27,3 +28,12 @@ jobs:
       - name: Plugin launcher runs on this OS
         shell: bash
         run: sh scripts/cartographer "$RUNNER_TEMP/plugin-data" --help && test -d "$RUNNER_TEMP/plugin-data/uv"
+
+  # The one check branch protection requires: it reports the result of every OS above, so the matrix can change
+  # without touching the protection settings.
+  test:
+    if: always()
+    needs: suite
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ needs.suite.result }}" = success

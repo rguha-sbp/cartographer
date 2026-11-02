@@ -111,14 +111,16 @@ class Session:
                 self._reply(404)
 
             def do_POST(self) -> None:
+                length = int(self.headers.get("Content-Length") or 0)
+                if length > MAX_SAVE_BYTES:
+                    return self._reply(413)
+                # Read the body before any reply: a socket closed with unread request bytes is reset on Windows,
+                # and the client loses the response.
+                body = self.rfile.read(length).decode(errors="replace")
                 if self.path not in (f"{PREFIX}/save", f"{PREFIX}/close"):
                     return self._reply(404)
                 if not self._allowed(post=True):
                     return self._reply(403)
-                length = int(self.headers.get("Content-Length") or 0)
-                if length > MAX_SAVE_BYTES:
-                    return self._reply(413)
-                body = self.rfile.read(length).decode(errors="replace")
                 if self.path == f"{PREFIX}/close":
                     self._reply(204)
                     session.closed.set()
