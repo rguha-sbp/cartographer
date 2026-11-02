@@ -32,6 +32,7 @@ class Module:
     outputs: dict[str, Any] = field(default_factory=dict)
     calls: dict[str, Block] = field(default_factory=dict)
     variables: dict[str, Any] = field(default_factory=dict)
+    providers: dict[str, dict] = field(default_factory=dict)  # `name` or `name.alias` -> provider block body
 
 
 def parse_module(directory: Path, repo_root: Path) -> Module:
@@ -59,6 +60,10 @@ def parse_module(directory: Path, repo_root: Path) -> Module:
         for item in doc.get("variable", []):
             for name, body in item.items():
                 mod.variables[unq(name)] = body.get("default")
+        for item in doc.get("provider", []):
+            for name, body in item.items():
+                alias = body.get("alias")
+                mod.providers[f"{unq(name)}.{unq(alias)}" if alias else unq(name)] = body
         for item in doc.get("locals", []):
             mod.locals.update(attrs(item))
     return mod

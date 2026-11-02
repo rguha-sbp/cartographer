@@ -1,7 +1,14 @@
+import re
+
 from cartographer.clouds.azure.network import network_facts
+from cartographer.clouds.azure.permissions import permission_edges
 from cartographer.clouds.azure.rules import RULES
+from cartographer.clouds.azure.specs import EDGE_SPECS
 from cartographer.clouds.base import Catalog, Cloud, load_json
 from cartographer.diagram_model import FRAME_TITLE_LEFT
+from cartographer.tf_values import text
+
+ALIAS = re.compile(r"\b(?:azurerm|azapi)\.(\w+)")
 
 
 def _frame(kind: str, stroke: str, font: str, dashed: int) -> str:
@@ -34,6 +41,39 @@ class AzureCloud(Cloud):
     def network_facts(self, ex):
         return network_facts(ex)
 
+    def permission_edges(self, ex):
+        permission_edges(ex)
+
+    def extra(self, ex, res):
+        return {"location": self.location(ex, res), "subscription": self.subscription(ex, res)}
+
+    @staticmethod
+    def location(ex, res):
+        """The literal location, or the literal location of the resource group it references."""
+        expr = res.block.body.get("location")
+        found = ex.value(res.inst, expr)
+        if isinstance(found, str):
+            return found
+        groups = {r.address: r for r in ex.res if r.type == "azurerm_resource_group"}
+        for address in sorted(ex.refs(res.inst, expr)):
+            group = groups.get(address)
+            literal = ex.value(group.inst, group.block.body.get("location")) if group else None
+            if isinstance(literal, str):
+                return literal
+        return None
+
+    @staticmethod
+    def subscription(ex, res):
+        """The `subscription_id` literal of the provider block the resource uses, by alias; None when it is not one."""
+        provider = res.type.split("_", 1)[0]
+        alias = ALIAS.search(text(res.block.body.get("provider", "")))
+        key = f"{provider}.{alias[1]}" if alias else provider
+        inst = res.inst
+        while inst is not None and key not in inst.mod.providers:
+            inst = inst.parent
+        found = ex.value(inst, inst.mod.providers[key].get("subscription_id")) if inst else None
+        return found if isinstance(found, str) else None
+
     def icon_style(self, name: str) -> str:
         return (f"image;aspect=fixed;html=1;points=[];align=center;fontSize=12;"
                 f"image=img/lib/azure2/{self.icons[name]['path']};verticalLabelPosition=bottom;verticalAlign=top;")
@@ -42,5 +82,5 @@ class AzureCloud(Cloud):
 AZURE = AzureCloud(
     "azure", "Azure", ("azurerm", "azapi"), load_json(__file__, "icons.json"), FRAME_STYLES, "Azure managed services",
     provider_types=load_json(__file__, "provider_types.json"), catalog=Catalog(load_json(__file__, "catalog.json")),
-    rules=RULES, modules=load_json(__file__, "modules.json"), network_attrs=NETWORK_ATTRS,
+    rules=RULES, modules=load_json(__file__, "modules.json"), edge_specs=EDGE_SPECS, network_attrs=NETWORK_ATTRS,
 )
