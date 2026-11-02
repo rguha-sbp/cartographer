@@ -109,3 +109,8 @@ def test_every_network_and_placement_names_azure_and_ids_do_not_clash():
         assert {p["cloud"] for p in found["placements"]} <= {"azure"}
         ids = [f["id"] for key in ("edges", "hints", "networks", "placements") for f in found[key]]
         assert len(ids) == len(set(ids))
+
+
+def test_a_public_ip_on_an_application_gateway_frontend_or_nic_makes_its_subnet_public():
+    assert tier_of("lb_exposure", "azurerm_application_gateway.gw") == ("public", "azurerm_subnet.gw public ip")
+    assert tier_of("lb_exposure", "azurerm_linux_virtual_machine.vm") == ("public", "azurerm_subnet.edge public ip")

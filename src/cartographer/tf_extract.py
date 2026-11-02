@@ -88,7 +88,9 @@ class Extractor:
         return UNRESOLVED if got is None else got
 
     def getter(self, r: Res) -> Getter:
-        def get(path: str) -> str | None | object:
+        def get(path: str, present: bool = False) -> str | None | bool | object:
+            if present:
+                return self.is_set(r.block.body, path.split("."))
             node: Any = r.block.body
             for key in path.split("."):
                 node = node[0] if isinstance(node, list) and node else node
@@ -101,6 +103,15 @@ class Extractor:
             return self.value(r.inst, node)
 
         return get
+
+    @staticmethod
+    def is_set(node: Any, keys: list[str]) -> bool:
+        """Whether `keys` names an attribute in any of the repeated blocks along the path, whatever its value."""
+        if isinstance(node, list):
+            return any(Extractor.is_set(n, keys) for n in node)
+        if not keys or not isinstance(node, dict) or keys[0] not in node:
+            return False
+        return len(keys) == 1 or Extractor.is_set(node[keys[0]], keys[1:])
 
     def refs(self, inst: Inst, obj: Any, seen: set | None = None) -> set[str]:
         seen = set() if seen is None else seen

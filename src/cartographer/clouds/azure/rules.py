@@ -10,7 +10,7 @@ from cartographer.clouds.base import Getter, Resolution, Rule
 ARM_TYPES: dict[str, str] = {k.lower(): v for k, v in json.loads((Path(__file__).parent / "arm_types.json").read_text()).items()}
 
 # The pinned icon set has one icon each for load balancers, application gateways and Cosmos DB, so those rules
-# keep the icon and record which SKU, tier or API the literal attributes name.
+# keep the icon and record whether the frontend is public or internal, which tier or which API the attributes name.
 COGNITIVE_KINDS = {
     "OpenAI": "azure_openai", "AIServices": "ai_foundry", "SpeechServices": "speech_services",
     "FormRecognizer": "form_recognizers", "ComputerVision": "computer_vision", "Face": "face_apis",
@@ -24,9 +24,18 @@ def arm_icon(arm_type: str) -> str | None:
     return ARM_TYPES.get(arm_type.split("@", 1)[0].lower())
 
 
+FRONTEND = "frontend_ip_configuration"
+# Listed public first: a load balancer with any public frontend is public.
+LB_FRONTENDS = (("public_ip_address_id", "public"), ("public_ip_prefix_id", "public"),
+                ("subnet_id", "internal"), ("private_ip_address", "internal"))
+
+
 def _lb(get: Getter) -> Resolution:
-    sku = get("sku")
-    return Resolution("icon", "azure:load_balancers", f'rule azurerm_lb sku = "{sku}"' if sku else "rule azurerm_lb sku absent")
+    for attr, exposure in LB_FRONTENDS:
+        if get(f"{FRONTEND}.{attr}", present=True):
+            return Resolution("icon", "azure:load_balancers", f"rule azurerm_lb frontend {attr} set ({exposure})")
+    return Resolution("icon", "azure:load_balancers", f"rule azurerm_lb {FRONTEND} absent", marked=True,
+                      reason=f"{FRONTEND} absent")
 
 
 def _application_gateway(get: Getter) -> Resolution:

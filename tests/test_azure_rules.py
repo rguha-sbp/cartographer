@@ -13,17 +13,25 @@ def unresolved(*names):
     return lambda attr: UNRESOLVED if attr.replace(".", "_") in names else None
 
 
-@pytest.mark.parametrize(("sku", "decided"), [
-    (None, "sku absent"), ("Standard", 'sku = "Standard"'), ("Basic", 'sku = "Basic"'), ("Gateway", 'sku = "Gateway"'),
+def frontends(*set_attrs):
+    return lambda attr, present=False: attr.removeprefix("frontend_ip_configuration.") in set_attrs if present else None
+
+
+@pytest.mark.parametrize(("set_attrs", "decided"), [
+    (("public_ip_address_id",), "frontend public_ip_address_id set (public)"),
+    (("public_ip_prefix_id",), "frontend public_ip_prefix_id set (public)"),
+    (("subnet_id",), "frontend subnet_id set (internal)"),
+    (("private_ip_address",), "frontend private_ip_address set (internal)"),
+    (("subnet_id", "public_ip_address_id"), "frontend public_ip_address_id set (public)"),
 ])
-def test_lb_rule(sku, decided):
-    r = AZURE.resolve("azurerm_lb", attrs(sku=sku))
+def test_lb_rule(set_attrs, decided):
+    r = AZURE.resolve("azurerm_lb", frontends(*set_attrs))
     assert (r.icon, r.marked, r.decided_by) == ("azure:load_balancers", False, f"rule azurerm_lb {decided}")
 
 
-def test_lb_unresolved_sku_marks_and_keeps_base_icon():
-    r = AZURE.resolve("azurerm_lb", unresolved("sku"))
-    assert (r.icon, r.marked, r.reason) == ("azure:load_balancers", True, "sku is not a literal")
+def test_lb_without_a_frontend_block_is_marked_with_the_base_icon():
+    r = AZURE.resolve("azurerm_lb", frontends())
+    assert (r.icon, r.marked, r.reason) == ("azure:load_balancers", True, "frontend_ip_configuration absent")
 
 
 @pytest.mark.parametrize(("tier", "decided"), [

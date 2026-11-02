@@ -13,7 +13,8 @@ if TYPE_CHECKING:
     from cartographer.tf_modules import Res
 
 UNRESOLVED = object()  # the attribute exists but is not a literal (reference, local, var without default)
-Getter = Callable[[str], str | None | object]  # attribute path such as "sku.tier" -> literal, None (absent) or UNRESOLVED
+# attribute path such as "sku.tier" -> literal, None (absent) or UNRESOLVED; `present=True` -> whether any block sets it
+Getter = Callable[..., str | None | bool | object]
 
 
 def load_json(package_file: str, name: str) -> Any:
@@ -111,7 +112,9 @@ class Cloud:
             return base
         unresolved: list[str] = []
 
-        def watched(attr: str) -> str | None | object:
+        def watched(attr: str, present: bool = False) -> str | None | bool | object:
+            if present:
+                return get(attr, present=True)
             value = get(attr)
             if value is UNRESOLVED:
                 unresolved.append(attr)

@@ -114,3 +114,17 @@ def test_mixed_stack_never_lets_random_resources_reach_the_facts():
     assert not [r for r in found["resources"] if r["type"].startswith("random_")]
     assert not [e for e in found["edges"] if "random_" in e["src"] + e["dst"]]
     assert {n["cloud"] for n in found["networks"]} <= {"aws", "azure"}
+
+
+def test_load_balancer_is_public_or_internal_by_its_frontend_blocks():
+    got = {n: resource("lb_exposure", f"azurerm_lb.{n}") for n in (
+        "public_ip", "public_prefix", "internal", "internal_private_ip", "second_frontend_public", "no_frontend")}
+    assert {n: (r["icon"], r["marked"], r.get("decided_by")) for n, r in got.items()} == {
+        "public_ip": ("azure:load_balancers", False, "rule azurerm_lb frontend public_ip_address_id set (public)"),
+        "public_prefix": ("azure:load_balancers", False, "rule azurerm_lb frontend public_ip_prefix_id set (public)"),
+        "internal": ("azure:load_balancers", False, "rule azurerm_lb frontend subnet_id set (internal)"),
+        "internal_private_ip": ("azure:load_balancers", False, "rule azurerm_lb frontend private_ip_address set (internal)"),
+        "second_frontend_public": ("azure:load_balancers", False, "rule azurerm_lb frontend public_ip_address_id set (public)"),
+        "no_frontend": ("azure:load_balancers", True, "rule azurerm_lb frontend_ip_configuration absent"),
+    }
+    assert got["no_frontend"]["reason"] == "frontend_ip_configuration absent"
