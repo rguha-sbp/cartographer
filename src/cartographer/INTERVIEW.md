@@ -1,6 +1,6 @@
 # Describe mode playbook
 
-How Claude gets an AWS engineer from "I have a design" to a complete, reviewed Layer 7 diagram when there is no
+How Claude gets a cloud engineer from "I have a design" to a complete, reviewed Layer 7 diagram when there is no
 Terraform to read. The diagram ends up in official documents, so it must be correct and look finished.
 
 ## 1. Opening
@@ -32,17 +32,18 @@ pass `build` (structurally valid, every node connected), so keep drafts small an
 Adapted from the C4 diagram review checklist (c4model.com/diagrams/checklist). Before each question, check the
 current diagram against it:
 
-- Elements: each has a name, an AWS service (sets the icon) or a named external system, and a purpose.
+- Cloud: which cloud or clouds the solution runs on (AWS, Azure or both). Ask it first when the engineer has not said.
+- Elements: each has a name, a cloud service (sets the icon) or a named external system, and a purpose.
 - Arrows: each has a direction, a label stating its intent, sync or async (solid or dashed), and the protocol where it
   matters.
 - Entry points: who or what calls into the system, and through what.
 - Where data lives: every store and what it holds.
 - Workloads: how the solution splits into applications or services (one targeted question, with your recommended
   split). Each workload becomes its own frame, so separate workloads read as separate.
-- Network placement: which services run in a VPC and in which subnet tier (public, private, isolated). When the
-  engineer does not say, default to load balancers public, compute and data private, and record each default in
+- Network placement: which services run in a VPC or virtual network and in which subnet tier (public, private, isolated). When the
+  engineer does not say, default to gateways and public load balancers public, compute and data private, and record each default in
   `assumptions`. Ask for a CIDR only if the engineer brings one up; draw a CIDR only when stated, never guess one.
-- Outside AWS: third-party and on-premises systems, and the account and VPC boundaries.
+- Outside the cloud: third-party and on-premises systems, and the account or subscription and network boundaries.
 - Identity and auth: how callers and services prove who they are.
 
 Rank the gaps by how badly each would mislead the diagram: wrong or missing boxes and arrows first, labels and

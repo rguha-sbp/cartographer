@@ -1,8 +1,8 @@
 # cartographer
 
-cartographer draws Layer 7 AWS architecture diagrams and C4 diagram sets (System Context, Container, Component, Code,
-Deployment and Dynamic views, to the C4 model standard) as draw.io files, either from the code and Terraform in your
-repo or from a solution you describe to Claude. Claude does the curation and, in describe mode, an interview. The tool does layout,
+cartographer draws Layer 7 AWS and Azure architecture diagrams and C4 diagram sets (System Context, Container, Component,
+Code, Deployment and Dynamic views, to the C4 model standard) as draw.io files, either from the code and Terraform in
+your repo or from a solution you describe to Claude. Claude does the curation and, in describe mode, an interview. The tool does layout,
 routing and verification and never calls a model. A diagram is only called ready after a visual review loop in which
 Claude looks at the rendered image, fixes what is wrong and looks again.
 
@@ -154,23 +154,55 @@ Everything goes to `docs/architecture/diagrams/` in your repo:
 | `<name>.drawio` | the diagram, the source of truth |
 | `<name>.svg` | image rendered from exactly that `.drawio`, for GitHub |
 | `<name>.curated.json` | the curation: what was drawn and the evidence for it |
+| `icons.json` | optional icon overrides for the diagrams in the folder |
 | `README.md` | generated index of the diagrams in the folder |
 
-Commit all four. A C4 set instead writes one `<name>-c4.drawio` with a page (a tab in draw.io) per view, an `.svg` per view (for example `shop-c4-1-context.svg`, `shop-c4-2-container.svg`, `shop-c4-3-component-api.svg`, `shop-c4-5-deployment.svg`) and the index `README.md`, with one row per view. There is no curated file to commit. Intermediates (facts, schema, screenshots) live in the plugin data folder (`~/.cache/cartographer/<name>/` for the
+Commit all four (and `icons.json` when it exists). A C4 set instead writes one `<name>-c4.drawio` with a page (a tab in draw.io) per view, an `.svg` per view (for example `shop-c4-1-context.svg`, `shop-c4-2-container.svg`, `shop-c4-3-component-api.svg`, `shop-c4-5-deployment.svg`) and the index `README.md`, with one row per view. There is no curated file to commit. Intermediates (facts, schema, screenshots) live in the plugin data folder (`~/.cache/cartographer/<name>/` for the
 standalone CLI) and are not committed. Claude never commits or pushes for you.
 
 ## Nesting on the diagram
 
-An L7 diagram nests AWS Cloud, region, account, VPC, subnet tier and workload:
+An L7 diagram nests cloud, region, account (an Azure subscription), network (a VPC or an Azure virtual network), subnet tier
+and workload. A diagram that uses both clouds has one top-level frame per cloud, side by side:
 
-- A VPC frame carries its address ranges in the title, for example `shop-vpc (10.0.0.0/16)`, but only when the
+- A network frame carries its address ranges in the title, for example `shop-vpc (10.0.0.0/16)`, but only when the
   Terraform or you gave them. A CIDR is never guessed.
 - Subnet frames group the services of one tier: public, private or isolated. Availability Zones are not drawn.
 - Workload frames hold the services of one application, so separate workloads read as separate, inside a subnet frame
-  or directly under the account for regional services such as S3.
+  or directly under the account for regional services such as S3 or Azure Storage.
+- On Azure, a private endpoint sits in its subnet, an app with VNet integration stays outside it, and resource groups are
+  not drawn.
 
 The view command opens the diagram in the bundled draw.io editor. A C4 set opens with `view <name>-c4`, one tab per
 view. To change a diagram, edit it there as below.
+
+## Azure support
+
+Azure Terraform (`azurerm` and `azapi`) is read like AWS: resources, role assignments, event subscriptions and virtual
+networks become facts, and the subnet tier is decided from what sits in the subnet. Only literal values are read; a
+variable without a default marks the icon for review instead of guessing.
+
+## Icons and overrides
+
+Each resource gets its icon from a per-cloud catalog, so the same Terraform always draws the same icon. A resource the
+catalog is unsure of is marked, and the build report lists it under `Marked icons`. To change an icon, find its name,
+then add an override to `docs/architecture/diagrams/icons.json`:
+
+```
+cartographer icons --cloud azure --search "key vault"
+```
+
+```json
+{"overrides": [{"cloud": "azure", "type": "azurerm_key_vault", "icon": "key_vault", "reason": "why this icon",
+                "address": "optional: one resource instead of the whole type"}]}
+```
+
+Run `build` again. The report shows `Overrides` (a refused one names its reason) and `Icon changes` since the last build.
+`icons` prints at most 20 matches, as `cloud:name` and the title; `--cloud` is `aws`, `azure`, `generic` or `brand`.
+Commit `icons.json` with the diagram.
+
+The visual review starts from `review.json` (written by `build` to the cache folder: the view being reviewed and, for
+every icon, the resource it stands for) and `tiles.json` (written by `snapshot`: which icons fall in which tile).
 
 ## Editing a diagram by hand
 
@@ -214,6 +246,7 @@ Without the plugin, prefix each command with
 | `check FOLDER` | offline: fail when a page of a `.drawio` has no image or a stale one |
 | `snapshot FILE.drawio -o DIR` | per page: print `view: <page name>`, then its PNG and tiles from the bundled draw.io, for the visual review |
 | `view FILE.drawio` | edit in the bundled draw.io until the tab is closed |
+| `icons --cloud CLOUD --search WORDS` | find icon names (at most 20 results) |
 | `docs interview\|review\|rules` | print the path of a packaged document |
 
 ## Troubleshooting

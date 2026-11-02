@@ -1,4 +1,4 @@
-# cartographer: Terraform folder -> Lucid-compatible draw.io
+# cartographer: Terraform folder (AWS, Azure or both) -> Lucid-compatible draw.io
 
 Python package in `src/cartographer/` (the stage files below live there). Subcommands of `cartographer`:
 
@@ -12,12 +12,14 @@ cartographer image FILE.drawio                   regenerate the .svg next to a .
 cartographer check FOLDER                        fail when a .drawio has no image or a stale one (offline)
 cartographer snapshot FILE -o DIR                per page: `view: <name>`, then PNG and tiles from the local draw.io
 cartographer view FILE                           open in the local draw.io
+cartographer icons --cloud C --search WORDS        icon names of a namespace (aws, azure, generic, brand), at most 20
 cartographer docs interview|review|rules         path of a packaged document
 ```
 
 The curation (stage 2) runs in the user's own Claude session, driven by the plugin skill; the tool never calls a model.
 The committed files are `<name>.curated.json`, `<name>.drawio`, `<name>.svg` and the folder `README.md` index; facts and verify output stay
-in the cache folder. `build` writes the svg by rendering the diagram in the local draw.io with headless Chrome
+in the cache folder. `build` also applies `<out>/icons.json` overrides and writes `review.json` to the cache folder; `snapshot` writes
+`tiles.json` beside the PNGs. `build` writes the svg by rendering the diagram in the local draw.io with headless Chrome
 (`svg_export.py`), inlining local images as data URIs and embedding the mxfile in the `content` attribute.
 Output is XML (draw.io), never an image. Coordinates come from a deterministic column grid (pure Python).
 
@@ -33,7 +35,7 @@ Output is XML (draw.io), never an image. Coordinates come from a deterministic c
 
 Reproducibility: curated.json is cached under `inputs_sha256`, a hash of the facts.json bytes, the prompt template
 (`curate_prompt.md` with its placeholders unsubstituted, so no path enters the key) and the schema text the curation
-must satisfy (with the icon enums injected). There is no model in the key. `build` refuses (exit 3) when the curated file's
+must satisfy (the static `curated.schema.json`; it lists no icons). There is no model in the key. `build` refuses (exit 3) when the curated file's
 `inputs_sha256` differs from the current key, so the curation is only redone when one of those changes. Stages 1, 3, 4, 5
 are deterministic (sorted iteration everywhere, fixed grid constants), so the same curated.json always yields
 a byte-identical .drawio.
@@ -51,25 +53,36 @@ passes `<name>-architecture` and the curated title, `tf_layout.__main__` derives
 their purpose colour. A `Box` carries its node's `shape` (its `icon`, else its `service`) and no colours.
 Nothing in the generic modules is specific to one stack.
 
-## Icons (`clouds/aws/icons.json`)
+## Clouds and icons
 
-The tool works for any AWS Terraform stack. Icons are draw.io's own 329 AWS resource icons, keyed by draw.io
-`resIcon` name (`lambda`, `s3`, `key_management_service`, `systems_manager`, `eventbridge`, `cloudwatch_2`, ...).
-`clouds/aws/icons.json` maps each name to its category fill colour and draw.io title (`{"lambda": {"fill": "#ED7100", "title": "Lambda"}}`). It is vendored by
-`clouds/aws/vendor.py` from `Sidebar-AWS4.js` of the pinned draw.io web app (`drawio_pin.json`), the same
-sha256-checked build that renders the diagrams. Refresh after a bump with:
+Every cloud difference is a member of a `Cloud` object (`clouds/base.py`); the core never tests a cloud name.
+`clouds/__init__.py` registers `AWS` and `AZURE`. Each cloud lives in `clouds/<cloud>/`:
 
-```
-uv run python -m cartographer.clouds.aws.vendor
-```
+| File | Holds |
+|---|---|
+| `icons.json` | draw.io icon name -> fill colour and title, vendored by `vendor.py` from the sidebar of the pinned, sha256-checked draw.io web app (`drawio_pin.json`); refresh after a bump with `uv run python -m cartographer.clouds.<cloud>.vendor` |
+| `catalog.json` | reviewed Terraform type -> icon row: `icon`, `fold` (merged into its owner), `drop` (never in the facts), `global` |
+| `provider_types.json` | the provider's resource types, so a type newer than the list is marked instead of failing |
+| `rules.py` | attribute rules that choose among a type's icons (for example `load_balancer_type`, `kind`) |
+| `modules.json` | remote module source prefix -> icon |
+| `network.py`, `permissions.py` | networks and placements; permission edges (IAM, Azure role assignments) |
 
-`generic_icons.json` (same script, same source file) holds the General Resources shapes drawn as
-`shape=mxgraph.aws4.<name>` (`users`, `user`, `client`, `mobile_client`, `internet`, `generic_application`,
-`corporate_data_center`, `generic_database`, ...) with their fill colour; names that are also `resIcon` names
-(`marketplace`, `all_products`) stay AWS icons. `diagram_model.AWS_ICONS` and `GENERIC_ICONS` load the two files, in
-that one place, and `has_icon` accepts either. `gen_drawio` styles AWS icons from `AWS_ICONS` and generic ones from
-`GENERIC_ICONS` (shape with the label below, split on its line breaks and never wrapped, like an AWS icon).
-Any other `Icon.service` renders as a box of icon size, drawn by the notation.
+The catalog is the single place a type's icon, fold or drop lives. An attribute that is not a literal (a `var.x` with no
+default, a `local`, a reference) never guesses: the base icon is used and the resource is `marked` with a reason.
+
+`icons.py` is the one lookup of icon names. A name is qualified: `aws:lambda`, `azure:key_vault`, `generic:users`
+(General Resources shapes, `generic_icons.json`), `brand:github` (`brand_icons.json`, complete draw.io styles).
+Any other name renders as a box of icon size, drawn by the notation.
+`cartographer icons --cloud X --search Y` searches one namespace by name and title and returns at most 20 matches.
+No full icon list is in the schema, the prompts or the skill.
+
+`overrides.py` reads `<out>/icons.json` (`{"overrides": [{"cloud", "type", "icon", "reason", "address"?}]}`) and applies
+it to the verified diagram at build time; an address beats a type. A malformed file, an unknown icon or a type or
+address not in the facts is refused with one report line and the rest of the build continues.
+
+`review_sheet.py` writes `review.json` (the `view`, its `view_name`, the `clouds`, and per icon: label, qualified icon and
+title, `tf` addresses, `decided_by`, `marked`, `override`, `frame`, `tiles`). `snapshot` writes `tiles.json`, the icon ids
+per tile, and fills the `tiles` of each sheet entry. The reviewer reads the sheet for a Layer 7 diagram (`REVIEW.md`).
 
 ## facts.json (stage 1)
 
@@ -77,9 +90,12 @@ Any other `Icon.service` renders as a box of icon size, drawn by the notation.
 {
   "infra_dir": "infra",
   "resources": [
-    {"address": "aws_lambda_function.orders_api", "type": "aws_lambda_function", "module": "",
+    {"address": "aws_lambda_function.orders_api", "type": "aws_lambda_function", "module": "", "cloud": "aws",
+     "icon": "aws:lambda", "marked": false, "decided_by": "catalog aws_lambda_function",
      "multi": false, "file": "infra/orders_api.tf", "line": 12}
   ],
+  "networks": [{"id": "n1", "cloud": "aws", "name": "main", "cidrs": ["10.0.0.0/16"], "remote": false}],
+  "placements": [{"id": "p1", "resource": "aws_lambda_function.orders_api", "network": "n1", "tier": "private"}],
   "edges": [
     {"id": "f12", "src": "aws_lambda_function.orders_api", "dst": "aws_dynamodb_table.orders",
      "kind": "iam", "detail": "dynamodb:Query,dynamodb:GetItem", "file": "infra/orders_api.tf", "line": 40}
@@ -88,6 +104,10 @@ Any other `Icon.service` renders as a box of icon size, drawn by the notation.
 }
 ```
 
+- Each resource carries `cloud` (from its type's provider; `random_*`, `tls_*`, `time_*`, `null_*` and other non-cloud
+  providers never reach the facts) and `icon` (qualified) or `fold: "owner"`, plus `marked` (with `reason`) when the
+  catalog could not decide, `decided_by`, and `global: true` for a service outside any region. Folded resources stay in
+  the facts so evidence can cite them; the curator merges them into their owner.
 - Parse every `*.tf` in the infra dir and, recursively, every LOCAL module (`source` starting `./` or `../`).
   Addresses inside a module instance are prefixed `module.<name>.`; nested modules chain the prefix. Remote
   modules (registry, git, TFC private) are recorded as a single resource of type `module` and not entered; they carry
@@ -134,11 +154,14 @@ Any other `Icon.service` renders as a box of icon size, drawn by the notation.
 ```json
 {
   "inputs_sha256": "...",
-  "title": "Shop: AWS architecture",
-  "groups": [{"id": "g_api", "label": "Shop APIs", "kind": null, "parent": "acct", "column": 1}],
-  "nodes": [{"id": "api_orders", "label": "orders API\norder handling", "service": "lambda", "group": "g_api",
+  "format": 2,
+  "system": "Shop",
+  "view": "l7",
+  "groups": [{"id": "g_api", "label": "Shop APIs", "kind": null, "parent": "acct", "column": 1},
+             {"id": "acct", "label": "Account", "kind": "account", "cloud": "aws", "parent": "region", "column": 0}],
+  "nodes": [{"id": "api_orders", "label": "orders API\norder handling", "group": "g_api",
              "tf": ["aws_lambda_function.orders_api"], "multi": false}],
-  "externals": [{"id": "stripe", "label": "Stripe\n(payments)", "icon": "internet",
+  "externals": [{"id": "stripe", "label": "Stripe\n(payments)", "icon": "generic:internet",
                  "evidence": [{"file": "infra/orders_api.tf", "line": 30, "contains": "stripe"}]}],
   "edges": [{"src": "api_orders", "dst": "ddb_orders", "label": "reads orders", "flow": "web",
              "dashed": false,
@@ -146,19 +169,20 @@ Any other `Icon.service` renders as a box of icon size, drawn by the notation.
 }
 ```
 
-- `kind` in groups: `cloud | region | account | vpc | null` (the AWS frames; null = plain dashed group).
+- `format` is 2. A file without it is legacy (`vpc` groups, node and external `service`, bare icons) and is converted on
+  load (`curated_format.py`), so it still builds.
+- `kind` in groups: `cloud | region | account | network | subnet | null`. Frame kinds carry `cloud`; null is a plain
+  dashed role group. One top-level `cloud` frame per cloud present, side by side. Resource groups are never drawn.
 - `column` in groups: integer 0 to 3, required. Role groups directly in the account are placed left to right by it
   (ignored for frames and for groups nested in another group, which follow their parent).
-- `service`: a draw.io icon name from `clouds/aws/icons.json` (`AWS_ICONS`) or `other` (SaaS, non-AWS), which becomes a
-  plain box. The static `curated.schema.json` keeps `"type": "string"`; `tfdiagram.schema_text()` injects the enum
-  (`sorted(AWS_ICONS) + ["other"]`) when it builds the schema the curation validates against, and that injected text
-  feeds `inputs_sha256`. The prompt has no service list: the schema enum is the list.
-- `icon` in nodes: optional, the same enum as the external `icon`. A non-AWS node (`service` `other`, a Datadog
-  monitor) with an icon is drawn as that icon instead of a plain box.
-- `icon` in externals: required, a name from `generic_icons.json` or `none` (plain box). Externals have no `group`;
-  they always sit in the side lanes. `tfdiagram.schema_text()` injects the enum (`sorted(GENERIC_ICONS) + ["none"]`) like the
-  service enum. Prompt guidance: people `users`/`user`, browsers and apps `client`, SaaS and remote APIs `internet` or
-  `generic_application`, on-prem `corporate_data_center`.
+- Node `icon`: a qualified name, set only when no resource of the node resolves to one (a non-cloud provider) or for a
+  described node with no fitting `tf_type`. Otherwise the icon comes from the facts. A described node or a managed-service
+  external names `tf_type` (and `attributes`) and the catalog resolves its icon (`clouds.resolve_declared`).
+- Externals: `icon` is a qualified `brand:` or `generic:` name, an `aws:` or `azure:` name (drawn in that cloud's managed
+  services block), or `none` (plain box). Externals have no `group`; they sit in the side lanes. The schema is static
+  (`curated.schema.json`) and lists no icon names. Prompt guidance: people `generic:users`/`generic:user`, browsers and apps
+  `generic:client`, SaaS and remote APIs `generic:internet` or `generic:generic_application`, on-prem
+  `generic:corporate_data_center`.
 - `label` on edges: a specific verb plus protocol where known ("invokes, HTTPS"), schema `maxLength` 28. The prompt asks for at most about 45 edges: primary request
   and data paths only, with per-node plumbing (logs, shared KMS key, config reads) mentioned once in a group label.
 - Groups with no nodes (directly or in a child group) are legal but dropped by the layout; verify warns about them.
@@ -192,7 +216,7 @@ placement). Every number is a module constant
   frame are BLOCK_GAP apart: a channel of CHANNEL_TRACKS (6) lines at LINE_GAP, each GROUP_CLEAR from both blocks, so
   routes between distant blocks run through the gaps instead of round the whole drawing.
 
-- Frames are groups of kind cloud, region or account. Every other group (kind null or vpc) is a block. A block with no
+- Frames are groups of kind cloud, region or account. Every other group (kind null, network or subnet) is a block. Several frame trees (one per cloud, or two regions of one cloud) sit side by side. A block with no
   nodes and no non-empty child block is dropped (`tf_blocks.empty_blocks`; verify reports it as a warning).
 - Block size: child blocks stacked vertically at the top, then the block's own nodes in a grid of `min(n, GRID_COLS)`
   columns in curated order. Width is the max of the grid, the children and a label estimate (7 px per char + 40).
@@ -209,7 +233,7 @@ placement). Every number is a module constant
   then tries every swap of two nodes in one block, two blocks in one column slot and two externals in one lane, every
   move of an external to the other lane, and every slot (column and position) for a block whose `column` is open,
   keeping each change that lowers the objective, until a sweep finds none (at most 30 sweeps). Every candidate is a
-  full placement, so the objective sees the real grid. The "AWS managed services" block has an open column, so it
+  full placement, so the objective sees the real grid. Each cloud's managed-services block (`tf_externals`) has an open column, so it
   lands by its callers.
 - Straight lines only approximate the routes, so for the chosen `GRID_COLS` the placement is made once per length
   weight in `tf_layout.SPREADS` (none, and 1000, 500 and 250 px per crossing), each is routed and fitted, and the one with the fewest
@@ -217,7 +241,7 @@ placement). Every number is a module constant
 - Externals sit outside the frames in two lanes: an external's `lane` (set by placement) decides; without one, those
   that are only ever an edge `src` go left and all others (including edgeless ones) go right. An external with an `icon` takes a 150x150 icon cell (shape plus label below),
   one without a 200x100 box cell. A lane taller than the frames wraps into two sub-columns, filled row-major.
-- Nodes whose service has no icon (`has_icon`) become boxes, centred in an icon cell.
+- Nodes without an icon become boxes, centred in an icon cell.
 - Output is a `Diagram`: frames, then groups parent-before-child, then leaves, edges sorted by (src, dst, label), a
   generated legend listing only the flows used under everything, title from curated.json.
 - Routing (`tf_route.py`, after the arrangement is chosen): `tf_ports.py` picks a side per edge end (sideways when the
