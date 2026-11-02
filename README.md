@@ -217,12 +217,13 @@ generation, or write a side file to compare. These map to doing nothing, `build 
 
 ## Pre-commit hook
 
-Add to `.pre-commit-config.yaml`:
+Add to `.pre-commit-config.yaml`, then run `pre-commit autoupdate --repo https://github.com/rguha-sbp/cartographer`,
+which sets `rev` to the latest release tag:
 
 ```yaml
 repos:
   - repo: https://github.com/rguha-sbp/cartographer
-    rev: v0.3.2
+    rev: LATEST_TAG
     hooks:
       - id: cartographer-check
 ```
@@ -233,7 +234,8 @@ rendered from a different `.drawio`, for example after a hand edit without `cart
 ## Running the CLI directly
 
 Without the plugin, prefix each command with
-`uvx --from git+https://github.com/rguha-sbp/cartographer@v0.3.2 cartographer`:
+`uvx --from git+https://github.com/rguha-sbp/cartographer@LATEST_TAG cartographer`, where `LATEST_TAG` is the tag of
+the latest release at https://github.com/rguha-sbp/cartographer/releases/latest:
 
 | Command | What it does |
 |---|---|
