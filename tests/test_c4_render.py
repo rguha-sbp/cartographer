@@ -1,13 +1,16 @@
 import html
+import inspect
+
+import pytest
 
 from cartographer import c4_styles, gen_drawio, notation, tf_layout
-from cartographer.c4_styles import box_style, element_label, element_size
+from cartographer.c4_styles import C4, element_label, element_size
 from cartographer.diagram_model import Box, Diagram, Edge, Group, Legend, Title
 
 
 def _container(nid: str) -> dict:
-    return {"id": nid, "label": element_label(nid, "[Container: Python]", "Serves the shop"), "service": "other",
-            "group": None, "tf": [], "multi": False, "box": [260, 112], "c4": "container"}
+    return {"id": nid, "label": element_label(nid, "[Container: Python]", "Serves the shop"), "service": "container",
+            "group": None, "tf": [], "multi": False, "box": [260, 112]}
 
 
 def _curated(nodes: list[dict], edges: list[dict]) -> dict:
@@ -38,19 +41,19 @@ def test_l7_output_unchanged() -> None:  # existing tests cover it; this one ass
 def test_c4_box_is_sized_and_styled() -> None:
     d = tf_layout.layout(_one_container_curated(), notation=c4_styles.C4)
     box = next(n for n in d.nodes if n.id == "api")
-    assert (box.w, box.h, box.kind) == (260, 112, "container")
-    xml = gen_drawio.render(d, page_id="p", page_name="t")
+    assert (box.w, box.h, box.shape) == (260, 112, "container")
+    xml = gen_drawio.render(d, page_id="p", page_name="t", notation=c4_styles.C4)
     assert "fillColor=#438DD5" in xml and "<b" in html.unescape(xml)
 
 
 def test_c4_external_box_is_sized_in_its_lane() -> None:
-    person = {"id": "user", "label": element_label("User", "[Person]", "Buys things"), "icon": "none",
-              "box": [220, 140], "c4": "person", "evidence": []}
+    person = {"id": "user", "label": element_label("User", "[Person]", "Buys things"), "icon": "person",
+              "box": [220, 140], "evidence": []}
     edge = {"src": "user", "dst": "api", "label": "uses", "dashed": False, "evidence": []}
     d = tf_layout.layout({**_one_container_curated(), "externals": [person], "edges": [edge]}, notation=c4_styles.C4)
     box = next(n for n in d.nodes if n.id == "user")
-    assert (box.w, box.h, box.kind) == (220, 140, "person")
-    assert "shape=mxgraph.c4.person2" in gen_drawio.render(d, page_id="p", page_name="t")
+    assert (box.w, box.h, box.shape) == (220, 140, "person")
+    assert "shape=mxgraph.c4.person2" in gen_drawio.render(d, page_id="p", page_name="t", notation=c4_styles.C4)
 
 
 def test_c4_legend_lists_only_used_kinds() -> None:
@@ -72,7 +75,8 @@ def test_c4_legend_lists_boundaries() -> None:
     curated["nodes"][0]["group"] = "shop"
     d = tf_layout.layout(curated, notation=c4_styles.C4)
     assert [e.name for e in d.legend.entries] == ["Container", "Boundary"]
-    style = next(c for c in gen_drawio.render(d, page_id="p", page_name="t").splitlines() if 'id="shop"' in c)
+    xml = gen_drawio.render(d, page_id="p", page_name="t", notation=c4_styles.C4)
+    style = next(c for c in xml.splitlines() if 'id="shop"' in c)
     assert "dashed=1" in style and "fillColor=none" in style
 
 
@@ -106,20 +110,38 @@ def test_element_size_grows_with_text() -> None:
 
 
 def test_box_html_bolds_the_name() -> None:
-    assert c4_styles.box_html("A & B\n[Container]\ndoes x") == (
+    assert C4.box(Box("a", "A & B\n[Container]\ndoes x", 0, 0, shape="container"))[0] == (
         '<b style="font-size:14px">A &amp; B</b><br>[Container]<br>does x')
 
 
 def test_no_flashy_styles() -> None:
     for kind in ("person", "system", "container", "container_store", "component", "code"):
-        style = box_style(kind)
+        style = C4.box(Box("a", "A", 0, 0, shape=kind))[1]
         assert not any(k in style for k in ("shadow=1", "gradientColor=#", "sketch=1", "flowAnimation", "glass=1"))
 
 
+def _render_nodes(nodes: tuple, note: notation.Notation) -> str:
+    diagram = Diagram(Title(0, 0, 100, 40, "t"), nodes, (), Legend(0, 300, 100, 40, "Key", (), ""))
+    return gen_drawio.render(diagram, page_id="p", page_name="t", notation=note)
+
+
 def test_c4_groups_render_with_c4_styles() -> None:
-    xml = gen_drawio.render(Diagram(Title(0, 0, 100, 40, "t"), (Group("n", "Node", 0, 0, 300, 200, kind="deployment"),),
-                                    (), Legend(0, 300, 100, 40, "Key", (), "")), page_id="p", page_name="t")
+    xml = _render_nodes((Group("n", "Node", 0, 0, 300, 200, kind="deployment"),), c4_styles.C4)
     assert "fillColor=#FFFFFF" in xml and "dashed=0" in xml
+
+
+def test_c4_deployment_frames_keep_the_aws_frame_style() -> None:
+    frame = (Group("r", "eu-west-1", 0, 0, 300, 200, kind="region"),)
+    assert _render_nodes(frame, c4_styles.C4) == _render_nodes(frame, notation.AWS)
+
+
+@pytest.mark.parametrize(("note", "fill"), [(notation.AWS, "#F2F3F3"), (c4_styles.C4, "#438DD5")])
+def test_the_notation_draws_the_box(note: notation.Notation, fill: str) -> None:
+    assert f"fillColor={fill}" in _render_nodes((Box("a", "A\n[Container]", 0, 0, shape="container"),), note)
+
+
+def test_the_renderer_knows_no_c4() -> None:
+    assert "c4" not in inspect.getsource(gen_drawio).lower()
 
 
 def test_c4_legend_explains_arrowheads_that_appear() -> None:

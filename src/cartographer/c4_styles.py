@@ -7,8 +7,9 @@ import textwrap
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from cartographer.diagram_model import GROUP_TITLE_LEFT, ORIGIN, Legend, LegendEntry
-from cartographer.notation import LEGEND_LINE, LEGEND_W, Curated, Notation
+from cartographer.diagram_model import GROUP_TITLE_LEFT, ORIGIN, Box, Group, Legend, LegendEntry
+from cartographer.notation import LEGEND_LINE, LEGEND_W, Cell, Curated, Notation, aws_group, html_value
+from cartographer.tf_blocks import shape
 from cartographer.tf_geom import GLYPH_W
 
 LINE = "#707070"  # every relationship line, and the grey of boundaries and deployment nodes
@@ -76,28 +77,29 @@ def element_size(label: str, kind: str) -> tuple[int, int]:
             len(lines) * TEXT_LINE_H + TEXT_PAD_Y + ELEMENTS[kind].head)
 
 
-def box_style(kind: str) -> str:
-    e = ELEMENTS[kind]
-    return (f"{e.shape}whiteSpace=wrap;html=1;fillColor={e.fill};strokeColor={e.stroke};fontColor={e.font};"
-            f"fontSize=12;align=center;")
+def _box(b: Box) -> Cell:
+    """An element box in its C4 shape and colours: the name in bold 14 px over the type line and description."""
+    e = ELEMENTS[b.shape]
+    name, *rest = (html.escape(line, quote=False) for line in b.label.split("\n"))
+    return "<br>".join([f'<b style="font-size:14px">{name}</b>', *rest]), (
+        f"{e.shape}whiteSpace=wrap;html=1;fillColor={e.fill};strokeColor={e.stroke};fontColor={e.font};"
+        f"fontSize=12;align=center;")
 
 
-def box_html(label: str) -> str:
-    """The name in bold 14 px over the type line and description at 12 px."""
-    name, *rest = (html.escape(line, quote=False) for line in label.split("\n"))
-    return "<br>".join([f'<b style="font-size:14px">{name}</b>', *rest])
-
-
-def group_style(kind: str) -> str:
-    f = GROUP_KINDS[kind]
-    return (f"rounded=0;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;fillColor={f.fill};"
-            f"strokeColor={LINE};dashed={f.dashed};verticalAlign=top;align=left;spacingLeft={GROUP_TITLE_LEFT};"
-            f"fontSize=12;fontStyle=1;fontColor={DARK};")
+def _group(g: Group) -> Cell:
+    """A boundary or deployment node in C4 grey; a cloud, region or network frame as AWS draws it."""
+    if g.kind not in GROUP_KINDS:
+        return aws_group(g)
+    f = GROUP_KINDS[g.kind]
+    return html_value(g.label), (
+        f"rounded=0;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;fillColor={f.fill};"
+        f"strokeColor={LINE};dashed={f.dashed};verticalAlign=top;align=left;spacingLeft={GROUP_TITLE_LEFT};"
+        f"fontSize=12;fontStyle=1;fontColor={DARK};")
 
 
 def _legend(curated: Curated, y: int) -> Legend:
     leaves = [*curated["nodes"], *curated["externals"]]
-    shown = {n["c4"] for n in leaves if "c4" in n} | {g["kind"] for g in curated["groups"]}
+    shown = {shape(n) for n in leaves} | {g["kind"] for g in curated["groups"]}
     entries = [LegendEntry(e.stroke, e.name, e.meaning) for k, e in ELEMENTS.items() if k in shown]
     entries += [LegendEntry(LINE, f.name, f.meaning) for k, f in GROUP_KINDS.items() if k in shown]
     dashed = {e["dashed"] for e in curated["edges"] if e.get("head", "open") == "open"}
@@ -113,4 +115,4 @@ def _neutral(curated: Curated) -> Callable[[str], str]:
     return lambda _dst: LINE
 
 
-C4 = Notation(_legend, _neutral)
+C4 = Notation(_box, _group, _legend, _neutral)

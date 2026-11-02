@@ -45,7 +45,7 @@ def build(args: argparse.Namespace) -> int:
     mxfiles = {
         out / f"{args.name}-{v.slug}.drawio": gen_drawio.render(
             tf_layout.layout(v.curated, edge_labels=edge_labels, notation=c4_styles.C4),
-            page_id=f"{args.name}-{v.slug}", page_name=v.title)
+            page_id=f"{args.name}-{v.slug}", page_name=v.title, notation=c4_styles.C4)
         for v in views
     }
     svgs = render_svgs(list(mxfiles.values()), args.drawio_url)

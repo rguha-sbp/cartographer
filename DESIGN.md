@@ -29,7 +29,7 @@ Output is XML (draw.io), never an image. Coordinates come from a deterministic c
 | 2 curate | `curate_prompt.md`, followed by Claude in the user's session (`cartographer prompt`) | yes | facts.json + repo code -> curated.json |
 | 3 verify | `tf_verify.py` | no | facts + curated + repo -> verified curated + report |
 | 4 layout | `tf_layout.py` | no | verified curated -> `Diagram` (absolute coords) |
-| 5 render | `gen_drawio.py render(diagram, page_id=, page_name=)` | no | Diagram -> .drawio XML |
+| 5 render | `gen_drawio.py render(diagram, page_id=, page_name=, notation=AWS)` | no | Diagram -> .drawio XML |
 
 Reproducibility: curated.json is cached under `inputs_sha256`, a hash of the facts.json bytes, the prompt template
 (`curate_prompt.md` with its placeholders unsubstituted, so no path enters the key) and the schema text the curation
@@ -46,6 +46,9 @@ checks the file format (no `version` attribute, id first and `as` last, 2-space 
 every edge, unique vertex ids).
 `gen_drawio.render(diagram)` takes the draw.io page `id` and `name` as required keyword arguments: `build.py`
 passes `<name>-architecture` and the curated title, `tf_layout.__main__` derives the name from the input file name.
+`gen_drawio` draws icons, lines, title and legend; the `notation.Notation` it is given draws every box and group
+(value HTML and style). `notation.AWS` is the Layer 7 look: grey boxes, AWS frames by `Group.kind`, plain groups in
+their purpose colour. A `Box` carries its node's `shape` (its `icon`, else its `service`) and no colours.
 Nothing in the generic modules is specific to one stack.
 
 ## Icons (`aws_icons.json`)
@@ -66,7 +69,7 @@ python -m cartographer.vendor_aws_icons <dir>/Sidebar-AWS4.js
 (`marketplace`, `all_products`) stay AWS icons. `diagram_model.AWS_ICONS` and `GENERIC_ICONS` load the two files, in
 that one place, and `has_icon` accepts either. `gen_drawio` styles AWS icons from `AWS_ICONS` and generic ones from
 `GENERIC_ICONS` (shape with the label below, split on its line breaks and never wrapped, like an AWS icon).
-Any other `Icon.service` renders as a plain box.
+Any other `Icon.service` renders as a box of icon size, drawn by the notation.
 
 ## facts.json (stage 1)
 
@@ -254,13 +257,14 @@ placement). Every number is a module constant
 ## C4 diagrams
 
 A second notation next to the AWS one. The curation writes `model.json` (schema `c4.schema.json`) in the cache folder;
-nothing curated is committed. Modules:
+nothing curated is committed. A view's curated data uses the Layer 7 keys: an element's C4 kind (`person`,
+`container_store`, ...) is its node's `service` or its external's `icon`, and `c4_styles.C4` draws it. Modules:
 
 | File | Role |
 |---|---|
 | `c4_model.py` | the model: people, systems, containers, components, code, deployment, scenarios |
 | `c4_verify.py` | structure and evidence checks; no `code` elements without the engineer's consent |
-| `c4_styles.py`, `notation.py` | C4 shapes, palette, key entries and title format, asked by `gen_drawio` |
+| `c4_styles.py` | the C4 `Notation`: element boxes by shape, boundaries and deployment nodes, key, neutral lines |
 | `c4_views.py`, `c4_boxes.py` | one `Diagram` per view, boxes sized from their three text blocks |
 | `c4_deploy.py` | the Deployment view: nested nodes and container instances |
 

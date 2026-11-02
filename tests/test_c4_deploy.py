@@ -48,9 +48,9 @@ def test_instances_sit_in_their_deployment_node():
     c = _view().curated
     node_ = next(n for n in c["nodes"] if n["id"] == "fn.api")
     group = next(g for g in c["groups"] if g["id"] == "fn")
-    assert node_["group"] == "fn" and node_["c4"] == "container" and group["kind"] == "deployment"
+    assert node_["group"] == "fn" and node_["service"] == "container" and group["kind"] == "deployment"
     assert group["label"] == "fn\n[Deployment Node: Lambda]"
-    assert next(n for n in c["nodes"] if n["id"] == "tbl.orders")["c4"] == "container_store"
+    assert next(n for n in c["nodes"] if n["id"] == "tbl.orders")["service"] == "container_store"
 
 
 def test_frames_keep_aws_kinds():
@@ -62,7 +62,7 @@ def test_frames_keep_aws_kinds():
 
 def test_infrastructure_without_instances_is_an_aws_icon():
     nodes = {n["id"]: n for n in _view().curated["nodes"]}
-    assert nodes["alb"]["service"] == "application_load_balancer" and "c4" not in nodes["alb"]
+    assert nodes["alb"]["service"] == "application_load_balancer"
     assert nodes["alb"]["group"] == "priv"
     assert nodes["bare"]["service"] == "other"
 

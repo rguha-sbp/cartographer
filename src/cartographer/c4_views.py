@@ -18,7 +18,7 @@ class View:
 
 def _element_external(element: dict) -> dict:
     node = element_node(element, None)
-    return {"id": node["id"], "label": node["label"], "icon": "none", "box": node["box"], "c4": node["c4"],
+    return {"id": node["id"], "label": node["label"], "icon": node["service"], "box": node["box"],
             "evidence": []}
 
 

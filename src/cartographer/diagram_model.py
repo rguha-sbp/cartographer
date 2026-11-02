@@ -78,9 +78,7 @@ class Box:
     w: int = 200
     h: int = 56
     parent: str | None = None
-    fill: str = "#F2F3F3"
-    stroke: str = EDGE_DEFAULT
-    kind: str | None = None  # a C4 element kind (person, container, ...) drawn in C4 style; else a plain box
+    shape: str = "none"  # what the box stands for (its node's service or icon); the notation decides its look
 
 
 @dataclass(frozen=True)

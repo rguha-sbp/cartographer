@@ -36,7 +36,7 @@ def cell_w(labels: list[str]) -> int:
 
 def shape(n: dict[str, Any]) -> str:
     """What a node is drawn as: its `icon` (a generic or brand shape for a non-AWS node), else its AWS service."""
-    return n.get("icon", n["service"])
+    return n["icon"] if "icon" in n else n["service"]
 
 
 def box_size(n: dict[str, Any]) -> Size:
@@ -105,7 +105,7 @@ class Blocks:
             else:
                 w, h = box_size(n)  # level with an icon's middle; a box taller than an icon starts at the cell top
                 self.out_leaves.append(Box(n["id"], _label(n), cx + (cw - w) // 2, cy + max(ICON - h, 0) // 2, w, h,
-                                           parent, kind=n.get("c4")))
+                                           parent, shape(n)))
 
     def place(self, bid: str, x: int, y: int, w: int) -> int:
         """Place a block at (x, y) with width w; return its height."""

@@ -50,5 +50,5 @@ def place(lane: Lane, x: int, y: int, height: int) -> list[Icon | Box]:
             out.append(Icon(ext["id"], ext["label"], ext["icon"], cx + (cw - ICON) // 2, cy))
         else:
             w, h = box_size(ext)
-            out.append(Box(ext["id"], ext["label"], cx + (cw - w) // 2, cy, w, h, kind=ext.get("c4")))
+            out.append(Box(ext["id"], ext["label"], cx + (cw - w) // 2, cy, w, h, shape=ext.get("icon", "none")))
     return out
