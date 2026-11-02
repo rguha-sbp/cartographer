@@ -98,19 +98,21 @@ engineer's consent, Code. Ask for the system name (lowercase kebab-case, for exa
    The build first checks `model.json` against the schema and reports each misfit by its JSON path (for example
    `relationships[3]: missing 'dashed'`); it checks nothing else until the model fits. A clean build prints "C4 model: ok", then the containers, components, code elements, relationships and deployment
    nodes that rest only on `stated`: repeat that list to the user in the final summary.
-5. Review every produced view with step 6 below. The snapshot prints `view: <page name>` first. Apply "Every diagram"
+5. Review every produced view with step 6 below. The snapshot shoots every page of `<name>-c4.drawio` and prints
+   `view: <page name>` before the PNGs of each page. Apply "Every diagram"
    and "C4: every view" from the checklist, plus the section named like the view. A finding names the view, the rule,
    the tile and the element.
-6. Show it (step 7) applies to C4: open each produced view .drawio the same way as for an AWS diagram.
+6. Show it (step 7) applies to C4: open `<name>-c4.drawio` the same way as for an AWS diagram; each view is a tab.
 7. Run the `check` command from Stopping.
 
 C4 runs differ from the AWS flow:
 
-- Each run overwrites `docs/architecture/diagrams/<name>-<view>.drawio` and `.svg` for every view. There is no
-  hand-edit guard: do not edit those files by hand.
-- Each run deletes the view files the model no longer produces (`<name>-1-context`, `<name>-2-container`,
-  `<name>-3-component-<id>`, `<name>-4-code-<id>`, `<name>-5-deployment`, `<name>-6-dynamic-<id>`; no other file),
-  and rewrites the folder `README.md` index (one row per .drawio).
+- Each run overwrites `docs/architecture/diagrams/<name>-c4.drawio` (one page per view) and the image of every view,
+  `<name>-c4-<view>.svg`. There is no hand-edit guard: do not edit those files by hand.
+- Each run deletes the images of views the model no longer produces (`<name>-c4-1-context.svg`,
+  `<name>-c4-2-container.svg`, `<name>-c4-3-component-<id>.svg`, `<name>-c4-4-code-<id>.svg`,
+  `<name>-c4-5-deployment.svg`, `<name>-c4-6-dynamic-<id>.svg`) and the per-view `<name>-<view>.drawio` and `.svg`
+  files of earlier builds; no other file. It rewrites the folder `README.md` index (one row per view).
 - No curated file is kept in the repo. `model.json` stays in the cache folder.
 
 ## Describe flow (instead of steps 3 to 5)
@@ -129,7 +131,7 @@ C4 runs differ from the AWS flow:
 
 ## 6. Review loop (at most 3 rounds)
 
-1. Snapshot (C4: once per view .drawio): `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" snapshot docs/architecture/diagrams/<name>.drawio -o SNAP_DIR`, with `SNAP_DIR` set to `${CLAUDE_PLUGIN_DATA}/<name>/snap`. It prints `view: <page name>`, then the full PNG and four tiles, one path per line. Exit 2 means the bundled draw.io could not be downloaded or Chrome is missing.
+1. Snapshot (C4: `<name>-c4.drawio`, which gives every view): `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" snapshot docs/architecture/diagrams/<name>.drawio -o SNAP_DIR`, with `SNAP_DIR` set to `${CLAUDE_PLUGIN_DATA}/<name>/snap`. It prints `view: <page name>`, then the full PNG and four tiles, one path per line, for every page. Exit 2 means the bundled draw.io could not be downloaded or Chrome is missing.
 2. Look: Read the full PNG, then every tile. Do not skip tiles: small defects show only there.
 3. Get the checklist path with `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" docs review`, Read that file, and list findings against it, applying the rules its "How to pick the rules" section selects for the `view:` line. Each finding names the view, the rule, the tile (for example `r0c1`) and the element (node, caption or line). `docs rules` (same launcher) prints the drawing rules the tool already enforces.
 4. Fix every [curation] finding in `docs/architecture/diagrams/<name>.curated.json` (C4: `model.json`). The evidence rules in the `prompt` output still apply: add an edge or change an icon only when the Terraform or code supports it. If a fix needs evidence you cannot find, leave the finding open and report it.
@@ -144,11 +146,11 @@ Run `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" view d
 - Stop when a round has zero findings, or after 3 rounds.
 - Never say the diagram is ready while a finding remains.
 - Do not patch [tool] findings by hand and do not edit the .drawio or the .svg by hand. Report each one to the user as a tool defect, with the rule, the tile it appears in and the element.
-- Before finishing, run `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" check docs/architecture/diagrams`. It is offline and must print nothing and exit 0: every .drawio has an image rendered from exactly that .drawio.
+- Before finishing, run `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" check docs/architecture/diagrams`. It is offline and must print nothing and exit 0: every page of every .drawio has an image rendered from exactly that .drawio.
 - Never commit or push. Tell the user exactly which files to review and commit:
   `docs/architecture/diagrams/<name>.drawio`, `docs/architecture/diagrams/<name>.svg`,
   `docs/architecture/diagrams/<name>.curated.json` and the regenerated `docs/architecture/diagrams/README.md`.
-- For a C4 set, tell the user to commit every `<name>-<view>.drawio` and `.svg` and the regenerated `README.md`. There is no curated file to commit.
+- For a C4 set, tell the user to commit `<name>-c4.drawio`, every `<name>-c4-<view>.svg` and the regenerated `README.md`. There is no curated file to commit.
 - For a described diagram the final message also lists every assumption, one line each.
 - The final message lists: rounds run, curation fixes made, remaining findings (tool defects and any unfixed curation
-  findings), and the files: for a C4 set, every produced view file.
+  findings), and the files: for a C4 set, the .drawio and every view image.

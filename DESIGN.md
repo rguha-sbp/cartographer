@@ -7,10 +7,10 @@ cartographer extract INFRA_DIR --name NAME       facts to $XDG_CACHE_HOME/cartog
 cartographer prompt --name NAME [--describe]     schema to the cache folder, curation or describe prompt on stdout
 cartographer prompt --name NAME --c4 [--describe]  C4 curation prompt (model.json), schema c4.schema.json
 cartographer build --name NAME                   verify, then docs/architecture/diagrams/NAME.drawio and .svg
-cartographer build --name NAME --c4              verify model.json, then one .drawio and .svg per C4 view
-cartographer image FILE.drawio                   regenerate the .svg next to a .drawio
+cartographer build --name NAME --c4              verify model.json, then NAME-c4.drawio, a page and .svg per view
+cartographer image FILE.drawio                   regenerate the .svg next to a .drawio, one per page
 cartographer check FOLDER                        fail when a .drawio has no image or a stale one (offline)
-cartographer snapshot FILE -o DIR                `view: <page name>`, then PNG and tiles from the local draw.io
+cartographer snapshot FILE -o DIR                per page: `view: <name>`, then PNG and tiles from the local draw.io
 cartographer view FILE                           open in the local draw.io
 cartographer docs interview|review|rules         path of a packaged document
 ```
@@ -268,7 +268,8 @@ nothing curated is committed. A view's curated data uses the Layer 7 keys: an el
 | `c4_views.py`, `c4_boxes.py` | one `Diagram` per view, boxes sized from their three text blocks |
 | `c4_deploy.py` | the Deployment view: nested nodes and container instances |
 
-Views and files, written to `docs/architecture/diagrams/<name>-<slug>.drawio` and `.svg`:
+Views, written as pages of `docs/architecture/diagrams/<name>-c4.drawio` (page id `<name>-<slug>`, in slug order)
+and drawn into `<name>-c4-<slug>.svg`:
 
 | Slug | Page title |
 |---|---|
@@ -279,9 +280,16 @@ Views and files, written to `docs/architecture/diagrams/<name>-<slug>.drawio` an
 | `5-deployment` | Deployment diagram for S: env |
 | `6-dynamic-<id>` | Dynamic diagram for S: scenario |
 
-`build --c4` overwrites every view on each run, deletes the `<name>-*` view files the model no longer produces and
-writes a README index with one row per .drawio. There is no hand-edit guard for C4 views; `check` and `image` work as
-before. The layout, router and checker are shared with Layer 7.
+`build --c4` overwrites the file and every view image on each run, deletes the images of views the model no longer
+produces and the per-view `<name>-<slug>.drawio` and `.svg` files of earlier builds (exact slugs only, so
+`<name>-3-tier.drawio` survives), and writes a README index with one row per view. There is no hand-edit guard for C4
+views.
+
+Pages (`files.pages`): a one-page .drawio is drawn whole into its sibling `.svg`, as an L7 diagram always was. Each
+page of a file of several is drawn alone, as a one-page mxfile, into `<stem>-<page>.svg`, where `<page>` is the page id
+less the file name up to its last dash. Every image is stamped with the sha256 of the whole file, so `check` wants a
+fresh image per page, `image` and `view` regenerate them all, the index lists one row per page and `snapshot` shoots
+each page alone. The layout, router and checker are shared with Layer 7.
 
 Relationships are stated at the lowest level known and `c4_model.rollup` lifts them to the elements a view shows; each
 lifted edge names the relationships behind it. Context and Container views draw every lifted edge, including those
@@ -298,7 +306,7 @@ container, and a relationship's must run between the hosts of its two ends. A su
 report: "C4 model: ok", then every container, component, code element, relationship and deployment node that rests
 only on `stated`.
 
-Review: `snapshot` prints `view: <page name>` first (`files.page_name` reads the first `<diagram name=...>`; the README index uses it too).
+Review: `snapshot` prints `view: <page name>` before the PNGs of each page (the `<diagram name=...>`; the README index uses it too).
 `REVIEW.md` picks the rules from it: "Every diagram" plus "Layer 7" or "C4: every view" plus the section named like the page.
 
 ## Non-goals

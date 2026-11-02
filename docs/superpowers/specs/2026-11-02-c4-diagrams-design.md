@@ -172,11 +172,16 @@ is built and the model has no `code` elements.
 
 ### Files
 
-- One `.drawio` and one `.svg` per view in `docs/architecture/diagrams/`, overwritten on every run; `check`,
-  `image` and the svg fingerprint keep working unchanged. There is no hand-edit guard for C4 views. A view file the
-  new model no longer produces (a container that was removed) is deleted on the same run, so the folder always
-  matches the repo. The folder index (`index.py`) gains one row per C4 view. Files: `<system>-c4-context`, `<system>-c4-container`, `<system>-c4-component-<container>`,
-  `<system>-c4-code-<component>`, `<system>-c4-deployment-<env>`, `<system>-c4-dynamic-<scenario>`.
+- One `<name>-c4.drawio` in `docs/architecture/diagrams/` with one page (a draw.io tab) per view, in slug order
+  (`1-context`, `2-container`, `3-component-<container>`, `4-code-<component>`, `5-deployment`,
+  `6-dynamic-<scenario>`). Each page has the id `<name>-<slug>` and the view title as its name.
+- One `<name>-c4-<slug>.svg` per view, drawn from that page alone and stamped with the sha256 of the whole .drawio,
+  for the README index, diffs and readers without draw.io. A .drawio of several pages has an image per page;
+  `check`, `image`, `view` and `snapshot` handle every page, and a one-page L7 diagram keeps its sibling `.svg`.
+- Everything is overwritten on every run. There is no hand-edit guard for C4 views. The image of a view the new
+  model no longer produces (a container that was removed) is deleted on the same run, as are the per-view
+  `<name>-<slug>.drawio` and `.svg` files of earlier builds, so the folder always matches the repo. The folder index
+  (`index.py`) has one row per C4 view, linking the .drawio and that view's image.
 - The draw.io page name and the diagram title carry the view type and scope.
 - The folder `README.md` index groups the C4 views of one system in level order.
 

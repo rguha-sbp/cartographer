@@ -10,7 +10,8 @@ Drawing rules the tool already enforces are in `RULES.md` (`cartographer docs ru
 
 ## How to pick the rules
 
-`cartographer snapshot` prints `view: <page name>` as its first line. The page name starts with the view type:
+`cartographer snapshot` prints `view: <page name>` before the PNGs of each page (a C4 set has one page per view). The
+page name starts with the view type:
 
 - `System Context diagram for ...`, `Container diagram for ...`, `Component diagram for ...`, `Code diagram for ...`, `Deployment diagram for ...`, `Dynamic diagram for ...`: a C4 view. Apply "Every diagram", "C4: every view" and the section named like the page.
 - Anything else: an AWS Layer 7 diagram. Apply "Every diagram" and "Layer 7".

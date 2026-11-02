@@ -152,7 +152,7 @@ Everything goes to `docs/architecture/diagrams/` in your repo:
 | `<name>.curated.json` | the curation: what was drawn and the evidence for it |
 | `README.md` | generated index of the diagrams in the folder |
 
-Commit all four. A C4 set instead writes `<name>-<view>.drawio` and `.svg` per view (for example `shop-1-context`, `shop-2-container`, `shop-3-component-api`, `shop-5-deployment`) and the index `README.md`, with one row per .drawio. There is no curated file to commit. Intermediates (facts, schema, screenshots) live in the plugin data folder (`~/.cache/cartographer/<name>/` for the
+Commit all four. A C4 set instead writes one `<name>-c4.drawio` with a page (a tab in draw.io) per view, an `.svg` per view (for example `shop-c4-1-context.svg`, `shop-c4-2-container.svg`, `shop-c4-3-component-api.svg`, `shop-c4-5-deployment.svg`) and the index `README.md`, with one row per view. There is no curated file to commit. Intermediates (facts, schema, screenshots) live in the plugin data folder (`~/.cache/cartographer/<name>/` for the
 standalone CLI) and are not committed. Claude never commits or pushes for you.
 
 ## Nesting on the diagram
@@ -165,7 +165,8 @@ An L7 diagram nests AWS Cloud, region, account, VPC, subnet tier and workload:
 - Workload frames hold the services of one application, so separate workloads read as separate, inside a subnet frame
   or directly under the account for regional services such as S3.
 
-The view command opens the diagram in the bundled draw.io editor. To change a diagram, edit it there as below.
+The view command opens the diagram in the bundled draw.io editor. A C4 set opens with `view <name>-c4`, one tab per
+view. To change a diagram, edit it there as below.
 
 ## Editing a diagram by hand
 
@@ -204,10 +205,10 @@ Without the plugin, prefix each command with
 | `prompt --name NAME [--describe]` | print the curation prompt, or the describe prompt for a new solution |
 | `prompt --name NAME --c4 [--describe]` | print the C4 curation prompt, or the interview-led one |
 | `build --name NAME [--replace \| --side-file]` | verify, then write `.drawio`, `.svg` and the folder index |
-| `build --name NAME --c4` | verify `model.json`, then write a `.drawio` and `.svg` per C4 view; overwrites, deletes stale views |
-| `image FILE.drawio` | regenerate the `.svg` next to a `.drawio` |
-| `check FOLDER` | offline: fail when a `.drawio` has no image or a stale one |
-| `snapshot FILE.drawio -o DIR` | print `view: <page name>`, then the PNG and tiles from the bundled draw.io, for the visual review |
+| `build --name NAME --c4` | verify `model.json`, then write `NAME-c4.drawio` with a page and an `.svg` per C4 view; overwrites, deletes stale view images |
+| `image FILE.drawio` | regenerate the `.svg` next to a `.drawio`, one per page of a file of several |
+| `check FOLDER` | offline: fail when a page of a `.drawio` has no image or a stale one |
+| `snapshot FILE.drawio -o DIR` | per page: print `view: <page name>`, then its PNG and tiles from the bundled draw.io, for the visual review |
 | `view FILE.drawio` | edit in the bundled draw.io until the tab is closed |
 | `docs interview\|review\|rules` | print the path of a packaged document |
 
