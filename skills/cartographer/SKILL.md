@@ -56,7 +56,7 @@ Otherwise:
 
 Follow the printed prompt: read the facts and the application code (icons come from the facts; look up a missing one with `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" icons --cloud X --search Y`), then write
 `docs/architecture/diagrams/<name>.curated.json`. Read only files inside this repo. Start from the existing curated file when
-there is one, so the diff stays small. A curated file without `format: 2` is legacy: it still builds, but rewrite it in format 2 when you change it. Every edge and external needs evidence you have actually read; never invent
+there is one, so the diff stays small. A curated file without `format: 2` is legacy: a described solution still builds, but rewrite it in format 2 when you change it. A legacy Terraform curated file no longer matches the facts' staleness key, so build stops and asks for a fresh curation: curate it again in format 2. Every edge and external needs evidence you have actually read; never invent
 evidence.
 
 ## 5. Build

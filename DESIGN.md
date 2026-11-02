@@ -77,8 +77,9 @@ Any other name renders as a box of icon size, drawn by the notation.
 No full icon list is in the schema, the prompts or the skill.
 
 `overrides.py` reads `<out>/icons.json` (`{"overrides": [{"cloud", "type", "icon", "reason", "address"?}]}`) and applies
-it to the verified diagram at build time; an address beats a type. A malformed file, an unknown icon or a type or
-address not in the facts is refused with one report line and the rest of the build continues.
+it to the verified diagram at build time; an address beats a type. A malformed file, an unknown icon or an address that
+is not a resource of that type is refused with one report line; an override for a type not in this diagram is
+skipped with one report line. Either way the rest of the build continues.
 
 `review_sheet.py` writes `review.json` (the `view`, its `view_name`, the `clouds`, and per icon: label, qualified icon and
 title, `tf` addresses, `decided_by`, `marked`, `override`, `frame`, `tiles`). `snapshot` writes `tiles.json`, the icon ids
@@ -170,7 +171,8 @@ per tile, and fills the `tiles` of each sheet entry. The reviewer reads the shee
 ```
 
 - `format` is 2. A file without it is legacy (`vpc` groups, node and external `service`, bare icons) and is converted on
-  load (`curated_format.py`), so it still builds.
+  load (`curated_format.py`). A described solution still builds from it. A Terraform one was keyed to the older
+  prompt, schema and facts, so build refuses it as stale and it is curated again.
 - `kind` in groups: `cloud | region | account | network | subnet | null`. Frame kinds carry `cloud`; null is a plain
   dashed role group. One top-level `cloud` frame per cloud present, side by side. Resource groups are never drawn.
 - `column` in groups: integer 0 to 3, required. Role groups directly in the account are placed left to right by it
