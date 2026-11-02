@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 NETWORK_KEY = re.compile(r"(\w*_)?virtual_network_(id|name)")
 # virtual_network_subnet_id is VNet integration: outbound only, never a placement
 SUBNET_KEY = re.compile(r"(?!virtual_network_subnet_ids?$)(\w*_)?subnet_ids?")
+# what a VM or scale set uses to own a NIC; a NIC named anywhere else in a body (a backend pool address) is only a reference
+NIC_ATTACHMENT = re.compile(r"network_interface(_ids?)?")
 FRONTEND = "frontend_ip_configuration"
 PUBLIC_IP_KEY = re.compile(r"public_ip_address(_id)?")
 NAME_SUFFIXES = "ids?|name"
@@ -93,11 +95,12 @@ class Network:
                     self.subnets[address] = Subnet(address, r.address, block, r)
 
     def subnet_refs(self, r: Res) -> list[Subnet]:
-        """The local subnets `r` sits in: its own subnet attributes, and those of the network interfaces it uses."""
+        """The local subnets `r` sits in: its own subnet attributes, and those of the network interfaces attached to it."""
         if r.address in self._subnet_refs:
             return self._subnet_refs[r.address]
         found: dict[str, Subnet] = {}
-        for ref in self.body_refs(r):
+        attached = (ref for value in find(r.block.body, NIC_ATTACHMENT) for ref in self.refs(r.inst, value))
+        for ref in attached:
             nic = self.by_address.get(ref.address)
             if nic is not None and nic.type == "azurerm_network_interface":
                 found |= {s.address: s for s in self.direct_subnets(nic)}

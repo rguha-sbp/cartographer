@@ -24,6 +24,8 @@ def tier_of(case: str, resource: str) -> tuple[str, str]:
 
 @pytest.mark.parametrize(("case", "resource", "tier", "via"), [
     ("public_nic_ip", "azurerm_linux_virtual_machine.web", "public", "azurerm_subnet.app public ip"),
+    ("gateway_names_backend_nic", "azurerm_application_gateway.gw", "public", "azurerm_subnet.agw public ip"),
+    ("gateway_names_backend_nic", "azurerm_linux_virtual_machine.vm", "private", "azurerm_subnet.app default"),
     ("public_reserved_names", "azurerm_virtual_network_gateway.gw", "public", "azurerm_subnet.gw reserved name GatewaySubnet"),
     ("public_reserved_names", "azurerm_bastion_host.bastion", "public", "azurerm_subnet.bastion reserved name AzureBastionSubnet"),
     ("public_reserved_names", "azurerm_firewall.fw", "public", "azurerm_subnet.fw reserved name AzureFirewallSubnet"),
