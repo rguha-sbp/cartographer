@@ -1,4 +1,4 @@
-"""Check a curated diagram's network claims against the `vpcs` and `placements` facts."""
+"""Check a curated diagram's network claims against the `networks` and `placements` facts."""
 
 from pathlib import Path
 

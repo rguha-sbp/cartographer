@@ -1,10 +1,16 @@
 """The Cloud object: everything that differs between clouds hangs off an instance of it."""
 
+from __future__ import annotations
+
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from cartographer.tf_extract import Extractor
+    from cartographer.tf_modules import Res
 
 UNRESOLVED = object()  # the attribute exists but is not a literal (reference, local, var without default)
 Getter = Callable[[str], str | None | object]  # attribute path such as "sku.tier" -> literal, None (absent) or UNRESOLVED
@@ -12,6 +18,16 @@ Getter = Callable[[str], str | None | object]  # attribute path such as "sku.tie
 
 def load_json(package_file: str, name: str) -> Any:
     return json.loads(Path(package_file).with_name(name).read_text(encoding="utf-8"))
+
+
+@dataclass(frozen=True)
+class Spec:
+    """kind edge from refs of `src` (None = the resource itself) to refs of `dst`, optionally only under `leaf`."""
+
+    kind: str
+    src: str | None
+    dst: str
+    leaf: str | None = None
 
 
 @dataclass(frozen=True)
@@ -47,7 +63,9 @@ class Cloud:
     def __init__(self, name: str, label: str, providers: tuple[str, ...], icons: dict[str, dict],
                  frame_styles: dict[str, str], managed_label: str, *, provider_types: list[str] | None = None,
                  catalog: Catalog | None = None, rules: dict[str, Rule] | None = None,
-                 modules: dict[str, str] | None = None) -> None:
+                 modules: dict[str, str] | None = None, edge_specs: dict[str, list[Spec]] | None = None,
+                 network_attrs: frozenset[str] = frozenset(), data_ref_types: frozenset[str] = frozenset(),
+                 param_types: frozenset[str] = frozenset()) -> None:
         self.name = name
         self.label = label
         self.providers = providers
@@ -59,6 +77,21 @@ class Cloud:
         self.catalog = catalog or Catalog({})
         self.rules = rules or {}
         self.modules = modules or {}  # module source prefix -> icon name
+        self.edge_specs = edge_specs or {}
+        self.network_attrs = network_attrs  # attribute names whose references are `network` edges
+        self.data_ref_types = data_ref_types  # data source types whose body the reference scan follows
+        self.param_types = param_types  # parameter and secret resources whose `name` is an integration hint
+
+    def network_facts(self, ex: Extractor) -> dict:
+        """{"networks": [...], "placements": [...]} without ids; a placement names its network by address."""
+        return {"networks": [], "placements": []}
+
+    def permission_edges(self, ex: Extractor) -> None:
+        """Add permission edges through `ex.add` and `ex.services`."""
+
+    def extra(self, ex: Extractor, res: Res) -> dict:
+        """Cloud-specific fields of a resource's facts entry."""
+        return {}
 
     def resolve(self, tf_type: str, get: Getter) -> Resolution:
         found = self.catalog.row(tf_type)

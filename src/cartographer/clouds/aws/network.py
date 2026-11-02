@@ -1,23 +1,22 @@
-"""Network facts for tfdiagram: VPCs with their CIDRs and the subnet tier each VPC-attached resource sits in."""
+"""AWS network facts: VPCs with their CIDRs and the subnet tier each VPC-attached resource sits in."""
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from cartographer.tf_policies import unq
+from cartographer.tf_values import find
 
 if TYPE_CHECKING:
-    from cartographer.tf_extract import Extractor, Inst, Res
+    from cartographer.tf_extract import Extractor
+    from cartographer.tf_modules import Inst, Res
 
 TIERS = ("isolated", "private", "public")
 CIDR = re.compile(r"\d{1,3}(\.\d{1,3}){3}/\d{1,2}")
 VPC_KEY = re.compile(r"(\w*_)?vpc_id")
 SUBNET_KEY = re.compile(r"(\w*_)?subnets?(_ids?)?")
-SINGLE = re.compile(r"\$\{(var|local)\.(\w+)\}")
 NOT_PLACED = {"aws_subnet", "aws_route_table_association", "aws_network_acl_association"}
-MAX_DEPTH = 8
 TOKEN = re.compile(
     r"(?<![\w.\-])(?:(?P<remote>data\.(?:tfe_outputs|terraform_remote_state)\.\w+"
     r"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.aws_(?:vpc|subnets?)\.(?P<ds>\w+))"
@@ -39,19 +38,6 @@ class Ref:
 
 def _derive(name: str) -> str:
     return re.sub(r"_ids?$", "", name).replace("_", "-")
-
-
-def _find(obj: Any, key: re.Pattern[str]) -> Iterator[Any]:
-    """Values of every attribute whose name matches `key`, at any block depth."""
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            if key.fullmatch(unq(k)):
-                yield v
-            else:
-                yield from _find(v, key)
-    elif isinstance(obj, list):
-        for v in obj:
-            yield from _find(v, key)
 
 
 def _tier_in(name: str) -> str | None:
@@ -98,21 +84,6 @@ class Network:
                 out[Ref(f"{inst.prefix}{head}.{second}")] = None
         return out
 
-    def literal(self, inst: Inst, value: Any, depth: int = 0) -> str | None:
-        """The string `value` is, or resolves through locals and variable defaults to, when it is a CIDR."""
-        s = unq(value) if isinstance(value, str) else ""
-        if m := SINGLE.fullmatch(s):
-            kind, name = m.groups()
-            if depth >= MAX_DEPTH:
-                return None
-            if kind == "local":
-                return self.literal(inst, inst.mod.locals.get(name), depth + 1)
-            passed = [a[name] for a in inst.args if name in a]
-            if passed and inst.parent is not None:
-                return self.literal(inst.parent, passed[0], depth + 1)
-            return self.literal(inst, inst.mod.variables.get(name), depth + 1)
-        return s if CIDR.fullmatch(s) else None
-
     def cidrs(self, vpc: Res) -> list[str]:
         """Every CIDR of a local VPC, or none when any of them is not a literal."""
         blocks = [(vpc.inst, vpc.block.body.get("cidr_block"))]
@@ -121,15 +92,17 @@ class Network:
                 r.inst, r.block.body.get("vpc_id")
             ):
                 blocks.append((r.inst, r.block.body.get("cidr_block")))
-        found = [self.literal(inst, value) for inst, value in blocks]
-        return [] if None in found else list(dict.fromkeys(found))  # type: ignore[arg-type]
+        found = [self.ex.value(inst, value) for inst, value in blocks]
+        if not all(isinstance(v, str) and CIDR.fullmatch(v) for v in found):
+            return []
+        return list(dict.fromkeys(found))  # type: ignore[arg-type]
 
     def collect_vpcs(self) -> None:
         for r in self.ex.res:
             if r.type == "aws_vpc":
                 self.vpcs[r.address] = self._vpc(r.address, r.address.rsplit(".", 1)[1], self.cidrs(r), False, r)
         for r in self.ex.res:
-            for value in _find(r.block.body, VPC_KEY):
+            for value in find(r.block.body, VPC_KEY):
                 for ref in self.sources(r.inst, value):
                     if ref.remote and ref.address not in self.vpcs:
                         self.vpcs[ref.address] = self._vpc(ref.address, _derive(ref.name or ""), [], True, r)
@@ -162,19 +135,15 @@ class Network:
         for r in self.ex.res:
             if r.type in NOT_PLACED:
                 continue
-            for value in _find(r.block.body, SUBNET_KEY):
+            for value in find(r.block.body, SUBNET_KEY):
                 for ref in self.sources(r.inst, value):
                     if placed := self.place(ref):
                         found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
-        return [{"resource": address, "vpc": vpc, "tier": tier, "via": via, "file": r.block.file, "line": r.block.line}
+        return [{"resource": address, "network": vpc, "tier": tier, "via": via, "file": r.block.file, "line": r.block.line}
                 for (address, vpc, tier), (via, r) in sorted(found.items())]
 
 
 def network_facts(ex: Extractor) -> dict:
     net = Network(ex)
     net.collect_vpcs()
-    ids = {a: f"v{i}" for i, a in enumerate(sorted(net.vpcs), 1)}
-    return {
-        "vpcs": [{"id": ids[a], **v} for a, v in sorted(net.vpcs.items())],
-        "placements": [{"id": f"p{i}", **p, "vpc": ids[p["vpc"]]} for i, p in enumerate(net.placements(), 1)],
-    }
+    return {"networks": [v for _, v in sorted(net.vpcs.items())], "placements": net.placements()}

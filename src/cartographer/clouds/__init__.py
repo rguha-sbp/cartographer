@@ -17,3 +17,11 @@ def resolve_module(source: str) -> Resolution:
         return Resolution("none", marked=True, reason="unknown module", decided_by="curator, unknown module")
     prefix, cloud, icon = max(matches, key=lambda m: len(m[0]))
     return Resolution("icon", f"{cloud.name}:{icon}", f"module {prefix}")
+
+
+def resolve_declared(tf_type: str, attributes: dict[str, str]) -> Resolution:
+    """The icon decision for a Terraform type named by a curator, with the attributes they declared."""
+    cloud = cloud_of_type(tf_type)
+    if cloud is None:
+        return Resolution("none", marked=True, reason="type not in catalog", decided_by="curator, unknown type")
+    return cloud.resolve(tf_type, attributes.get)

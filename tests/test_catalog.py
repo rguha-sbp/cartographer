@@ -163,3 +163,24 @@ def test_draft_catalog_lists_only_types_without_a_row(monkeypatch, tmp_path):
     types.write_text(json.dumps(["aws_lambda_function", "aws_lambda_brand_new_thing", "aws_zzz_thing"]))
     monkeypatch.setattr(vendor, "PROVIDER_TYPES", types)
     assert vendor.draft_catalog() == ['  "aws_zzz": {"icon": "?"},']
+
+
+def test_declared_types_resolve_through_the_owning_cloud() -> None:
+    assert clouds.resolve_declared("aws_lb", {"load_balancer_type": "network"}).icon == "aws:elastic_load_balancing"
+    unknown = clouds.resolve_declared("kubernetes_pod", {})
+    assert (unknown.kind, unknown.marked) == ("none", True)
+
+
+def test_description_verify_sets_icons_from_tf_type_and_marks_a_direct_cloud_icon(tmp_path) -> None:
+    from cartographer import verify_description
+
+    node = {"group": None, "multi": False, "tf": []}
+    curated = {"format": 2, "source": "description", "title": "t", "groups": [], "edges": [], "omitted": [],
+               "nodes": [{**node, "id": "a", "label": "a", "tf_type": "aws_sqs_queue"},
+                         {**node, "id": "b", "label": "b", "icon": "aws:lambda"}],
+               "externals": [{"id": "x", "label": "x", "tf_type": "aws_s3_bucket", "evidence": [{"stated": "s"}]}]}
+    out, _ = verify_description.verify(curated, tmp_path)
+    a, b = out["nodes"]
+    assert (a["icon"], a["decided_by"], a["marked"]) == ("aws:sqs", "catalog aws_sqs", False)
+    assert (b["decided_by"], b["marked"]) == ("curator", True)
+    assert out["externals"][0]["icon"] == "aws:s3"

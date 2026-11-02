@@ -1,11 +1,11 @@
-"""The `cartographer` command: extract, prompt, build, image, check, snapshot, view, docs."""
+"""The `cartographer` command: extract, prompt, build, image, check, snapshot, view, icons, docs."""
 
 import argparse
 import sys
 from functools import partial
 from pathlib import Path
 
-from cartographer import build, c4_commands, drift, snapshot, svg_export, tf_extract, tfdiagram, view
+from cartographer import build, c4_commands, drift, icons, snapshot, svg_export, tf_extract, tfdiagram, view
 from cartographer.workdir import cache_dir, write_json
 
 HERE = Path(__file__).parent
@@ -47,6 +47,12 @@ def _docs(args: argparse.Namespace) -> int:
     return 0
 
 
+def _icons(args: argparse.Namespace) -> int:
+    for qualified, title in icons.search(args.cloud, args.search):
+        print(f"{qualified}\t{title}")
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="cartographer", description=__doc__)
     sub = ap.add_subparsers(dest="command", required=True)
@@ -80,6 +86,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--drawio-url", default=None, help="your own local draw.io (never a public host)")
     p = command("check", drift.run, "fail when a .drawio has no image or a stale one (offline)", named=False)
     p.add_argument("folder", type=Path, help="diagrams folder, searched recursively")
+    p = command("icons", _icons, "find icon names by words in the name or title", named=False)
+    p.add_argument("--cloud", required=True, choices=icons.namespaces(), help="icon namespace to search")
+    p.add_argument("--search", required=True, help="words that must all appear in the icon name or title")
     p = command("docs", _docs, "print the path of a packaged document (review, rules, interview)", named=False)
     p.add_argument("name", choices=sorted(DOCS))
     return ap

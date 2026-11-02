@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from cartographer import icons
-from cartographer.clouds import CLOUDS
+from cartographer.clouds import CLOUDS, resolve_declared
 from cartographer.curated_format import FRAME_KINDS
 from cartographer.secret_patterns import contains_secret
 from cartographer.tf_blocks import empty_blocks
@@ -40,6 +40,39 @@ def shape_warnings(item: dict) -> list[str]:
     if icon == "none" or icons.known(icon):
         return []
     return [f"{item['id']}: icon {icon!r} is not a known icon, renders as a box"]
+
+
+def declared_icon(item: dict) -> None:
+    """Set `icon`, `decided_by` and `marked` from the catalog when the item names a `tf_type`; an item that names a
+    cloud icon directly is marked as the curator's choice."""
+    if tf_type := item.get("tf_type"):
+        res = resolve_declared(tf_type, item.get("attributes", {}))
+        if res.icon:
+            item.update(icon=res.icon, decided_by=res.decided_by, marked=res.marked)
+            return
+    if icons.cloud_of(item.get("icon", "")):
+        item.update(decided_by="curator", marked=True)
+
+
+def frame_cloud(groups: dict[str, dict], gid: str | None) -> str | None:
+    """The cloud of the nearest enclosing frame."""
+    seen: set[str] = set()
+    while gid in groups and gid not in seen:
+        seen.add(gid)
+        if groups[gid]["kind"] in FRAME_KINDS:
+            return groups[gid].get("cloud")
+        gid = groups[gid]["parent"]
+    return None
+
+
+def cloud_warnings(diagram: dict) -> list[str]:
+    groups = {g["id"]: g for g in diagram["groups"]}
+    out = []
+    for n in diagram["nodes"]:
+        icon_cloud, frame = icons.cloud_of(n.get("icon", "")), frame_cloud(groups, n["group"])
+        if icon_cloud and frame and icon_cloud != frame:
+            out.append(f"{n['id']}: icon {n['icon']} belongs to {icon_cloud}, its frame to {frame}")
+    return out
 
 
 def edge_name(edge: dict) -> str:

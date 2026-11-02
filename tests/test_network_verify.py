@@ -5,11 +5,12 @@ import pytest
 
 from cartographer import tf_extract, tf_verify, verify_description
 from cartographer.curated_format import FRAME_KINDS
+from cartographer.verify_shared import cloud_warnings
 
 REPO = Path(__file__).parent / "fixtures" / "network"
 FACTS = tf_extract.extract(Path("infra"), REPO)
-VPC = next(v for v in FACTS["vpcs"] if v["address"] == "aws_vpc.main")
-REMOTE = next(v for v in FACTS["vpcs"] if v["remote"])
+VPC = next(v for v in FACTS["networks"] if v["address"] == "aws_vpc.main")
+REMOTE = next(v for v in FACTS["networks"] if v["remote"])
 PLACED = {p["resource"]: p["id"] for p in FACTS["placements"]}
 
 
@@ -187,3 +188,54 @@ def test_described_file_evidence_is_checked(tmp_path: Path) -> None:
     assert "cidrs" in _group_of(verify_description.verify(curated, tmp_path)[0], "vpc")
     curated["groups"][1]["evidence"][0]["contains"] = "10.9.9.9"
     assert "cidrs" not in _group_of(verify_description.verify(copy.deepcopy(curated), tmp_path)[0], "vpc")
+
+
+BARE = ("address", "type", "module", "multi", "file", "line")
+
+
+def _facts_with(**resolutions: dict) -> dict:
+    """The facts with every resource's resolution removed, and the given one (by address with `.` as `__`) set."""
+    chosen = {k.replace("__", "."): v for k, v in resolutions.items()}
+    resources = [{**{k: r[k] for k in BARE}, **chosen.get(r["address"], {})} for r in FACTS["resources"]]
+    return {**FACTS, "resources": resources}
+
+
+LB = {"icon": "aws:ec2", "decided_by": "catalog aws_lb", "marked": True}
+MISC = "aws_instance.misc"
+
+
+def test_verify_takes_the_icon_from_the_first_resolved_address() -> None:
+    facts = _facts_with(aws_lb__front=LB, aws_instance__orders={"icon": "aws:lambda", "marked": False})
+    curated = _curated()
+    curated["nodes"] = [{**_node("n", "aws_lb.front", "shop"), "tf": [MISC, "aws_lb.front", "aws_instance.orders"],
+                         "icon": "generic:users"}]
+    verified, report = tf_verify.verify(facts, curated, REPO)
+    node = verified["nodes"][0]
+    assert (node["icon"], node["decided_by"], node["marked"]) == ("aws:ec2", "catalog aws_lb", True)
+    assert "n: curator icon is set but the resources resolve, resolved icon wins" in report
+
+
+def test_verify_sets_no_warning_when_the_curator_left_the_icon_to_the_facts() -> None:
+    verified, report = tf_verify.verify(_facts_with(aws_lb__front=LB), _curated(), REPO)
+    assert verified["nodes"][0]["icon"] == "aws:ec2" and "Warnings (0)" in report
+
+
+def test_verify_keeps_the_curator_icon_when_nothing_resolves() -> None:
+    curated = _curated()
+    curated["nodes"] = [{**_node("n", MISC, "shop"), "icon": "aws:lambda"}]
+    node = tf_verify.verify(_facts_with(), curated, REPO)[0]["nodes"][0]
+    assert (node["icon"], node["decided_by"], node["marked"]) == ("aws:lambda", "curator", True)
+
+
+def test_verify_warns_on_a_node_built_only_from_folds() -> None:
+    curated = _curated()
+    curated["nodes"] = [_node("n", MISC, "shop")]
+    report = tf_verify.verify(_facts_with(aws_instance__misc={"fold": "owner"}), curated, REPO)[1]
+    assert "n: built only from folded resources" in report
+
+
+def test_a_node_icon_of_another_cloud_than_its_frame_is_a_warning() -> None:
+    frame = {"id": "f", "label": "f", "kind": "region", "cloud": "azure", "parent": None, "column": 0}
+    diagram = {"groups": [frame, {**frame, "id": "g", "kind": None, "parent": "f"}],
+               "nodes": [{"id": "n", "group": "g", "icon": "aws:lambda"}, {"id": "m", "group": "g", "icon": "brand:github"}]}
+    assert cloud_warnings(diagram) == ["n: icon aws:lambda belongs to aws, its frame to azure"]

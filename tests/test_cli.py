@@ -259,3 +259,16 @@ def test_snapshot_subcommand_delegates(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "a.drawio").write_text('<mxfile><diagram name="Container diagram for Shop"/></mxfile>')
     assert cli.main(["snapshot", str(tmp_path / "a.drawio"), "-o", str(tmp_path / "s")]) == 0
     assert seen[0][3] == "2x2"
+
+
+def test_icons_command_prints_at_most_20(capsys) -> None:
+    assert cli.main(["icons", "--cloud", "aws", "--search", "a"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert 0 < len(lines) <= 20 and all(len(line.split("\t")) == 2 for line in lines)
+
+
+def test_icons_command_finds_a_named_icon_and_is_silent_without_a_match(capsys) -> None:
+    assert cli.main(["icons", "--cloud", "aws", "--search", "lambda"]) == 0
+    assert capsys.readouterr().out.splitlines()[0].startswith("aws:lambda\t")
+    assert cli.main(["icons", "--cloud", "aws", "--search", "zzzzqq"]) == 0
+    assert capsys.readouterr().out == ""

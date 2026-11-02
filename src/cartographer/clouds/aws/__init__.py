@@ -1,5 +1,7 @@
+from cartographer.clouds.aws.network import network_facts
+from cartographer.clouds.aws.permissions import permission_edges
 from cartographer.clouds.aws.rules import RULES
-from cartographer.clouds.base import Catalog, Cloud, load_json
+from cartographer.clouds.base import Catalog, Cloud, Spec, load_json
 from cartographer.diagram_model import FRAME_TITLE_LEFT
 
 
@@ -21,8 +23,30 @@ FRAME_STYLES = {
     "subnet-isolated": _frame("group_security_group", "#00A4A6", "#147EBA", 1),
 }
 
-AWS = Cloud(
+EDGE_SPECS = {
+    "aws_cloudwatch_event_target": [Spec("trigger", "rule", "arn")],
+    "aws_lambda_event_source_mapping": [Spec("trigger", "event_source_arn", "function_name")],
+    "aws_s3_bucket_notification": [Spec("trigger", "bucket", a) for a in ("lambda_function", "queue", "topic")],
+    "aws_scheduler_schedule": [Spec("trigger", None, "target", "arn")],
+    "aws_lambda_permission": [Spec("trigger", "source_arn", "function_name")],
+    "aws_cloudfront_distribution": [Spec("route", None, "origin")],
+    "aws_lambda_function_url": [Spec("route", None, "function_name")],
+}
+NETWORK_ATTRS = frozenset({"vpc_config", "network_configuration", "subnet_ids", "security_group_ids", "subnet_id", "vpc_id"})
+
+
+class AwsCloud(Cloud):
+    def network_facts(self, ex):
+        return network_facts(ex)
+
+    def permission_edges(self, ex):
+        permission_edges(ex)
+
+
+AWS = AwsCloud(
     "aws", "AWS", ("aws",), load_json(__file__, "icons.json"), FRAME_STYLES, "AWS managed services",
     provider_types=load_json(__file__, "provider_types.json"), catalog=Catalog(load_json(__file__, "catalog.json")),
-    rules=RULES, modules=load_json(__file__, "modules.json"),
+    rules=RULES, modules=load_json(__file__, "modules.json"), edge_specs=EDGE_SPECS, network_attrs=NETWORK_ATTRS,
+    data_ref_types=frozenset({"aws_iam_policy_document"}),
+    param_types=frozenset({"aws_ssm_parameter", "aws_secretsmanager_secret"}),
 )
