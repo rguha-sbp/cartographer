@@ -1,5 +1,6 @@
 """A notation decides how a laid-out diagram looks and explains itself: the draw.io value and style of its boxes and
-groups, its legend, the colour of each line and the air between boxes stacked one above another. The AWS notation is the layer 7 look."""
+groups, its legend, the colour of each line and the air between boxes stacked one above another. LAYER7 is the
+Layer 7 look of every cloud."""
 
 import html
 from collections.abc import Callable
@@ -42,13 +43,13 @@ def cloud_group(g: Group) -> Cell:
         f"fontStyle=1;fontColor=#232F3E;")
 
 
-def _aws_box(b: Box) -> Cell:
+def _layer7_box(b: Box) -> Cell:
     """Every box alike: a grey rounded rectangle, whatever its shape."""
     return html_value(b.label), (f"rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F3F3;strokeColor={EDGE_DEFAULT};"
                                  f"fontColor=#232F3E;fontSize=12;arcSize=12;")
 
 
-def _aws_legend(curated: Curated, y: int) -> Legend:
+def _layer7_legend(curated: Curated, y: int) -> Legend:
     return Legend(ORIGIN[0], y, LEGEND_W, LEGEND_LINE * 4 + 8, "Line colour = destination", (),
                   "Solid line: primary request path\nDashed line: secondary, control or async")
 
@@ -57,4 +58,4 @@ def _destination_colour(curated: Curated) -> Callable[[str], str]:
     return Colours(curated).node
 
 
-AWS = Notation(_aws_box, cloud_group, _aws_legend, _destination_colour, row_gap=GAP)
+LAYER7 = Notation(_layer7_box, cloud_group, _layer7_legend, _destination_colour, row_gap=GAP)

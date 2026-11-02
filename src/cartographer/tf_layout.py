@@ -17,7 +17,7 @@ from typing import Any
 from cartographer import tf_lanes
 from cartographer.curated_format import upgrade
 from cartographer.diagram_model import ORIGIN, Diagram, Edge, Title, bounds
-from cartographer.notation import AWS, Notation
+from cartographer.notation import LAYER7, Notation
 from cartographer.tf_blocks import GAP, Blocks
 from cartographer.tf_check import defects, measure
 from cartographer.tf_externals import adopt
@@ -86,7 +86,7 @@ def _off_a4(diagram: Diagram) -> float:
 
 
 def layout_report(curated: Curated, *, edge_labels: bool = True,
-                  notation: Notation = AWS) -> tuple[Diagram, list[Widening]]:
+                  notation: Notation = LAYER7) -> tuple[Diagram, list[Widening]]:
     """The arrangement with the block grid width whose extent is closest to A4 landscape (ties go to fewer columns),
     routed, with the gaps that had to be widened for its lines."""
     curated = adopt(curated)
@@ -98,7 +98,7 @@ def layout_report(curated: Curated, *, edge_labels: bool = True,
     return clear_legend(diagram), widened
 
 
-def layout(curated: Curated, *, edge_labels: bool = True, notation: Notation = AWS) -> Diagram:
+def layout(curated: Curated, *, edge_labels: bool = True, notation: Notation = LAYER7) -> Diagram:
     return layout_report(curated, edge_labels=edge_labels, notation=notation)[0]
 
 

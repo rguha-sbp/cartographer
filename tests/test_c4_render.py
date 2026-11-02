@@ -34,9 +34,9 @@ def _render_with_head(head: str) -> str:
     return gen_drawio.render(diagram, page_id="p", page_name="t")
 
 
-def test_l7_output_unchanged() -> None:  # existing tests cover it; this one asserts AWS is the default notation
-    assert tf_layout.layout.__kwdefaults__["notation"] is notation.AWS
-    assert tf_layout.layout_report.__kwdefaults__["notation"] is notation.AWS
+def test_l7_output_unchanged() -> None:  # existing tests cover it; this one asserts LAYER7 is the default notation
+    assert tf_layout.layout.__kwdefaults__["notation"] is notation.LAYER7
+    assert tf_layout.layout_report.__kwdefaults__["notation"] is notation.LAYER7
 
 
 def test_c4_box_is_sized_and_styled() -> None:
@@ -134,11 +134,11 @@ def test_c4_groups_render_with_c4_styles() -> None:
 @pytest.mark.parametrize("cloud", ["aws", "azure"])
 def test_c4_deployment_frames_keep_their_cloud_frame_style(cloud: str) -> None:
     frame = (Group("r", "west", 0, 0, 300, 200, kind="region", cloud=cloud),)
-    assert _render_nodes(frame, c4_styles.C4) == _render_nodes(frame, notation.AWS)
+    assert _render_nodes(frame, c4_styles.C4) == _render_nodes(frame, notation.LAYER7)
     assert html.escape(CLOUDS[cloud].frame_styles["region"]) in _render_nodes(frame, c4_styles.C4)
 
 
-@pytest.mark.parametrize(("note", "fill"), [(notation.AWS, "#F2F3F3"), (c4_styles.C4, "#438DD5")])
+@pytest.mark.parametrize(("note", "fill"), [(notation.LAYER7, "#F2F3F3"), (c4_styles.C4, "#438DD5")])
 def test_the_notation_draws_the_box(note: notation.Notation, fill: str) -> None:
     assert f"fillColor={fill}" in _render_nodes((Box("a", "A\n[Container]", 0, 0, shape="container"),), note)
 

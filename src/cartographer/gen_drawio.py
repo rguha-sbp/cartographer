@@ -17,7 +17,7 @@ from cartographer.diagram_model import (
     Port,
     Title,
 )
-from cartographer.notation import AWS, Notation, html_value
+from cartographer.notation import LAYER7, Notation, html_value
 
 END_ARROWS = {
     "open": "endArrow=open;endFill=0;",
@@ -101,7 +101,7 @@ class DrawioRenderer:
         self._vertex("legend", _legend_html(lg), LEGEND_STYLE, lg.x, lg.y, lg.w, lg.h, None)
 
 
-def page(diagram: Diagram, *, page_id: str, page_name: str, notation: Notation = AWS) -> ET.Element:
+def page(diagram: Diagram, *, page_id: str, page_name: str, notation: Notation = LAYER7) -> ET.Element:
     """The diagram as one page of an mxfile."""
     r = DrawioRenderer(notation)
     r.title(diagram.title)
@@ -118,6 +118,6 @@ def page(diagram: Diagram, *, page_id: str, page_name: str, notation: Notation =
     return result
 
 
-def render(diagram: Diagram, *, page_id: str, page_name: str, notation: Notation = AWS) -> str:
+def render(diagram: Diagram, *, page_id: str, page_name: str, notation: Notation = LAYER7) -> str:
     """The diagram as a one-page mxfile."""
     return files.mxfile([page(diagram, page_id=page_id, page_name=page_name, notation=notation)])
