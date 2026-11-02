@@ -1,4 +1,5 @@
-from cartographer.clouds.base import Cloud, load_json
+from cartographer.clouds.aws.rules import RULES
+from cartographer.clouds.base import Catalog, Cloud, load_json
 from cartographer.diagram_model import FRAME_TITLE_LEFT
 
 
@@ -20,4 +21,8 @@ FRAME_STYLES = {
     "subnet-isolated": _frame("group_security_group", "#00A4A6", "#147EBA", 1),
 }
 
-AWS = Cloud("aws", "AWS", ("aws",), load_json(__file__, "icons.json"), FRAME_STYLES, "AWS managed services")
+AWS = Cloud(
+    "aws", "AWS", ("aws",), load_json(__file__, "icons.json"), FRAME_STYLES, "AWS managed services",
+    provider_types=load_json(__file__, "provider_types.json"), catalog=Catalog(load_json(__file__, "catalog.json")),
+    rules=RULES, modules=load_json(__file__, "modules.json"),
+)
