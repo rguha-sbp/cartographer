@@ -192,6 +192,7 @@ def _shots(chrome: str, page: files.Page, size: tuple[int, int], out_dir: Path, 
     full = out_dir / f"{page.image.stem}.png"
     _shoot(chrome, viewer_url(drawio_url, page.mxfile), size, full)
     written = [full]
+    _write_tiles(xml, drawio.stem, size, rows, cols, out_dir)
     if rows * cols == 1:
         return written
     for tile in tile_rects(*size, rows, cols):
