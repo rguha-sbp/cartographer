@@ -32,9 +32,8 @@ def in_scope(model: Model) -> dict:
     return system
 
 
-def ancestors(model: Model, eid: str) -> list[str]:
-    """Parents of eid, nearest first."""
-    by_id = elements(model)
+def ancestors(by_id: dict[str, dict], eid: str) -> list[str]:
+    """Parents of eid, nearest first; by_id is the model's elements by id."""
     chain = []
     while parent := by_id[eid].get("parent"):
         chain.append(parent)
@@ -42,9 +41,9 @@ def ancestors(model: Model, eid: str) -> list[str]:
     return chain
 
 
-def visible(model: Model, eid: str, shown: set[str]) -> str | None:
+def visible(by_id: dict[str, dict], eid: str, shown: set[str]) -> str | None:
     """The element that stands for eid in a view: itself, else its nearest shown ancestor."""
-    return next((e for e in [eid, *ancestors(model, eid)] if e in shown), None)
+    return next((e for e in [eid, *ancestors(by_id, eid)] if e in shown), None)
 
 
 def type_line(element: dict) -> str:
@@ -73,8 +72,9 @@ def _edge_label(pair: tuple[str, str], parts: list[dict]) -> str:
 def rollup(model: Model, shown: set[str]) -> list[dict]:
     """Relationships lifted to the shown elements, one edge per ordered pair, naming the relationships behind it."""
     groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    by_id = elements(model)
     for r in model["relationships"]:
-        src, dst = visible(model, r["src"], shown), visible(model, r["dst"], shown)
+        src, dst = visible(by_id, r["src"], shown), visible(by_id, r["dst"], shown)
         if src and dst and src != dst:
             groups[src, dst].append(r)
     return [

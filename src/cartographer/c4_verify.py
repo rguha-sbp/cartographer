@@ -96,9 +96,8 @@ def _structure(model: Model) -> list[str]:
     return out
 
 
-def _container_of(model: Model, eid: str) -> str | None:
-    by_id = elements(model)
-    return next((e for e in [eid, *ancestors(model, eid)] if by_id[e]["type"] == "container"), None)
+def _container_of(by_id: dict[str, dict], eid: str) -> str | None:
+    return next((e for e in [eid, *ancestors(by_id, eid)] if by_id[e]["type"] == "container"), None)
 
 
 def _nesting(model: Model) -> list[str]:
@@ -107,7 +106,7 @@ def _nesting(model: Model) -> list[str]:
     by_id = elements(model)
     known = [r for r in model["relationships"] if r["src"] in by_id and r["dst"] in by_id]
     out = [f"{r['id']}: ends are ancestor and descendant" for r in known
-           if r["dst"] in ancestors(model, r["src"]) or r["src"] in ancestors(model, r["dst"])]
+           if r["dst"] in ancestors(by_id, r["src"]) or r["src"] in ancestors(by_id, r["dst"])]
     systems = [e["id"] for e in model["elements"] if e["type"] == "system" and not e.get("external")]
     split = {e["parent"] for e in model["elements"] if e["type"] == "container"} & set(systems)
     out += [f"{r['id']}: ends at the system {end}; name the container it reaches"
@@ -115,15 +114,15 @@ def _nesting(model: Model) -> list[str]:
     steps = {r["id"]: r for r in known}
     for s in model.get("scenarios", []):
         for step in s["steps"]:
-            inner = {_container_of(model, steps[step][end]) for end in ("src", "dst")} if step in steps else set()
+            inner = {_container_of(by_id, steps[step][end]) for end in ("src", "dst")} if step in steps else set()
             if len(inner) == 1 and None not in inner:
                 out.append(f"{s['id']}: step {step} stays inside container {inner.pop()}")
     return out
 
 
-def _hosts(model: Model, eid: str) -> set[str]:
+def _hosts(model: Model, by_id: dict[str, dict], eid: str) -> set[str]:
     """Terraform addresses of the nodes hosting the container that eid is, or sits in."""
-    container = _container_of(model, eid)
+    container = _container_of(by_id, eid)
     hosting = {i["node"] for i in _instances(model) if i["container"] == container}
     return {a for n in _nodes(model) if n["id"] in hosting for a in n.get("tf", [])}
 
@@ -156,7 +155,8 @@ def _evidence(item: dict, known: dict[str, dict] | None, repo: Path, ends: tuple
 
 def _evidence_rules(model: Model, facts: dict | None, repo: Path) -> list[str]:
     known = None if facts is None else {f["id"]: f for key in ("edges", "vpcs", "placements") for f in facts.get(key, [])}
-    hosts = {e["id"]: _hosts(model, e["id"]) for e in model["elements"]}
+    by_id = elements(model)
+    hosts = {eid: _hosts(model, by_id, eid) for eid in by_id}
     out = [p for n in _nodes(model) for p in _evidence(n, known, repo, (set(n.get("tf", [])),))]
     out += [p for e in model["elements"] for p in _evidence(e, known, repo, (hosts[e["id"]],))]
     out += [p for r in model["relationships"]

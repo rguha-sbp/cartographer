@@ -6,7 +6,7 @@ from pathlib import Path
 
 from cartographer.c4_boxes import element_node
 from cartographer.c4_deploy import deployment
-from cartographer.c4_model import SHAPE, Model, edge_text, in_scope, rollup, type_line, visible
+from cartographer.c4_model import SHAPE, Model, edge_text, elements, in_scope, rollup, type_line, visible
 
 HEADS = {"uses": "open", "inherits": "inherits", "implements": "implements"}
 # Slugs of the views: the first three once per model, the rest once per container, component or scenario id.
@@ -67,12 +67,12 @@ def _component(model: Model, title: str, container: dict, components: list[dict]
 def _dynamic(model: Model, system: dict, scenario: dict, title: str) -> dict:
     """The scenario's steps at container level: containers inside the system boundary, the rest outside."""
     containers = _children(model, system, "container")
-    shown = _shown(model, containers)
-    by_id = {r["id"]: r for r in model["relationships"]}
+    shown, by_id = _shown(model, containers), elements(model)
+    relationships = {r["id"]: r for r in model["relationships"]}
     edges = []
     for number, step in enumerate(scenario["steps"], 1):
-        r = by_id[step]
-        src, dst = visible(model, r["src"], shown), visible(model, r["dst"], shown)
+        r = relationships[step]
+        src, dst = visible(by_id, r["src"], shown), visible(by_id, r["dst"], shown)
         if src != dst:
             edges.append({"src": src, "dst": dst, "label": f"{number}. {edge_text(r['label'], r.get('technology'))}",
                           "dashed": r["dashed"]})

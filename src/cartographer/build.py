@@ -3,6 +3,8 @@ structure and evidence for a described one), then lay out and write the diagram.
 
 import argparse
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from cartographer import (
@@ -44,13 +46,21 @@ def cached_facts(name: str) -> Path:
     return facts_path
 
 
-def render_svgs(mxfiles: list[str], drawio_url: str | None) -> list[str]:
-    """The svg image of every mxfile, from one draw.io: the caller's own at `drawio_url`, else the bundled one."""
+@contextmanager
+def renderer(drawio_url: str | None) -> Iterator[str]:
+    """The url of one draw.io, the caller's own at `drawio_url` else the bundled one; failing to start it or to
+    render with it is a Refusal with EXIT_NO_RENDERER."""
     try:
         with drawio_app.drawio_at(drawio_url) as url:
-            return [svg_export.export_svg(mxfile, url) for mxfile in mxfiles]
+            yield url
     except (svg_export.SvgError, snapshot.SnapshotError, drawio_app.DrawioError) as err:
         raise Refusal(EXIT_NO_RENDERER, str(err)) from err
+
+
+def render_svgs(mxfiles: list[str], drawio_url: str | None) -> list[str]:
+    """The svg image of every mxfile, from one draw.io."""
+    with renderer(drawio_url) as url:
+        return [svg_export.export_svg(mxfile, url) for mxfile in mxfiles]
 
 
 def _verify_terraform(name: str, curated: dict, repo: Path) -> tuple[dict, str]:

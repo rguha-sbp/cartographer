@@ -108,12 +108,13 @@ def test_rollup_is_sorted_by_ends():
 
 
 def test_ancestors_and_visible():
-    m = _model([])
-    assert ancestors(m, "a1") == ["a", "s"]
-    assert ancestors(m, "s") == []
-    assert visible(m, "a1", {"a", "s"}) == "a"
-    assert visible(m, "a", {"a"}) == "a"
-    assert visible(m, "u", {"a"}) is None
+    by_id = elements(_model([]))
+    assert ancestors(by_id, "a1") == ["a", "s"]
+    assert ancestors(by_id, "s") == []
+    assert visible(by_id, "a1", {"a", "s"}) == "a"
+    assert visible(by_id, "a", {"a"}) == "a"
+    assert visible(by_id, "u", {"a"}) is None
+
 
 
 def test_elements_and_in_scope():

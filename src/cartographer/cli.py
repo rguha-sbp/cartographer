@@ -5,7 +5,7 @@ import sys
 from functools import partial
 from pathlib import Path
 
-from cartographer import build, c4_commands, drawio_app, drift, snapshot, svg_export, tf_extract, tfdiagram, view
+from cartographer import build, c4_commands, drift, snapshot, svg_export, tf_extract, tfdiagram, view
 from cartographer.workdir import cache_dir, write_json
 
 HERE = Path(__file__).parent
@@ -37,12 +37,8 @@ def _prompt(args: argparse.Namespace) -> int:
 
 
 def _image(args: argparse.Namespace) -> int:
-    try:
-        with drawio_app.drawio_at(args.drawio_url) as url:
-            print(svg_export.write_image(args.file, url, args.file.read_bytes().decode()))
-    except (svg_export.SvgError, snapshot.SnapshotError, drawio_app.DrawioError) as err:
-        print(err, file=sys.stderr)
-        return build.EXIT_NO_RENDERER
+    with build.renderer(args.drawio_url) as url:
+        print(svg_export.write_image(args.file, url, args.file.read_bytes().decode()))
     return 0
 
 
