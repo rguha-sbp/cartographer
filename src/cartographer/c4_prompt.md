@@ -36,14 +36,16 @@ Step 2: propose the whole model
 
 Evidence
 - Every element, relationship and deployment node needs at least one evidence item:
-  {"fact": "f12"}: a facts id. For a relationship, the fact must join the deployment nodes that host its two ends.
+  {"fact": "f12"}: a facts id. For an element, one end of the fact must be on a deployment node that hosts its
+  container; for a relationship, the fact must join the deployment nodes that host its two ends.
   {"file": "src/x/y.py", "line": 88, "contains": ".query("}: the line in the repo; `line` is 1-based and `contains` a
   short literal substring of that line or of one within 3 lines of it. Never cite a line you have not read.
   {"stated": "orders are paid through Adyen"}: a short paraphrase of what the engineer said. Never quote credentials,
   keys or personal data.
 - Anything the repo can prove (containers, stores, queues, components, deployment nodes, relationships) cites a
   `fact` or `file`. `stated` is for people, external systems, the system's purpose, and parts whose code is not in
-  the repo. The build lists every container, component and code element that rests only on `stated`.
+  the repo. The build lists every container, component, code element, relationship and deployment node that rests
+  only on `stated`.
 
 Asking the engineer
 - When something cannot be found in the repo (people and roles, external systems the code does not name, the

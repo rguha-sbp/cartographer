@@ -204,7 +204,27 @@ def test_report_lists_stated_only():
 def test_stated_only_lists_containers_without_repo_evidence():
     m = _valid()
     m["elements"][3]["evidence"] = STATED + FACT
-    assert stated_only(m) == ["api"]
+    assert stated_only(m) == ["api", "r1"]
+
+
+def test_stated_only_lists_relationships_and_deployment_nodes():
+    m = _tf()
+    m["elements"][2]["evidence"] = m["elements"][3]["evidence"] = FACT
+    m["relationships"][0]["evidence"] = STATED
+    m["deployment"]["nodes"][1]["evidence"] = STATED
+    assert stated_only(m) == ["n2", "r1"]
+
+
+def test_element_fact_must_touch_the_nodes_hosting_its_container(tmp_path):
+    m = _tf()
+    m["elements"] += [el("c1", "component", "api", technology="Py")]
+    m["elements"][2]["evidence"] = FACT
+    good = _facts("aws_lambda_function.fn", "aws_db_instance.db", edges=[_edge("aws_lambda_function.fn", "aws_db_instance.db")])
+    assert verify(m, good, tmp_path) == []
+    bad = _facts("aws_lambda_function.fn", "aws_db_instance.db", edges=[_edge("aws_sqs_queue.q", "aws_db_instance.db")])
+    errs = verify(m, bad, tmp_path)
+    assert "api: fact f1 does not join the deployment nodes hosting it" in errs
+    assert "c1: fact f1 does not join the deployment nodes hosting it" in errs
 
 
 def test_relationship_ending_at_a_system_with_containers_fails(tmp_path):

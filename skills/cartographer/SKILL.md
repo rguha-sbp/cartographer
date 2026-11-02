@@ -95,6 +95,8 @@ engineer's consent, Code. Ask for the system name (lowercase kebab-case, for exa
    and why, the C4 gap checklist, and the consent question before any Code level.
 3. Curate `model.json` in the cache folder, as the prompt says. Evidence rules apply: never invent evidence.
 4. Build: `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" build --name NAME --c4`. Fix what it reports in `model.json` and rebuild.
+   A clean build prints "C4 model: ok", then the containers, components, code elements, relationships and deployment
+   nodes that rest only on `stated`: repeat that list to the user in the final summary.
 5. Review every produced view with step 6 below. The snapshot prints `view: <page name>` first. Apply "Every diagram"
    and "C4: every view" from the checklist, plus the section named like the view. A finding names the view, the rule,
    the tile and the element.

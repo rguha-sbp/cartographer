@@ -289,6 +289,11 @@ A lifted edge over several relationships reads their shared `summary` (else thei
 relationship needs a label, and a technology when both ends are containers, components or code (except code
 `inherits` and `implements`).
 
+Evidence: a deployment node's `fact` needs only to exist; an element's `fact` must have an end on a node hosting its
+container, and a relationship's must run between the hosts of its two ends. A successful build prints the whole
+report: "C4 model: ok", then every container, component, code element, relationship and deployment node that rests
+only on `stated`.
+
 Review: `snapshot` prints `view: <page name>` first (`snapshot.page_name` reads the first `<diagram name=...>`).
 `REVIEW.md` picks the rules from it: "Every diagram" plus "Layer 7" or "C4: every view" plus the section named like the page.
 

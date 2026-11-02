@@ -35,11 +35,9 @@ def build(args: argparse.Namespace) -> int:
     facts = json.loads(cached_facts(args.name).read_text()) if model.get("source") == "terraform" else None
 
     errors = c4_verify.verify(model, facts, repo)
-    report = c4_verify.report(errors, c4_verify.stated_only(model))
+    print(c4_verify.report(errors, c4_verify.stated_only(model)), end="")
     if errors:
-        print(report, end="")
         return EXIT_VERIFY
-    print(report.splitlines()[0])
     views = c4_views.views(model)
 
     # Every view is laid out and rendered before anything is written, so a failure leaves the folder as it was.

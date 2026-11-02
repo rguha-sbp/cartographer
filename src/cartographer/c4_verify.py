@@ -125,13 +125,14 @@ def _hosts(model: Model, eid: str) -> set[str]:
     return {a for n in _nodes(model) if n["id"] in hosting for a in n.get("tf", [])}
 
 
-def _joins(ends: tuple[set[str], set[str]], fact: dict) -> bool:
-    """True when the fact's src and dst sit on the hosts of the two ends, in either direction."""
+def _joins(fact: dict, ends: tuple[set[str], ...]) -> bool:
+    """The fact's src and dst, in either order, land on the host sets in `ends`: none for a deployment node, the
+    hosts of an element, or the hosts of a relationship's two ends."""
     src, dst = fact.get("src"), fact.get("dst")
-    return src in ends[0] and dst in ends[1] or src in ends[1] and dst in ends[0]
+    return any(all(a in hosts for a, hosts in zip(pair, ends)) for pair in ((src, dst), (dst, src)))
 
 
-def _evidence(item: dict, known: dict[str, dict] | None, repo: Path, ends: tuple[set[str], set[str]] | None = None) -> list[str]:
+def _evidence(item: dict, known: dict[str, dict] | None, repo: Path, ends: tuple[set[str], ...]) -> list[str]:
     """Problems with item's evidence; known maps fact ids to facts, None without facts."""
     out = []
     for ev in item["evidence"]:
@@ -139,8 +140,8 @@ def _evidence(item: dict, known: dict[str, dict] | None, repo: Path, ends: tuple
             out.append(f"{item['id']}: fact {ev['fact']} needs Terraform facts")
         elif "fact" in ev and ev["fact"] not in known:
             out.append(f"{item['id']}: fact {ev['fact']} not found")
-        elif "fact" in ev and ends and not _joins(ends, known[ev["fact"]]):
-            out.append(f"{item['id']}: fact {ev['fact']} does not join the nodes hosting its two ends")
+        elif "fact" in ev and not _joins(known[ev["fact"]], ends):
+            out.append(f"{item['id']}: fact {ev['fact']} does not join the deployment nodes hosting it")
         elif "file" in ev and (reason := code_hit(repo, ev)):
             out.append(f"{item['id']}: {reason}")
     return out
@@ -148,11 +149,11 @@ def _evidence(item: dict, known: dict[str, dict] | None, repo: Path, ends: tuple
 
 def _evidence_rules(model: Model, facts: dict | None, repo: Path) -> list[str]:
     known = None if facts is None else {f["id"]: f for key in ("edges", "vpcs", "placements") for f in facts.get(key, [])}
-    by_id = elements(model)
-    out = [e for item in (*model["elements"], *_nodes(model)) for e in _evidence(item, known, repo)]
-    for r in model["relationships"]:
-        ends = (_hosts(model, r["src"]), _hosts(model, r["dst"])) if r["src"] in by_id and r["dst"] in by_id else None
-        out += _evidence(r, known, repo, ends)
+    hosts = {e["id"]: _hosts(model, e["id"]) for e in model["elements"]}
+    out = [p for n in _nodes(model) for p in _evidence(n, known, repo, ())]
+    out += [p for e in model["elements"] for p in _evidence(e, known, repo, (hosts[e["id"]],))]
+    out += [p for r in model["relationships"]
+            for p in _evidence(r, known, repo, (hosts.get(r["src"], set()), hosts.get(r["dst"], set())))]
     return out
 
 
@@ -202,9 +203,11 @@ def verify(model: Model, facts: dict | None, repo: Path) -> list[str]:
 
 
 def stated_only(model: Model) -> list[str]:
-    """Containers, components and code elements whose only evidence is what the engineer said; safe on any model."""
-    return sorted(e["id"] for e in model.get("elements", [])
-                  if e["type"] in ("container", "component", "code") and all("stated" in ev for ev in e["evidence"]))
+    """Containers, components, code elements, relationships and deployment nodes whose only evidence is what the
+    engineer said; safe on any model."""
+    items = [*(e for e in model.get("elements", []) if e["type"] in INSIDE), *model.get("relationships", []),
+             *_nodes(model)]
+    return sorted(i["id"] for i in items if all("stated" in ev for ev in i["evidence"]))
 
 
 def report(errors: list[str], stated: list[str]) -> str:

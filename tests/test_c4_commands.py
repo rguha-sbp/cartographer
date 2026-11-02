@@ -105,6 +105,14 @@ def test_build_c4_prints_every_written_path(tmp_path: Path, capsys, renderer) ->
         assert str(out / name) in lines and str(files.image_path(out / name)) in lines
 
 
+def test_build_c4_lists_what_rests_only_on_stated(tmp_path: Path, capsys, renderer) -> None:
+    _model(_shop())
+    assert _build(tmp_path) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("C4 model: ok\n")
+    assert "Stated by the engineer, not found in the repo (8)\n  api\n  auth\n  cart\n  db\n  r1\n" in out
+
+
 def test_build_c4_overwrites_without_asking(tmp_path: Path, renderer) -> None:
     out = tmp_path / "out"
     out.mkdir()
