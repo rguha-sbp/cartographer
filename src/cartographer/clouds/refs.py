@@ -58,9 +58,9 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
     return out
 
 
-def derive(name: str) -> str:
+def derive(name: str, suffixes: str = "ids?") -> str:
     """The network name a remote output or data source name implies: `shared_vpc_id` -> `shared-vpc`."""
-    return re.sub(r"_ids?$", "", name).replace("_", "-")
+    return re.sub(rf"_({suffixes})$", "", name).replace("_", "-")
 
 
 def tier_in(name: str) -> str | None:

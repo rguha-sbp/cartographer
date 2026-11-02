@@ -49,6 +49,16 @@ def test_local_subnet_tiers() -> None:
     assert vpcs[placements["aws_lb.front"]["network"]] == "aws_vpc.main"
 
 
+def test_interpolated_subnet_names_still_inform_the_tier(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'variable "env" { default = "dev" }\n'
+        'resource "aws_vpc" "v" { cidr_block = "10.0.0.0/16" }\n'
+        'resource "aws_subnet" "a" {\n  vpc_id = aws_vpc.v.id\n  tags = { Name = "${var.env}-public" }\n}\n'
+        'resource "aws_instance" "i" { subnet_id = aws_subnet.a.id }\n')
+    placed = {p["resource"]: p for p in tf_extract.extract(Path("."), tmp_path)["placements"]}
+    assert placed["aws_instance.i"]["tier"] == "public"
+
+
 def test_remote_tier_from_output_name_through_module_variable() -> None:
     placement = _placements()["module.worker.aws_lambda_function.fn"]
     assert placement["tier"] == "private"

@@ -21,6 +21,7 @@ NETWORK_KEY = re.compile(r"(\w*_)?virtual_network_(id|name)")
 SUBNET_KEY = re.compile(r"(?!virtual_network_subnet_ids?$)(\w*_)?subnet_ids?")
 FRONTEND = "frontend_ip_configuration"
 PUBLIC_IP_KEY = re.compile(r"public_ip_address(_id)?")
+NAME_SUFFIXES = "ids?|name"
 RESERVED_PUBLIC = {"GatewaySubnet", "AzureBastionSubnet", "AzureFirewallSubnet"}
 NOT_PLACED = {"azurerm_subnet", "azurerm_virtual_network"}
 TOKEN = token(r"azurerm_\w+", "azurerm_(?:virtual_network|subnet)")
@@ -77,7 +78,7 @@ class Network:
             for value in find(r.block.body, NETWORK_KEY):
                 for ref in self.refs(r.inst, value):
                     if ref.remote and ref.address not in self.nets:
-                        self.nets[ref.address] = self._net(ref.address, derive(ref.name or ""), [], True, r)
+                        self.nets[ref.address] = self._net(ref.address, derive(ref.name or "", NAME_SUFFIXES), [], True, r)
 
     def collect_subnets(self) -> None:
         for r in self.ex.res:
@@ -191,13 +192,13 @@ class Network:
         if self.literal(s.owner, s.body.get("default_outbound_access_enabled")) == "false":
             return "isolated", f"{s.address} default_outbound_access_enabled = false"
         tags = s.body.get("tags")
-        tagged = [self.literal(s.owner, v) for k, v in tags.items() if unq(k) == "Name"] if isinstance(tags, dict) else []
-        named = tier_in(" ".join(x for x in (name, *tagged) if x))
+        tagged = [v for k, v in tags.items() if unq(k) == "Name"] if isinstance(tags, dict) else []
+        named = tier_in(" ".join(unq(x) for x in (s.body.get("name", ""), *tagged)))
         return (named, f"{s.address} name") if named else ("private", f"{s.address} default")
 
     def remote_network(self, name: str) -> str | None:
         """Address of the remote network whose name prefixes an output name (`shared_vnet_private_subnet_id`)."""
-        hyphenated = derive(name)
+        hyphenated = derive(name, NAME_SUFFIXES)
         named = [(len(n["name"]), a) for a, n in self.nets.items() if n["remote"] and hyphenated.startswith(n["name"] + "-")]
         return max(named)[1] if named else None
 

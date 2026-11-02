@@ -102,6 +102,17 @@ def test_remote_networks_from_data_sources_and_outputs_have_names_and_no_cidrs()
     assert (ids[placed["network"]], placed["tier"]) == ("shared-vnet", "private")
 
 
+def test_interpolated_subnet_names_still_inform_the_tier():
+    assert tier_of("interpolated_tier_names", "azurerm_private_endpoint.pa") == ("public", "azurerm_subnet.a name")
+    assert tier_of("interpolated_tier_names", "azurerm_private_endpoint.pb") == ("isolated", "azurerm_subnet.b name")
+
+
+def test_a_remote_network_named_by_a_name_output_drops_the_name_suffix_and_is_placed():
+    nets = {n["id"]: n["name"] for n in facts("remote_network_by_name")["networks"]}
+    placed = placements("remote_network_by_name")["azurerm_private_endpoint.pa"]
+    assert (nets[placed["network"]], placed["tier"]) == ("hub-vnet", "private")
+
+
 def test_every_network_and_placement_names_azure_and_ids_do_not_clash():
     for case in ("public_nic_ip", "peered_networks", "remote_networks"):
         found = facts(case)
