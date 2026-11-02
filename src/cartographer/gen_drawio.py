@@ -1,5 +1,5 @@
-"""Render a Diagram as a draw.io file: icons, lines, title and legend here, boxes and groups as the notation draws
-them."""
+"""Render a Diagram as a draw.io file: icons in each cloud's own shapes, lines, title and legend here, boxes and groups
+as the notation draws them."""
 
 import html
 import xml.etree.ElementTree as ET

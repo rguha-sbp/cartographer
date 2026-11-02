@@ -44,7 +44,7 @@ Step 3: produce the curated JSON
   counting what was dropped per kind. Every distinct external system a hint suggests must be drawn as an external whose
   evidence is a code citation (file, line, contains) naming the hint value, or be listed in `omitted` as
   {"hint": <hint id or value>, "reason": <at most 80 characters>}. Several hints for one system (its host, its
-  parameter and its folder) need one external. AWS's own hosts (amazonaws.com) are not externals. Read the hinted file
+  parameter and its folder) need one external. A cloud's own hosts (amazonaws.com, azure.com, windows.net, azure.net) are not externals. Read the hinted file
   and line before deciding; verify reports every hint that is neither cited nor omitted.
 - A cloud managed service the stack calls but Terraform does not create (Bedrock foundation models, Azure OpenAI in
   another subscription, a shared service in another account) is an external with `tf_type` set to the

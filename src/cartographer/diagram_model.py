@@ -7,7 +7,7 @@ ICON = 60
 ICON_LABEL = 34
 BOX_W, BOX_H = 200, 56
 ORIGIN = (40, 100)  # top-left of the drawing below the title; the legend starts at the same x
-FRAME_TITLE_LEFT, GROUP_TITLE_LEFT = 30, 8  # a group title starts this far in: after the AWS frame icon, or plain
+FRAME_TITLE_LEFT, GROUP_TITLE_LEFT = 30, 8  # a group title starts this far in: after the cloud frame icon, or plain
 
 BLUE, RED, GREEN, PURPLE, GREY = "#147EBA", "#DD344C", "#1D8102", "#8C4FFF", "#879196"
 EDGE_DEFAULT = "#545B64"
