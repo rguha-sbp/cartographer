@@ -177,7 +177,7 @@ def cache(tmp_path: Path, monkeypatch) -> Path:
 @pytest.fixture
 def renderer(monkeypatch, bundled_app) -> None:
     monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
-    monkeypatch.setattr(svg_export, "export_svg", lambda mxfile, url: f"<svg>{files.sha256_text(mxfile)}</svg>")
+    monkeypatch.setattr(svg_export, "export_svg", lambda mxfile, source_sha256, url: f"<svg>{source_sha256}</svg>")
 
 
 def _write(repo: Path, curated: dict) -> Path:

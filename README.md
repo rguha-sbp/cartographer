@@ -1,7 +1,8 @@
 # cartographer
 
-cartographer draws Layer 7 AWS architecture diagrams as draw.io files, either from the Terraform in your repo or from
-a solution you describe to Claude. Claude does the curation and, in describe mode, an interview. The tool does layout,
+cartographer draws Layer 7 AWS architecture diagrams and C4 diagram sets (System Context, Container, Component, Code,
+Deployment and Dynamic views, to the C4 model standard) as draw.io files, either from the code and Terraform in your
+repo or from a solution you describe to Claude. Claude does the curation and, in describe mode, an interview. The tool does layout,
 routing and verification and never calls a model. A diagram is only called ready after a visual review loop in which
 Claude looks at the rendered image, fixes what is wrong and looks again.
 
@@ -125,6 +126,25 @@ Claude then:
 4. Ends by listing every assumption it made in chat so you can correct them. Assumptions are never shown on the
    diagram.
 
+### C4 mode
+
+Use it for a C4 set instead of an AWS diagram:
+
+```
+/cartographer:cartographer draw the C4 diagrams of this system
+```
+
+Claude asks "AWS architecture diagram or C4 set?" and then:
+
+1. Reads the Terraform if there is some, or interviews you if not. Each question names the C4 level, what is needed
+   and why.
+2. Asks whether you want Code-level diagrams. C4 makes them optional, so they are built only if you say yes.
+3. Curates the model, builds one diagram per view (Context, Container, Component, Deployment, Dynamic) and reviews each
+   one against the checklist, with the rules for its view type.
+
+C4 runs overwrite the diagrams every time and delete the view files the model no longer produces. No curated file is
+kept in the repo.
+
 ## Where files land
 
 Everything goes to `docs/architecture/diagrams/` in your repo:
@@ -136,7 +156,7 @@ Everything goes to `docs/architecture/diagrams/` in your repo:
 | `<name>.curated.json` | the curation: what was drawn and the evidence for it |
 | `README.md` | generated index of the diagrams in the folder |
 
-Commit all four. Intermediates (facts, schema, screenshots) live in the plugin data folder (`~/.cache/cartographer/<name>/` for the
+Commit all four. A C4 set instead writes one `<name>-c4.drawio` with a page (a tab in draw.io) per view, an `.svg` per view (for example `shop-c4-1-context.svg`, `shop-c4-2-container.svg`, `shop-c4-3-component-api.svg`, `shop-c4-5-deployment.svg`) and the index `README.md`, with one row per view. There is no curated file to commit. Intermediates (facts, schema, screenshots) live in the plugin data folder (`~/.cache/cartographer/<name>/` for the
 standalone CLI) and are not committed. Claude never commits or pushes for you.
 
 ## Nesting on the diagram
@@ -149,7 +169,8 @@ An L7 diagram nests AWS Cloud, region, account, VPC, subnet tier and workload:
 - Workload frames hold the services of one application, so separate workloads read as separate, inside a subnet frame
   or directly under the account for regional services such as S3.
 
-The view command opens the diagram in the bundled draw.io editor. To change a diagram, edit it there as below.
+The view command opens the diagram in the bundled draw.io editor. A C4 set opens with `view <name>-c4`, one tab per
+view. To change a diagram, edit it there as below.
 
 ## Editing a diagram by hand
 
@@ -186,10 +207,12 @@ Without the plugin, prefix each command with
 |---|---|
 | `extract INFRA_DIR --name NAME` | cache the Terraform facts and print the inputs key |
 | `prompt --name NAME [--describe]` | print the curation prompt, or the describe prompt for a new solution |
+| `prompt --name NAME --c4 [--describe]` | print the C4 curation prompt, or the interview-led one |
 | `build --name NAME [--replace \| --side-file]` | verify, then write `.drawio`, `.svg` and the folder index |
-| `image FILE.drawio` | regenerate the `.svg` next to a `.drawio` |
-| `check FOLDER` | offline: fail when a `.drawio` has no image or a stale one |
-| `snapshot FILE.drawio -o DIR` | PNG and tiles from the bundled draw.io, for the visual review |
+| `build --name NAME --c4` | verify `model.json`, then write `NAME-c4.drawio` with a page and an `.svg` per C4 view; overwrites, deletes stale view images |
+| `image FILE.drawio` | regenerate the `.svg` next to a `.drawio`, one per page of a file of several |
+| `check FOLDER` | offline: fail when a page of a `.drawio` has no image or a stale one |
+| `snapshot FILE.drawio -o DIR` | per page: print `view: <page name>`, then its PNG and tiles from the bundled draw.io, for the visual review |
 | `view FILE.drawio` | edit in the bundled draw.io until the tab is closed |
 | `docs interview\|review\|rules` | print the path of a packaged document |
 

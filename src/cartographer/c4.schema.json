@@ -1,0 +1,376 @@
+{
+  "$defs": {
+    "element": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "external": {
+          "type": "boolean"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parent": {
+          "type": "string"
+        },
+        "shape": {
+          "enum": [
+            "app",
+            "store",
+            "queue"
+          ]
+        },
+        "stereotype": {
+          "enum": [
+            "class",
+            "interface",
+            "enum",
+            "record",
+            "module"
+          ]
+        },
+        "technology": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "person",
+            "system",
+            "container",
+            "component",
+            "code"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "name",
+        "description",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "evidence": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fact": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "fact"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contains": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            },
+            "line": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "file",
+            "line",
+            "contains"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "stated": {
+              "description": "A short paraphrase of what the engineer said. Only for source description.",
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "stated"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "id": {
+      "description": "Lower-case letters, digits, '-' and '_': it becomes part of a file name.",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "type": "string"
+    },
+    "node": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "frame": {
+          "enum": [
+            "cloud",
+            "region",
+            "account",
+            "vpc",
+            "subnet"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parent": {
+          "type": "string"
+        },
+        "service": {
+          "description": "AWS icon name",
+          "type": "string"
+        },
+        "technology": {
+          "type": "string"
+        },
+        "tf": {
+          "description": "Terraform addresses",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tier": {
+          "enum": [
+            "public",
+            "private",
+            "isolated"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "technology",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "relationship": {
+      "additionalProperties": false,
+      "properties": {
+        "dashed": {
+          "type": "boolean"
+        },
+        "dst": {
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "default": "uses",
+          "description": "Code level only.",
+          "enum": [
+            "uses",
+            "inherits",
+            "implements"
+          ]
+        },
+        "label": {
+          "maxLength": 40,
+          "type": "string"
+        },
+        "src": {
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 40,
+          "type": "string"
+        },
+        "technology": {
+          "maxLength": 30,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "src",
+        "dst",
+        "label",
+        "dashed",
+        "evidence"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assumptions": {
+      "description": "Best guesses for what the engineer did not say. Never drawn. about is a node or external id, or an edge written as src->dst with the ids of its two ends, for example fn->psp.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "about": {
+            "type": "string"
+          },
+          "guess": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "about",
+          "guess"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "deployment": {
+      "additionalProperties": false,
+      "properties": {
+        "environment": {
+          "type": "string"
+        },
+        "instances": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "container": {
+                "type": "string"
+              },
+              "node": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "container",
+              "node"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/node"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "environment",
+        "nodes",
+        "instances"
+      ],
+      "type": "object"
+    },
+    "elements": {
+      "items": {
+        "$ref": "#/$defs/element"
+      },
+      "type": "array"
+    },
+    "omitted": {
+      "description": "Source terraform only: Terraform that is not drawn.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 80,
+            "type": "string"
+          },
+          "tf": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tf",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "relationships": {
+      "items": {
+        "$ref": "#/$defs/relationship"
+      },
+      "type": "array"
+    },
+    "scenarios": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "name": {
+            "type": "string"
+          },
+          "steps": {
+            "description": "Relationship ids",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "steps"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "source": {
+      "description": "terraform: drawn from Terraform facts and code. description: drawn from what an engineer described, no facts file.",
+      "enum": [
+        "terraform",
+        "description"
+      ]
+    }
+  },
+  "required": [
+    "source",
+    "elements",
+    "relationships"
+  ],
+  "title": "C4 model",
+  "type": "object"
+}

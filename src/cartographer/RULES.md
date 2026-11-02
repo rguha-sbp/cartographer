@@ -30,3 +30,13 @@ Each rule, where it is enforced, and where it comes from.
 | Captions are a specific verb plus protocol where known, never "uses" | curation prompt (`curate_prompt.md`, schema `maxLength` 28) | C4 model notation |
 | Official AWS icons and group frames (cloud, region, account, VPC) | renderer (`gen_drawio`, `aws_icons.json`) | AWS Architecture Icons |
 | Layout fits A4 landscape | `tf_layout` grid choice | AWS networking best-practices conventions |
+| C4: the page name and the title state the view type and scope ("Container diagram for S") | `c4_views` | C4 model notation |
+| C4: the key explains every shape, colour, line style and arrowhead drawn | `c4_views` legend, `c4_styles` | C4 model notation |
+| C4: every element shows name, type and description; containers and components show technology | `c4_verify` required fields; `c4_boxes` text blocks | C4 model notation |
+| C4: every relationship is one arrow with a label; between containers it names the technology or protocol | `c4_verify` | C4 model notation |
+| C4: Context holds the system, people and external systems only; levels are never mixed | `c4_verify`, `c4_views` | C4 model notation |
+| C4: containers sit in a system boundary; a Component view draws everything outside its container outside the boundary | `c4_views` | C4 model notation |
+| C4: plain shapes in the standard palette, no AWS icons (Deployment keeps AWS frames for nodes), solid sync and dashed async | `c4_styles`, `c4_deploy` | C4 model notation |
+| C4: Code views hold type name and stereotype only, and exist only with the engineer's consent | `c4_verify` (no `code` elements without consent), `c4_views` | C4 model notation |
+| C4: Dynamic arrows carry their step number | `c4_views` | C4 model notation |
+| C4: every C4 view obeys the line, icon and caption rules above; nothing flashy or animated | `tf_check`, `tf_route`, `c4_styles` | libavoid/ELK routing principles |

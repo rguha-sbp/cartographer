@@ -5,10 +5,10 @@ import re
 import xml.etree.ElementTree as ET
 
 from cartographer.diagram_model import Box, Diagram, Edge, Group, Icon, Legend, Title
-from cartographer.gen_drawio import GROUP_STYLES
+from cartographer.notation import FRAME_STYLES
 
 SKIP = {"title", "legend"}
-KINDS = {f"mxgraph.aws4.{style.split(';')[0]}": key.split("-")[0] for key, style in GROUP_STYLES.items()}
+KINDS = {f"mxgraph.aws4.{style.split(';')[0]}": key.split("-")[0] for key, style in FRAME_STYLES.items()}
 
 
 def _text(value: str) -> str:

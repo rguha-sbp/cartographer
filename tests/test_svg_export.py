@@ -1,4 +1,3 @@
-import hashlib
 import subprocess
 from xml.etree import ElementTree
 
@@ -76,13 +75,12 @@ def test_export_runs_headless_chrome_with_dump_dom(monkeypatch) -> None:
     monkeypatch.setattr(snapshot, "find_chrome", lambda: "/bin/chrome")
     monkeypatch.setattr(svg_export.subprocess, "run", fake_run)
     monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
-    out = svg_export.export_svg(mxfile, "http://localhost:8080", _fetch)
+    out = svg_export.export_svg(mxfile, SHA, "http://localhost:8080", _fetch)
     assert "--dump-dom" in seen[0]
-    root = ElementTree.fromstring(out)
-    assert root.get("data-cartographer-source-sha256") == hashlib.sha256(mxfile.encode()).hexdigest()
+    assert ElementTree.fromstring(out).get("data-cartographer-source-sha256") == SHA
 
 
 def test_export_refuses_when_the_local_draw_io_is_down(monkeypatch) -> None:
     monkeypatch.setattr(snapshot, "drawio_up", lambda url: False)
     with pytest.raises(svg_export.SvgError, match="no draw.io answers"):
-        svg_export.export_svg("<mxfile/>", "http://localhost:8080", _fetch)
+        svg_export.export_svg("<mxfile/>", SHA, "http://localhost:8080", _fetch)

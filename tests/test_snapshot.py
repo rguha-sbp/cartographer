@@ -64,7 +64,7 @@ def test_drawio_not_running_exits_2(tmp_path, monkeypatch, capsys):
 
 def test_main_writes_full_and_tiles(tmp_path, monkeypatch, capsys, bundled_app):
     d = tmp_path / "a.drawio"
-    d.write_text(XML)
+    d.write_text(XML.replace("<diagram>", '<diagram name="Container diagram for Shop">'))
     out = tmp_path / "out"
     calls = []
 
@@ -79,14 +79,38 @@ def test_main_writes_full_and_tiles(tmp_path, monkeypatch, capsys, bundled_app):
     monkeypatch.setattr(snapshot.subprocess, "run", fake_run)
     assert snapshot.main([str(d), "-o", str(out)]) == 0
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0] == str(out / "a.png")
-    assert [Path(p).name for p in lines[1:]] == [
+    assert lines[0] == "view: Container diagram for Shop"
+    assert lines[1] == str(out / "a.png")
+    assert [Path(p).name for p in lines[2:]] == [
         "a.tile-r0c0.png", "a.tile-r0c1.png", "a.tile-r1c0.png", "a.tile-r1c1.png"]
     assert len(calls) == 5
     assert "--window-size=640,540" in calls[0]
     assert "--force-device-scale-factor=2" in calls[0]
     assert f"--host-resolver-rules={snapshot.OFFLINE_RULES}" in calls[0]
     assert calls[0][-1].startswith(bundled_app)
+
+
+def test_main_shoots_every_page_of_a_book_alone(tmp_path, monkeypatch, capsys, bundled_app):
+    model = XML[XML.index("<mxGraphModel>"):XML.index("</diagram>")]
+    wide = model.replace('width="400"', 'width="900"')
+    d = tmp_path / "shop-c4.drawio"
+    d.write_text(f'<mxfile><diagram id="1-context" name="Context">{model}</diagram>'
+                 f'<diagram id="2-container" name="Container">{wide}</diagram></mxfile>')
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        Path(next(a for a in cmd if a.startswith("--screenshot=")).split("=", 1)[1]).write_bytes(b"png")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
+    monkeypatch.setattr(snapshot, "find_chrome", lambda: "/bin/chrome")
+    monkeypatch.setattr(snapshot.subprocess, "run", fake_run)
+    assert snapshot.main([str(d), "-o", str(tmp_path), "--tiles", "1x1"]) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "view: Context", str(tmp_path / "shop-c4-1-context.png"),
+        "view: Container", str(tmp_path / "shop-c4-2-container.png")]
+    assert ["--window-size=640,540" in calls[0], "--window-size=1140,540" in calls[1]] == [True, True]
 
 
 def test_find_chrome_missing(monkeypatch):

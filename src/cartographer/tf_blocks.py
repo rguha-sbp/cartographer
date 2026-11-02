@@ -10,7 +10,7 @@ from cartographer.tf_geom import GROUP_CLEAR, LINE_GAP, NODE_CLEAR, label_size
 CELL_W = CELL_H = 150  # icon pitch: ICON plus a label below, with air
 GROUP_PAD_X, GROUP_PAD_TOP = 30, 50
 FRAME_PAD_X, FRAME_PAD_TOP = 20, 40
-GAP = 40
+GAP = 40  # air beside a box; a notation sets the air below it (its row_gap)
 CHANNEL_TRACKS = 6  # lines that fit between two blocks side by side, each keeping GROUP_CLEAR from both
 BLOCK_GAP = 2 * GROUP_CLEAR + (CHANNEL_TRACKS - 1) * LINE_GAP
 LABEL_CHAR_W, LABEL_PAD = 7, 40
@@ -36,19 +36,13 @@ def cell_w(labels: list[str]) -> int:
 
 def shape(n: dict[str, Any]) -> str:
     """What a node is drawn as: its `icon` (a generic or brand shape for a non-AWS node), else its AWS service."""
-    return n.get("icon", n["service"])
+    return n["icon"] if "icon" in n else n["service"]
 
 
-def _cell_w(nodes: list[dict[str, Any]]) -> int:
-    """Grids holding a plain box widen every cell so neighbouring boxes cannot overlap."""
-    if any(not has_icon(shape(n)) for n in nodes):
-        return BOX_W + GAP
-    return cell_w([_label(n) for n in nodes])
-
-
-def _grid(nodes: list[dict[str, Any]], cols: int) -> Size:
-    """Size of the nodes' cells in at most `cols` columns."""
-    return min(len(nodes), cols) * _cell_w(nodes), math.ceil(len(nodes) / cols) * CELL_H
+def box_size(n: dict[str, Any]) -> Size:
+    """A plain box's size: its curated `box`, else the default box."""
+    w, h = n.get("box", (BOX_W, BOX_H))
+    return w, h
 
 
 def group_label(g: dict[str, Any]) -> str:
@@ -61,12 +55,13 @@ def _label(n: dict[str, Any]) -> str:
 
 
 class Blocks:
-    """Places the group tree with at most `cols` node columns per block; empty blocks are left out."""
+    """Places the group tree with at most `cols` node columns per block and `row_gap` between whatever stacks
+    vertically in a block; empty blocks are left out."""
 
-    def __init__(self, curated: Curated, cols: int) -> None:
+    def __init__(self, curated: Curated, cols: int, row_gap: int) -> None:
         self.colours = Colours(curated)
         empty = set(empty_blocks(curated))
-        self.cols = cols
+        self.cols, self.row_gap = cols, row_gap
         self.groups = {g["id"]: g for g in curated["groups"] if g["id"] not in empty}
         self.frames = [g for g, v in self.groups.items() if v["kind"] in FRAMES]
         self.blocks = [g for g, v in self.groups.items() if v["kind"] not in FRAMES]
@@ -78,24 +73,38 @@ class Blocks:
         self.out_groups: list[Group] = []
         self.out_leaves: list[Icon | Box] = []
 
+    def _cell(self, nodes: list[dict[str, Any]]) -> Size:
+        """Grids holding a plain box widen every cell to the widest box so neighbouring boxes cannot overlap, and
+        heighten it to the tallest box with row_gap below."""
+        boxes = [box_size(n) for n in nodes if not has_icon(shape(n))]
+        if not boxes:
+            return cell_w([_label(n) for n in nodes]), CELL_H
+        return max(w for w, _ in boxes) + GAP, max(CELL_H, max(h for _, h in boxes) + self.row_gap)
+
+    def _grid(self, nodes: list[dict[str, Any]], cols: int) -> Size:
+        """Size of the nodes' cells in at most `cols` columns."""
+        w, h = self._cell(nodes)
+        return min(len(nodes), cols) * w, math.ceil(len(nodes) / cols) * h
+
     def measure(self, bid: str) -> Size:
         kids = [self.measure(c) for c in self.children[bid]]
         own = self.nodes.get(bid, [])
-        grid_w, grid_h = _grid(own, self.cols) if own else (0, 0)
+        grid_w, grid_h = self._grid(own, self.cols) if own else (0, 0)
         stacked = [h for _, h in kids] + ([grid_h] if own else [])
         label_w = LABEL_CHAR_W * len(group_label(self.groups[bid])) + LABEL_PAD
         return (max(max([grid_w, *(w for w, _ in kids)]) + 2 * GROUP_PAD_X, label_w),
-                GROUP_PAD_TOP + sum(stacked) + GAP * (len(stacked) - 1) + GROUP_PAD_X)
+                GROUP_PAD_TOP + sum(stacked) + self.row_gap * (len(stacked) - 1) + GROUP_PAD_X)
 
     def place_leaves(self, nodes: list[dict[str, Any]], x: int, y: int, parent: str | None, cols: int) -> None:
-        cell_w = _cell_w(nodes)
+        cw, ch = self._cell(nodes)
         for i, n in enumerate(nodes):
-            cx, cy = x + (i % cols) * cell_w, y + (i // cols) * CELL_H
+            cx, cy = x + (i % cols) * cw, y + (i // cols) * ch
             if has_icon(shape(n)):
-                self.out_leaves.append(Icon(n["id"], _label(n), shape(n), cx + (cell_w - ICON) // 2, cy, parent))
+                self.out_leaves.append(Icon(n["id"], _label(n), shape(n), cx + (cw - ICON) // 2, cy, parent))
             else:
-                self.out_leaves.append(Box(n["id"], _label(n), cx + (cell_w - BOX_W) // 2,
-                                           cy + (ICON - BOX_H) // 2, parent=parent))
+                w, h = box_size(n)  # level with an icon's middle; a box taller than an icon starts at the cell top
+                self.out_leaves.append(Box(n["id"], _label(n), cx + (cw - w) // 2, cy + max(ICON - h, 0) // 2, w, h,
+                                           parent, shape(n)))
 
     def place(self, bid: str, x: int, y: int, w: int) -> int:
         """Place a block at (x, y) with width w; return its height."""
@@ -105,7 +114,7 @@ class Blocks:
                                      stroke=self.colours.group(bid) or GREY))
         top = y + GROUP_PAD_TOP
         for c in self.children[bid]:
-            top += self.place(c, x + GROUP_PAD_X, top, self.measure(c)[0]) + GAP
+            top += self.place(c, x + GROUP_PAD_X, top, self.measure(c)[0]) + self.row_gap
         self.place_leaves(self.nodes.get(bid, []), x + GROUP_PAD_X, top, bid, self.cols)
         return h
 
@@ -124,10 +133,11 @@ class Blocks:
             cx += w + BLOCK_GAP
         used_w, used_h = max(cx - BLOCK_GAP - x, 0), max(col_h, default=0)
         if loose:
-            row_cols = max(used_w // _cell_w(loose), 1)
-            self.place_leaves(loose, x, y + used_h + (GAP if used_h else 0), parent, row_cols)
-            loose_w, loose_h = _grid(loose, row_cols)
-            used_h += (GAP if used_h else 0) + loose_h
+            row_cols = max(used_w // self._cell(loose)[0], 1)
+            above = self.row_gap if used_h else 0
+            self.place_leaves(loose, x, y + used_h + above, parent, row_cols)
+            loose_w, loose_h = self._grid(loose, row_cols)
+            used_h += above + loose_h
             used_w = max(used_w, loose_w)
         return used_w, used_h
 

@@ -1,6 +1,6 @@
 ---
 name: cartographer
-description: Build a verified AWS architecture diagram (draw.io and svg) either from the Terraform in this repo or from an engineer's description of a new solution, then review the rendered result visually and fix curation findings until it is clean. Use when asked to generate, refresh, design or check an architecture diagram.
+description: Build a verified AWS architecture diagram or a C4 diagram set (draw.io and svg) either from the Terraform in this repo or from an engineer's description of a new solution, then review the rendered result visually and fix curation findings until it is clean. Use when asked to generate, refresh, design or check an architecture diagram, or a C4 model, system context, container, component, code, deployment or dynamic diagram.
 ---
 
 # Cartographer diagram loop
@@ -14,11 +14,14 @@ out in full.
 
 ## 0. Choose the mode
 
+First ask: "AWS architecture diagram or C4 set?" For a C4 set, follow the C4 flow below instead of steps 1 to 5, then
+review (step 6) and stop as in Stopping. For an AWS diagram:
+
 - The repo has a Terraform folder (`infra/`, `terraform/`, or one the user names): ask whether to draw from it
   (Terraform flow, steps 3 to 5) or describe a new solution (describe flow below).
 - No Terraform folder: describe mode, go straight to the describe flow.
 
-Both flows end in the same review loop (step 6) and the same checks.
+Both AWS flows end in the same review loop (step 6) and the same checks.
 
 ## 1. Name and folders
 
@@ -79,6 +82,39 @@ If the user kept a hand-edited .drawio, regenerate its image with
 `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" image docs/architecture/diagrams/<name>.drawio`
 (exit 5 means the bundled draw.io or Chrome is unavailable).
 
+## C4 flow (instead of steps 1 to 5)
+
+A C4 set is one diagram per view: System Context, Container, Component, Deployment, Dynamic and, only with the
+engineer's consent, Code. Ask for the system name (lowercase kebab-case, for example `shop`); it prefixes every file.
+
+1. Extract, only when the repo has Terraform: `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" extract INFRA_DIR --name NAME`.
+2. Get the prompt: `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" prompt --name NAME --c4` (Terraform or code to read) or
+   `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" prompt --name NAME --c4 --describe` (no Terraform: interview-led). It writes the schema to the cache folder
+   and prints the C4 prompt. For the interview, get the playbook path with
+   `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" docs interview`, Read section 7 and follow it: one question per message, each naming the level, what you need
+   and why, the C4 gap checklist, and the consent question before any Code level.
+3. Curate `model.json` in the cache folder, as the prompt says. Evidence rules apply: never invent evidence.
+4. Build: `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" build --name NAME --c4`. Fix what it reports in `model.json` and rebuild.
+   The build first checks `model.json` against the schema and reports each misfit by its JSON path (for example
+   `relationships[3]: missing 'dashed'`); it checks nothing else until the model fits. A clean build prints "C4 model: ok", then the containers, components, code elements, relationships and deployment
+   nodes that rest only on `stated`: repeat that list to the user in the final summary.
+5. Review every produced view with step 6 below. The snapshot shoots every page of `<name>-c4.drawio` and prints
+   `view: <page name>` before the PNGs of each page. Apply "Every diagram"
+   and "C4: every view" from the checklist, plus the section named like the view. A finding names the view, the rule,
+   the tile and the element.
+6. Show it (step 7) applies to C4: open `<name>-c4.drawio` the same way as for an AWS diagram; each view is a tab.
+7. Run the `check` command from Stopping.
+
+C4 runs differ from the AWS flow:
+
+- Each run overwrites `docs/architecture/diagrams/<name>-c4.drawio` (one page per view) and the image of every view,
+  `<name>-c4-<view>.svg`. There is no hand-edit guard: do not edit those files by hand.
+- Each run deletes the images of views the model no longer produces (`<name>-c4-1-context.svg`,
+  `<name>-c4-2-container.svg`, `<name>-c4-3-component-<id>.svg`, `<name>-c4-4-code-<id>.svg`,
+  `<name>-c4-5-deployment.svg`, `<name>-c4-6-dynamic-<id>.svg`) and the per-view `<name>-<view>.drawio` and `.svg`
+  files of earlier builds; no other file. It rewrites the folder `README.md` index (one row per view).
+- No curated file is kept in the repo. `model.json` stays in the cache folder.
+
 ## Describe flow (instead of steps 3 to 5)
 
 1. Get the prompt: `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" prompt --name NAME --describe`. It writes the schema to the cache folder and prints the
@@ -95,10 +131,10 @@ If the user kept a hand-edited .drawio, regenerate its image with
 
 ## 6. Review loop (at most 3 rounds)
 
-1. Snapshot: `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" snapshot docs/architecture/diagrams/<name>.drawio -o SNAP_DIR`, with `SNAP_DIR` set to `${CLAUDE_PLUGIN_DATA}/<name>/snap`. It prints the full PNG and four tiles, one path per line. Exit 2 means the bundled draw.io could not be downloaded or Chrome is missing.
+1. Snapshot (C4: `<name>-c4.drawio`, which gives every view): `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" snapshot docs/architecture/diagrams/<name>.drawio -o SNAP_DIR`, with `SNAP_DIR` set to `${CLAUDE_PLUGIN_DATA}/<name>/snap`. It prints `view: <page name>`, then the full PNG and four tiles, one path per line, for every page. Exit 2 means the bundled draw.io could not be downloaded or Chrome is missing.
 2. Look: Read the full PNG, then every tile. Do not skip tiles: small defects show only there.
-3. Get the checklist path with `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" docs review`, Read that file, and list findings against it. Each finding names the rule, the tile (for example `r0c1`) and the element (node, caption or line). `docs rules` (same launcher) prints the drawing rules the tool already enforces.
-4. Fix every [curation] finding in `docs/architecture/diagrams/<name>.curated.json`. The evidence rules in the `prompt` output still apply: add an edge or change an icon only when the Terraform or code supports it. If a fix needs evidence you cannot find, leave the finding open and report it.
+3. Get the checklist path with `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" docs review`, Read that file, and list findings against it, applying the rules its "How to pick the rules" section selects for the `view:` line. Each finding names the view, the rule, the tile (for example `r0c1`) and the element (node, caption or line). `docs rules` (same launcher) prints the drawing rules the tool already enforces.
+4. Fix every [curation] finding in `docs/architecture/diagrams/<name>.curated.json` (C4: `model.json`). The evidence rules in the `prompt` output still apply: add an edge or change an icon only when the Terraform or code supports it. If a fix needs evidence you cannot find, leave the finding open and report it.
 5. Rebuild (step 5) and snapshot again. Review the new images from scratch.
 
 ## 7. Show it
@@ -110,10 +146,11 @@ Run `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" view d
 - Stop when a round has zero findings, or after 3 rounds.
 - Never say the diagram is ready while a finding remains.
 - Do not patch [tool] findings by hand and do not edit the .drawio or the .svg by hand. Report each one to the user as a tool defect, with the rule, the tile it appears in and the element.
-- Before finishing, run `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" check docs/architecture/diagrams`. It is offline and must print nothing and exit 0: every .drawio has an image rendered from exactly that .drawio.
+- Before finishing, run `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" check docs/architecture/diagrams`. It is offline and must print nothing and exit 0: every page of every .drawio has an image rendered from exactly that .drawio.
 - Never commit or push. Tell the user exactly which files to review and commit:
   `docs/architecture/diagrams/<name>.drawio`, `docs/architecture/diagrams/<name>.svg`,
   `docs/architecture/diagrams/<name>.curated.json` and the regenerated `docs/architecture/diagrams/README.md`.
+- For a C4 set, tell the user to commit `<name>-c4.drawio`, every `<name>-c4-<view>.svg` and the regenerated `README.md`. There is no curated file to commit.
 - For a described diagram the final message also lists every assumption, one line each.
 - The final message lists: rounds run, curation fixes made, remaining findings (tool defects and any unfixed curation
-  findings), and the files.
+  findings), and the files: for a C4 set, the .drawio and every view image.

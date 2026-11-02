@@ -5,10 +5,12 @@ Python package in `src/cartographer/` (the stage files below live there). Subcom
 ```
 cartographer extract INFRA_DIR --name NAME       facts to $XDG_CACHE_HOME/cartographer/NAME/facts.json
 cartographer prompt --name NAME [--describe]     schema to the cache folder, curation or describe prompt on stdout
+cartographer prompt --name NAME --c4 [--describe]  C4 curation prompt (model.json), schema c4.schema.json
 cartographer build --name NAME                   verify, then docs/architecture/diagrams/NAME.drawio and .svg
-cartographer image FILE.drawio                   regenerate the .svg next to a .drawio
+cartographer build --name NAME --c4              verify model.json, then NAME-c4.drawio, a page and .svg per view
+cartographer image FILE.drawio                   regenerate the .svg next to a .drawio, one per page
 cartographer check FOLDER                        fail when a .drawio has no image or a stale one (offline)
-cartographer snapshot FILE -o DIR                PNG and tiles from the local draw.io
+cartographer snapshot FILE -o DIR                per page: `view: <name>`, then PNG and tiles from the local draw.io
 cartographer view FILE                           open in the local draw.io
 cartographer docs interview|review|rules         path of a packaged document
 ```
@@ -27,7 +29,7 @@ Output is XML (draw.io), never an image. Coordinates come from a deterministic c
 | 2 curate | `curate_prompt.md`, followed by Claude in the user's session (`cartographer prompt`) | yes | facts.json + repo code -> curated.json |
 | 3 verify | `tf_verify.py` | no | facts + curated + repo -> verified curated + report |
 | 4 layout | `tf_layout.py` | no | verified curated -> `Diagram` (absolute coords) |
-| 5 render | `gen_drawio.py render(diagram, page_id=, page_name=)` | no | Diagram -> .drawio XML |
+| 5 render | `gen_drawio.py render(diagram, page_id=, page_name=, notation=AWS)` | no | Diagram -> .drawio XML |
 
 Reproducibility: curated.json is cached under `inputs_sha256`, a hash of the facts.json bytes, the prompt template
 (`curate_prompt.md` with its placeholders unsubstituted, so no path enters the key) and the schema text the curation
@@ -44,6 +46,9 @@ checks the file format (no `version` attribute, id first and `as` last, 2-space 
 every edge, unique vertex ids).
 `gen_drawio.render(diagram)` takes the draw.io page `id` and `name` as required keyword arguments: `build.py`
 passes `<name>-architecture` and the curated title, `tf_layout.__main__` derives the name from the input file name.
+`gen_drawio` draws icons, lines, title and legend; the `notation.Notation` it is given draws every box and group
+(value HTML and style). `notation.AWS` is the Layer 7 look: grey boxes, AWS frames by `Group.kind`, plain groups in
+their purpose colour. A `Box` carries its node's `shape` (its `icon`, else its `service`) and no colours.
 Nothing in the generic modules is specific to one stack.
 
 ## Icons (`aws_icons.json`)
@@ -64,7 +69,7 @@ uv run python -m cartographer.vendor_aws_icons
 (`marketplace`, `all_products`) stay AWS icons. `diagram_model.AWS_ICONS` and `GENERIC_ICONS` load the two files, in
 that one place, and `has_icon` accepts either. `gen_drawio` styles AWS icons from `AWS_ICONS` and generic ones from
 `GENERIC_ICONS` (shape with the label below, split on its line breaks and never wrapped, like an AWS icon).
-Any other `Icon.service` renders as a plain box.
+Any other `Icon.service` renders as a box of icon size, drawn by the notation.
 
 ## facts.json (stage 1)
 
@@ -248,6 +253,61 @@ placement). Every number is a module constant
   segment; `tf_layout`'s command line prints it.
 - Legend: colours plus the words "Solid line: primary request path" and "Dashed line: secondary, control or async".
   All text is at least 12 px; arrowheads are open.
+
+## C4 diagrams
+
+A second notation next to the AWS one. The curation writes `model.json` (schema `c4.schema.json`) in the cache folder;
+nothing curated is committed. A view's curated data uses the Layer 7 keys: an element's C4 kind (`person`,
+`container_store`, ...) is its node's `service` or its external's `icon`, and `c4_styles.C4` draws it. Modules:
+
+| File | Role |
+|---|---|
+| `c4_model.py` | the model: people, systems, containers, components, code, deployment, scenarios |
+| `c4_verify.py` | structure and evidence checks; no `code` elements without the engineer's consent |
+| `c4_styles.py` | the C4 `Notation`: element boxes by shape, boundaries and deployment nodes, key, neutral lines |
+| `c4_views.py`, `c4_boxes.py` | one `Diagram` per view, boxes sized from their three text blocks |
+| `c4_deploy.py` | the Deployment view: nested nodes and container instances |
+
+Views, written as pages of `docs/architecture/diagrams/<name>-c4.drawio` (page id `<name>-<slug>`, in slug order)
+and drawn into `<name>-c4-<slug>.svg`:
+
+| Slug | Page title |
+|---|---|
+| `1-context` | System Context diagram for S |
+| `2-container` | Container diagram for S |
+| `3-component-<id>` | Component diagram for S: C |
+| `4-code-<id>` | Code diagram for S: X (only with consent) |
+| `5-deployment` | Deployment diagram for S: env |
+| `6-dynamic-<id>` | Dynamic diagram for S: scenario |
+
+`build --c4` overwrites the file and every view image on each run, deletes the images of views the model no longer
+produces and the per-view `<name>-<slug>.drawio` and `.svg` files of earlier builds (exact slugs only, so
+`<name>-3-tier.drawio` survives), and writes a README index with one row per view. There is no hand-edit guard for C4
+views.
+
+Pages (`files.pages`): a one-page .drawio is drawn whole into its sibling `.svg`, as an L7 diagram always was. Each
+page of a file of several is drawn alone, as a one-page mxfile, into `<stem>-<page>.svg`, where `<page>` is the page id
+less the file name up to its last dash. Every image is stamped with the sha256 of the whole file, so `check` wants a
+fresh image per page, `image` and `view` regenerate them all, the index lists one row per page and `snapshot` shoots
+each page alone. The layout, router and checker are shared with Layer 7.
+
+Relationships are stated at the lowest level known and `c4_model.rollup` lifts them to the elements a view shows; each
+lifted edge names the relationships behind it. Context and Container views draw every lifted edge, including those
+between people and external systems; a Component view only those that touch its components. `c4_verify` projects
+the core views (Context, Container, Component, Code) last and fails on a rolled-up arrow without a shared label and on
+a relationship that no core view draws.
+A lifted edge over several relationships reads their shared `summary` (else their shared label) over their shared
+`technology`; parts with different technologies are a verify error, not a silently dropped protocol. Every
+relationship needs a label, and a technology when both ends are containers, components or code (except code
+`inherits` and `implements`).
+
+Evidence: a deployment node's `fact` needs only to exist; an element's `fact` must have an end on a node hosting its
+container, and a relationship's must run between the hosts of its two ends. A successful build prints the whole
+report: "C4 model: ok", then every container, component, code element, relationship and deployment node that rests
+only on `stated`.
+
+Review: `snapshot` prints `view: <page name>` before the PNGs of each page (the `<diagram name=...>`; the README index uses it too).
+`REVIEW.md` picks the rules from it: "Every diagram" plus "Layer 7" or "C4: every view" plus the section named like the page.
 
 ## Non-goals
 
