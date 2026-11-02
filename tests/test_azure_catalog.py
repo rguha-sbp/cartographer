@@ -222,3 +222,14 @@ def test_an_azapi_resource_group_is_dropped_like_the_azurerm_one():
         return "Microsoft.Resources/resourceGroups@2024-03-01" if attr == "type" else None
 
     assert AZURE.resolve("azapi_resource", get).kind == "drop"
+
+
+@pytest.mark.parametrize(("tf_type", "kind", "icon"), [
+    ("azurerm_ai_services", "icon", "azure:ai_foundry"),
+    ("azurerm_mysql_server", "icon", "azure:azure_database_mysql_server"),
+    ("azurerm_mysql_database", "fold", None),
+    ("azurerm_databricks_workspace_customer_managed_key", "fold", None),
+])
+def test_types_seen_in_the_quickstarts_have_a_row_and_are_not_marked(tf_type, kind, icon):
+    r = AZURE.resolve(tf_type, no_attrs)
+    assert (r.kind, r.icon, r.marked) == (kind, icon, False)
