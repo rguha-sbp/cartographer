@@ -35,7 +35,7 @@ def build(args: argparse.Namespace) -> int:
     facts = json.loads(cached_facts(args.name).read_text()) if model.get("source") == "terraform" else None
 
     errors = c4_verify.verify(model, facts, repo)
-    print(c4_verify.report(errors, c4_verify.stated_only(model)), end="")
+    print(c4_verify.report(errors, [] if errors else c4_verify.stated_only(model)), end="")
     if errors:
         return EXIT_VERIFY
     views = c4_views.views(model)

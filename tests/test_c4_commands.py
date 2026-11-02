@@ -163,7 +163,16 @@ def test_build_c4_model_without_a_required_key_fails_verify(tmp_path: Path, caps
     _model(model)
     assert _build(tmp_path) == 1
     out = capsys.readouterr().out
-    assert out.startswith("C4 model: 1 problem") and f"model: {key} is required" in out
+    assert out.startswith("C4 model: 1 problem") and f"model: missing '{key}'" in out
+
+
+def test_build_c4_does_not_list_empty_evidence_as_stated(tmp_path: Path, capsys) -> None:
+    model = _shop()
+    model["elements"][3]["evidence"] = []
+    _model(model)
+    assert _build(tmp_path) == 1
+    out = capsys.readouterr().out
+    assert out == "C4 model: 1 problem\nelements[3].evidence: needs at least 1 item\n"
 
 
 def test_build_c4_without_model_exits_3(tmp_path: Path, cache: Path, capsys) -> None:

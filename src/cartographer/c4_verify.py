@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from cartographer import c4_views
+from cartographer import c4_views, schema_check
 from cartographer.c4_model import SCHEMA, Model, RollupError, ancestors, elements
 from cartographer.secret_patterns import contains_secret
 from cartographer.verify_shared import SECRET_REASON, code_hit, shape_warnings
@@ -14,7 +14,7 @@ COMPLETE_TYPES = (
     "aws_rds_cluster", "aws_dynamodb_table", "aws_s3_bucket", "aws_sqs_queue", "aws_sns_topic",
     "aws_kinesis_stream", "aws_elasticache_cluster", "aws_elasticache_replication_group",
 )
-REQUIRED = json.loads(SCHEMA.read_text())["required"]
+SHAPE = json.loads(SCHEMA.read_text())
 INSIDE = {"container", "component", "code"}
 PARENT_TYPE = {"container": "system", "component": "container", "code": "component"}
 STATED_HEADING = "Stated by the engineer, not found in the repo"
@@ -73,7 +73,7 @@ def _structure(model: Model) -> list[str]:
         kind, types = r.get("kind", "uses"), {by_id.get(end, {}).get("type") for end in (r["src"], r["dst"])}
         if kind != "uses" and types != {"code"}:
             out.append(f"{r['id']}: kind {kind} is only for code elements")
-        if not r.get("label", "").strip():
+        if not r["label"].strip():
             out.append(f"{r['id']}: needs a label")
         # The technology or protocol of a call inside the system; an inheritance arrow states a type, not a call.
         if kind == "uses" and types <= INSIDE and not r.get("technology"):
@@ -189,10 +189,10 @@ def _drawn(model: Model) -> list[str]:
 
 
 def verify(model: Model, facts: dict | None, repo: Path) -> list[str]:
-    """Every problem found, sorted; empty means the model passes. facts is None for source description."""
-    missing = [f"model: {key} is required" for key in REQUIRED if key not in model]
-    if missing:
-        return sorted(missing)
+    """Every problem found, sorted; empty means the model passes. facts is None for source description. Every rule
+    after the schema assumes well-formed items, so a model that does not fit the schema is checked no further."""
+    if shape := schema_check.check(model, SHAPE):
+        return sorted(shape)
     parents = _parents(model)
     # Ancestor walks loop or raise on broken parent links, so the later rules wait until the parents are sound,
     # and the views are projected only from a model that passes everything else.
@@ -204,9 +204,8 @@ def verify(model: Model, facts: dict | None, repo: Path) -> list[str]:
 
 def stated_only(model: Model) -> list[str]:
     """Containers, components, code elements, relationships and deployment nodes whose only evidence is what the
-    engineer said; safe on any model."""
-    items = [*(e for e in model.get("elements", []) if e["type"] in INSIDE), *model.get("relationships", []),
-             *_nodes(model)]
+    engineer said; needs a model that passes verify."""
+    items = [*(e for e in model["elements"] if e["type"] in INSIDE), *model["relationships"], *_nodes(model)]
     return sorted(i["id"] for i in items if all("stated" in ev for ev in i["evidence"]))
 
 

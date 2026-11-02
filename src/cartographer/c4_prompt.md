@@ -19,6 +19,8 @@ Step 2: propose the whole model
 - Elements: exactly one in-scope `system`; every other system has `"external": true`. People are `person`.
   A `container` (a deployable unit or a store) has the system as `parent`, a `technology`, and `shape` "store" for a
   database or bucket, "queue" for a queue or topic. A `component` has a container as `parent` and a `technology`.
+- Ids of elements, deployment nodes and scenarios are lower-case letters, digits, `-` and `_`, starting with a letter
+  or digit (`order-api`, `db_main`): they become part of file names.
 - Every element has a short `name` and a `description` of at most 120 characters. Plain ASCII only: no em dashes,
   en dashes or smart quotes.
 - Relationships: record each one at the lowest level you know (component or container), never at the system that
@@ -34,7 +36,8 @@ Step 2: propose the whole model
   view draws.
 
 Evidence
-- Every element, relationship and deployment node needs at least one evidence item:
+- Every element, relationship and deployment node needs at least one evidence item; an empty `evidence` list fails
+  the build:
   {"fact": "f12"}: a facts id. For an element, one end of the fact must be on a deployment node that hosts its
   container; for a relationship, the fact must join the deployment nodes that host its two ends.
   {"file": "src/x/y.py", "line": 88, "contains": ".query("}: the line in the repo; `line` is 1-based and `contains` a

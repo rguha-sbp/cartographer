@@ -260,7 +260,7 @@ def test_scenario_step_inside_one_container_fails(tmp_path):
 
 
 def test_missing_required_keys_are_errors_not_crashes(tmp_path):
-    assert verify({"elements": []}, None, tmp_path) == ["model: relationships is required", "model: source is required"]
+    assert verify({"elements": []}, None, tmp_path) == ["model: missing 'relationships'", "model: missing 'source'"]
 
 
 def test_deployment_node_with_an_unknown_icon_fails(tmp_path):
