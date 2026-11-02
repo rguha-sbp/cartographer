@@ -197,7 +197,7 @@ cartographer icons --cloud azure --search "key vault"
                 "address": "optional: one resource instead of the whole type"}]}
 ```
 
-Run `build` again. The report shows `Overrides` (a refused one names its reason) and `Icon changes` since the last build.
+Run `build` again. The report shows `Overrides` (a refused one names its reason; a skipped one targets something this diagram does not have) and `Icon changes` since the last build.
 `icons` prints at most 20 matches, as `cloud:name` and the title; `--cloud` is `aws`, `azure`, `generic` or `brand`.
 Commit `icons.json` with the diagram.
 

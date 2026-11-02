@@ -38,15 +38,16 @@ def load(path: Path) -> tuple[list[Override], list[str]]:
 
 
 def _refusal(o: Override, facts: dict | None) -> str | None:
+    """A reason to refuse the override itself; None when it is valid, even if this diagram has nothing for it."""
     if not icons.known(f"{o.cloud}:{o.icon}"):
         return f"unknown icon {o.cloud}:{o.icon}"
     if facts is None:
         return "an address needs Terraform facts" if o.address else None
     resources = facts["resources"]
-    if o.address:
-        return None if any(r["address"] == o.address and r["type"] == o.type for r in resources) else (
-            f"{o.address} is not a {o.type} in the facts")
-    return None if any(r["type"] == o.type for r in resources) else f"{o.type} is not in the facts"
+    if o.address and any(r["type"] == o.type for r in resources) and not any(
+            r["address"] == o.address and r["type"] == o.type for r in resources):
+        return f"{o.address} is not a {o.type} in the facts"
+    return None
 
 
 def _targets(items: list[dict], o: Override, types: dict[str, str] | None) -> list[dict]:
@@ -59,7 +60,7 @@ def _targets(items: list[dict], o: Override, types: dict[str, str] | None) -> li
 
 def apply(verified: dict, facts: dict | None, overrides: list[Override]) -> list[str]:
     """Set icon, override reason and decided_by on the nodes and externals each override names; an address beats a
-    type. Returns one line per override, `refused` or `applied`."""
+    type. Returns one line per override: `refused`, `skipped` (not in this diagram) or `applied`."""
     items = [*verified["nodes"], *verified["externals"]]
     types = {r["address"]: r["type"] for r in facts["resources"]} if facts is not None else None
     lines = []
@@ -70,6 +71,9 @@ def apply(verified: dict, facts: dict | None, overrides: list[Override]) -> list
             lines.append(f"refused {name}: {problem}")
             continue
         hit = _targets(items, o, types)
+        if facts is not None and not hit and not any(r["type"] == o.type for r in facts["resources"]):
+            lines.append(f"skipped {name}: not in this diagram")
+            continue
         for item in hit:
             item.update(icon=f"{o.cloud}:{o.icon}", override=o.reason, decided_by="override")
         lines.append(f"applied {name} -> {o.cloud}:{o.icon} on {', '.join(i['id'] for i in hit) or 'no drawn node'}: "

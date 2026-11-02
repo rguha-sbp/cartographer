@@ -65,3 +65,9 @@ def test_an_address_override_skips_externals_that_carry_no_tf() -> None:
     lines = overrides.apply(verified, FACTS, [Override("aws", "aws_s3_bucket", "lambda", "why", "aws_s3_bucket.a")])
     assert verified["nodes"][0]["icon"] == "aws:lambda" and verified["externals"][0]["icon"] == "generic:users"
     assert lines[0].startswith("applied")
+
+
+def test_an_override_for_a_type_absent_from_this_diagram_is_skipped_not_refused() -> None:
+    lines = overrides.apply(_verified(), FACTS, [Override("aws", "aws_lambda_function", "lambda", "r", None),
+                                                 Override("aws", "aws_lambda_function", "lambda", "r", "aws_lambda_function.f")])
+    assert len(lines) == 2 and all(line.startswith("skipped") for line in lines)

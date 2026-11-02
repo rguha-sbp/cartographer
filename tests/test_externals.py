@@ -1,7 +1,7 @@
 import math
 import xml.etree.ElementTree as ET
 
-from cartographer import gen_drawio, icons, tf_layout
+from cartographer import gen_drawio, icons, tf_externals, tf_layout
 from cartographer.tf_geom import (
     GLYPH_W,
     ICON_LABEL_PAD,
@@ -64,3 +64,16 @@ def test_generic_icon_label_is_not_wrapped_and_reads_back_at_its_true_size() -> 
     x0, y0, x1, y1 = label_rect(drawn)
     assert (x1 - x0, y1 - y0) == label_size("MCP servers\nremote tools") == (math.ceil(12 * GLYPH_W + TEXT_PAD),
                                                                                2 * ICON_LINE_H + ICON_LABEL_PAD)
+
+
+def test_managed_services_reuse_the_cloud_frame_when_the_curation_has_no_region() -> None:
+    curated = _curated()
+    curated["groups"] = [g for g in curated["groups"] if g["kind"] != "region"]
+    curated["groups"][1]["parent"] = "g_cloud"
+    for g in curated["groups"]:
+        g["cloud"] = "azure"
+    curated["externals"] = [{"id": "x_kv", "label": "Vault", "icon": "azure:key_vault", "evidence": []}]
+    curated["edges"] = []
+    out = tf_externals.adopt(curated)
+    assert [g["id"] for g in out["groups"] if g["kind"] == "cloud"] == ["g_cloud"]
+    assert next(g for g in out["groups"] if g["id"] == tf_externals.block_id("azure"))["parent"] == "g_cloud"

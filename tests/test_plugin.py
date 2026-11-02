@@ -54,3 +54,9 @@ def test_pre_commit_hook_runs_check_on_the_diagrams_folder() -> None:
     for line in ("- id: cartographer-check", "entry: cartographer check docs/architecture/diagrams", "language: python",
                  "files: ^docs/architecture/diagrams/", "pass_filenames: false"):
         assert line in hook
+
+
+def test_marketplace_description_covers_aws_and_azure() -> None:
+    market = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
+    description = market["plugins"][0]["description"]
+    assert "AWS" in description and "Azure" in description and not any(c in description for c in BANNED)

@@ -172,3 +172,8 @@ def test_a_literal_null_frontend_attribute_is_unset_and_every_capability_counts(
         "rule azurerm_lb frontend private_ip_address set (internal)")
     assert resource("lb_null_public", "azurerm_cosmosdb_account.late")["decided_by"] == (
         "rule azurerm_cosmosdb_account api = Table")
+
+
+def test_a_role_assignment_without_a_resolvable_principal_adds_no_service_and_no_edge():
+    assert facts("role_assignment_no_principal")["services"] == []
+    assert edges("role_assignment_no_principal", "iam") == set()

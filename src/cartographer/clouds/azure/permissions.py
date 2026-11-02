@@ -35,12 +35,12 @@ def holders(ex: Extractor, r: Res, expr: object, by_identity: dict[str, set[str]
 def grant(ex: Extractor, r: Res, who: list[str], scope: object, detail: set[str]) -> None:
     targets = {t for t in ex.refs(r.inst, scope) if ex.types.get(t) not in WIDE_SCOPES}
     wide = any(ex.types.get(t) in WIDE_SCOPES for t in ex.refs(r.inst, scope)) or "azurerm_subscription" in text(scope)
-    if wide:
+    if wide and who:
         for role in detail:
             entry = ex.services.setdefault(f"azure:{role}", {"actions": set(), "principals": set()})
             entry["actions"].add(role)
             entry["principals"].update(who)
-    elif not targets:
+    elif not wide and not targets:
         ex.stats["constructed_arns"] += 1
     for src in who:
         for dst in sorted(targets):
