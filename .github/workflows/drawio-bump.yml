@@ -2,7 +2,8 @@ name: Bump draw.io
 
 on:
   schedule:
-    - cron: '0 6 1,15 * *'
+    # Daily, so an advisory against the pin is acted on (or fails the run) within a day; quiet when up to date.
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 permissions:
@@ -45,6 +46,7 @@ jobs:
             --body "Bumps the pinned draw.io web app to ${version}.
 
           Release: https://github.com/jgraph/drawio/releases/tag/v${version}
+          Advisories: https://github.com/jgraph/drawio/security/advisories
           sha256: \`${sha256}\`"
           # A PR opened with GITHUB_TOKEN does not trigger CI, so run it on the branch head by hand.
           gh workflow run ci.yml --ref "$branch"

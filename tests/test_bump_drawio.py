@@ -44,11 +44,11 @@ class TestSelect:
             release("v32.5.5", "2026-09-01T00:00:00Z"),
             release("v32.5.4", "2026-08-01T00:00:00Z"),
         ]
-        assert bump.select_release(releases, NOW).version == "32.5.5"
+        assert bump.select_release(releases, NOW, [], "0.0.1").version == "32.5.5"
 
     def test_age_boundary_is_inclusive(self):
-        assert bump.select_release([release("v2.0.0", "2026-10-23T12:00:00Z")], NOW).version == "2.0.0"
-        assert bump.select_release([release("v2.0.0", "2026-10-23T12:00:01Z")], NOW) is None
+        assert bump.select_release([release("v2.0.0", "2026-10-23T12:00:00Z")], NOW, [], "0.0.1").version == "2.0.0"
+        assert bump.select_release([release("v2.0.0", "2026-10-23T12:00:01Z")], NOW, [], "0.0.1") is None
 
     def test_skips_draft_prerelease_and_missing_asset(self):
         releases = [
@@ -57,20 +57,85 @@ class TestSelect:
             release("v7.0.0", "2026-01-01T00:00:00Z", assets=("draw.zip",)),
             release("v6.0.0", "2026-01-01T00:00:00Z"),
         ]
-        picked = bump.select_release(releases, NOW)
+        picked = bump.select_release(releases, NOW, [], "0.0.1")
         assert picked.version == "6.0.0"
         assert picked.url == "https://example.invalid/v6.0.0/draw.war"
         assert picked.page == "https://example.invalid/v6.0.0"
 
     def test_picks_highest_version_not_first_listed(self):
         releases = [release("v1.0.0", "2026-01-01T00:00:00Z"), release("v1.1.0", "2026-01-02T00:00:00Z")]
-        assert bump.select_release(releases, NOW).version == "1.1.0"
+        assert bump.select_release(releases, NOW, [], "0.0.1").version == "1.1.0"
 
     def test_ignores_unparseable_tags(self):
-        assert bump.select_release([release("nightly", "2026-01-01T00:00:00Z")], NOW) is None
+        assert bump.select_release([release("nightly", "2026-01-01T00:00:00Z")], NOW, [], "0.0.1") is None
 
     def test_empty(self):
-        assert bump.select_release([], NOW) is None
+        assert bump.select_release([], NOW, [], "0.0.1") is None
+
+
+def advisory(ghsa, *ranges, withdrawn=None):
+    return {
+        "ghsa_id": ghsa,
+        "withdrawn_at": withdrawn,
+        "vulnerabilities": [{"vulnerable_version_range": r} for r in ranges],
+    }
+
+
+class TestAdvisories:
+    @pytest.mark.parametrize(
+        ("spec", "version", "hit"),
+        [
+            ("<= 32.6.8", "32.6.8", True),
+            ("<= 32.6.8", "32.6.9", False),
+            ("<30.2.7", "30.2.7", False),
+            ("< 29.7.8", "29.7.7", True),
+            ("<= v30.2.6", "30.2.6", True),
+            ("30.2.4", "30.2.4", True),
+            ("30.2.4", "30.2.5", False),
+            (">= 31.0.0, < 31.4.4", "31.2.0", True),
+            (">= 31.0.0, < 31.4.4", "30.9.0", False),
+            ("= 1.0.0", "1.0.0", True),
+            ("> 1.0.0", "1.0.0", False),
+        ],
+    )
+    def test_ranges_jgraph_publishes(self, spec, version, hit):
+        assert bump.affects(spec, version) is hit
+
+    @pytest.mark.parametrize("spec", ["", "all", "<= 1.x", "~1.0"])
+    def test_an_unreadable_range_fails_loudly(self, spec):
+        with pytest.raises(ValueError, match="range"):
+            bump.affects(spec, "1.0.0")
+
+    def test_open_advisories_skip_withdrawn_ones(self):
+        advisories = [
+            advisory("GHSA-a", "<= 32.6.8"),
+            advisory("GHSA-b", "<= 30.2.6"),
+            advisory("GHSA-c", "<= 32.6.8", withdrawn="2026-11-01T00:00:00Z"),
+            advisory("GHSA-d", "< 1.0.0", ">= 32.0.0, < 33.0.0"),
+        ]
+        assert bump.open_advisories(advisories, "32.5.5") == ["GHSA-a", "GHSA-d"]
+        assert bump.open_advisories(advisories, "33.0.0") == []
+
+
+class TestSecuritySelect:
+    RELEASES = (
+        release("v32.6.9", "2026-10-29T00:00:00Z"),  # one day old
+        release("v32.6.1", "2026-10-20T00:00:00Z"),
+        release("v32.5.5", "2026-10-01T00:00:00Z"),
+    )
+
+    def test_an_affected_pin_takes_the_newest_fixed_release_at_any_age(self):
+        advisories = [advisory("GHSA-a", "<= 32.6.8")]
+        assert bump.select_release(self.RELEASES, NOW, advisories, "32.5.5").version == "32.6.9"
+
+    def test_never_picks_an_affected_release(self):
+        advisories = [advisory("GHSA-a", "<= 32.6.9")]
+        assert bump.select_release(self.RELEASES, NOW, advisories, "32.5.5") is None
+        assert bump.select_release(self.RELEASES, NOW, [advisory("GHSA-b", "= 32.6.1")], "0.0.1").version == "32.5.5"
+
+    def test_without_an_open_advisory_on_the_pin_the_age_gate_holds(self):
+        advisories = [advisory("GHSA-old", "< 30.0.0")]
+        assert bump.select_release(self.RELEASES, NOW, advisories, "32.5.5").version == "32.6.1"
 
 
 PIN = {"name": "n", "version": "1.0.0", "url": "u", "sha256": "s", "licence": "l", "source": "src"}

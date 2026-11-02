@@ -1,10 +1,10 @@
 """Vendor draw.io's AWS icon tables: aws_icons.json {"<resIcon name>": "#FILL"} and generic_icons.json
 {"<shape name>": "#FILL"} (the General Resources shapes drawn as `shape=mxgraph.aws4.<name>`: users, client, ...).
 
-Source: Sidebar-AWS4.js from the pinned draw.io image (jgraph/drawio:32.5.5). Refresh with:
+Source: Sidebar-AWS4.js of the pinned draw.io web app (drawio_pin.json), the same sha256-checked build that renders
+the diagrams, so the tables never name an icon that build lacks. Refresh after a bump with:
 
-    docker cp drawio:/usr/local/tomcat/webapps/draw/js/diagramly/sidebar/Sidebar-AWS4.js <dir>/Sidebar-AWS4.js
-    python -m cartographer.vendor_aws_icons <dir>/Sidebar-AWS4.js
+    uv run python -m cartographer.vendor_aws_icons
 
 Each addAWS4<Category>Palette function defines style vars (n, n2, ...) carrying the category fillColor and adds
 entries like createVertexTemplateEntry(n2 + 'resourceIcon;resIcon=' + gn + '.lambda;', ...). The fill of an entry is
@@ -16,11 +16,13 @@ fill of the style var they are built from; the resourceIcon entries of that pale
 
 import json
 import re
-import sys
 from pathlib import Path
+
+from cartographer import drawio_app
 
 OUT = Path(__file__).with_name("aws_icons.json")
 GENERIC_OUT = Path(__file__).with_name("generic_icons.json")
+SIDEBAR = "js/diagramly/sidebar/Sidebar-AWS4.js"
 GENERAL = re.compile(
     r"Sidebar\.prototype\.addAWS4GeneralResourcesPalette = function(.*?)(?=Sidebar\.prototype\.|\Z)", re.DOTALL
 )
@@ -47,7 +49,7 @@ def parse_generic(source: str, taken: dict[str, str]) -> dict[str, str]:
 
 
 if __name__ == "__main__":
-    text = Path(sys.argv[1]).read_text(encoding="utf-8")
+    text = (drawio_app.ensure() / SIDEBAR).read_text(encoding="utf-8")
     aws = parse(text)
     for out, icons in ((OUT, aws), (GENERIC_OUT, parse_generic(text, aws))):
         out.write_text(json.dumps(icons, indent=2) + "\n", encoding="utf-8")

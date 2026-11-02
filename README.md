@@ -62,8 +62,11 @@ Set `CARTOGRAPHER_HOME=/some/dir` to move the cartographer folder elsewhere.
 | draw.io web app (`draw.war`) | 32.5.5 | Apache-2.0 | https://github.com/jgraph/drawio/releases/download/v32.5.5/draw.war | `cde0ebd72da197da37d100353e226d5344b08f0fcf7e1b18d1e000a77f9c5f52` |
 
 The pin lives only in `src/cartographer/drawio_pin.json`; update this table to match when it changes. The release must be
-at least 7 days old (the age gate). The `drawio-bump` workflow checks for a newer release on the 1st and 15th of each month
-and opens a PR (`scripts/bump_drawio.py`, or run it by hand with `--dry-run` to preview).
+at least 7 days old (the age gate) and not named by any open
+[draw.io security advisory](https://github.com/jgraph/drawio/security/advisories). When an advisory names the pinned
+version, a release that fixes it skips the age gate; if no fix exists yet the run fails so it is noticed. The
+`drawio-bump` workflow checks daily and opens a PR (`scripts/bump_drawio.py`, or run it by hand with `--dry-run` to
+preview).
 
 ## Install the plugin
 

@@ -56,11 +56,11 @@ Nothing in the generic modules is specific to one stack.
 The tool works for any AWS Terraform stack. Icons are draw.io's own 329 AWS resource icons, keyed by draw.io
 `resIcon` name (`lambda`, `s3`, `key_management_service`, `systems_manager`, `eventbridge`, `cloudwatch_2`, ...).
 `aws_icons.json` maps each name to its category fill colour (`{"lambda": "#ED7100"}`). It is vendored by
-`vendor_aws_icons.py` from `Sidebar-AWS4.js` of the pinned image `jgraph/drawio:32.5.5`:
+`vendor_aws_icons.py` from `Sidebar-AWS4.js` of the pinned draw.io web app (`drawio_pin.json`), the same
+sha256-checked build that renders the diagrams. Refresh after a bump with:
 
 ```
-docker cp drawio:/usr/local/tomcat/webapps/draw/js/diagramly/sidebar/Sidebar-AWS4.js <dir>/
-python -m cartographer.vendor_aws_icons <dir>/Sidebar-AWS4.js
+uv run python -m cartographer.vendor_aws_icons
 ```
 
 `generic_icons.json` (same script, same source file) holds the General Resources shapes drawn as
