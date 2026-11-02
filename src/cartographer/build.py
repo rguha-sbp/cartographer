@@ -137,7 +137,10 @@ def run(args: argparse.Namespace) -> int:
     curated_path = args.curated or out / f"{args.name}.curated.json"
     if not curated_path.is_file():
         raise Refusal(EXIT_STALE, f"no curated file at {curated_path}: run the curation (`cartographer prompt`)")
-    curated = upgrade(json.loads(curated_path.read_text()))
+    try:
+        curated = upgrade(json.loads(curated_path.read_text()))
+    except ValueError as err:
+        raise Refusal(EXIT_VERIFY, f"{curated_path}: {err}") from err
     verifier = VERIFIERS.get(curated.get("source"))
     if verifier is None:
         raise Refusal(EXIT_VERIFY, f"{curated_path}: source must be one of {', '.join(VERIFIERS)}")

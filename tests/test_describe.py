@@ -226,6 +226,14 @@ def test_build_refuses_a_curated_file_without_a_valid_source(tmp_path: Path, cap
     assert "source" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("format", [1, 3])
+def test_build_refuses_an_unsupported_curated_format_in_one_line(tmp_path: Path, capsys, format: int) -> None:
+    _write(tmp_path, {**_shop(), "format": format})
+    assert cli.main(["build", "--name", "shop-l7", "--repo", str(tmp_path)]) == 1
+    err = capsys.readouterr().err
+    assert f"format {format}" in err and "Traceback" not in err and "formats 1 and" not in err
+
+
 def test_terraform_build_still_needs_facts(tmp_path: Path, capsys) -> None:
     _write(tmp_path, _terraform())
     assert cli.main(["build", "--name", "shop-l7", "--repo", str(tmp_path)]) == 2
