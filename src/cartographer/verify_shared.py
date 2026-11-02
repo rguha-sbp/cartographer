@@ -43,12 +43,14 @@ def shape_warnings(item: dict) -> list[str]:
 
 
 def declared_icon(item: dict) -> None:
-    """Set `icon`, `decided_by` and `marked` from the catalog when the item names a `tf_type`; an item that names a
+    """Set `icon`, `decided_by`, `marked` and a marked item's `reason` from the catalog when the item names a `tf_type`; an item that names a
     cloud icon directly is marked as the curator's choice."""
     if tf_type := item.get("tf_type"):
         res = resolve_declared(tf_type, item.get("attributes", {}))
         if res.icon:
             item.update(icon=res.icon, decided_by=res.decided_by, marked=res.marked)
+            if res.marked and res.reason:
+                item["reason"] = res.reason
             return
     if icons.cloud_of(item.get("icon", "")):
         item.update(decided_by="curator", marked=True)

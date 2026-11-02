@@ -99,6 +99,8 @@ def _facts_icon(node: dict, resources: dict[str, dict]) -> list[str]:
     if resolved := next((r for r in iconed if icons.cloud_of(r["icon"])), next(iter(iconed), None)):
         overridden = "icon" in node
         node.update(icon=resolved["icon"], decided_by=resolved.get("decided_by", ""), marked=resolved["marked"])
+        if resolved["marked"] and "reason" in resolved:
+            node["reason"] = resolved["reason"]
         return [f"{node['id']}: curator icon is set but the resources resolve, resolved icon wins"] if overridden else []
     declared_icon(node)
     return [f"{node['id']}: built only from folded resources"] if all("fold" in r for r in found) else []
