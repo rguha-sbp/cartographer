@@ -6,7 +6,7 @@ Inputs
 - Schema file: {schema_path}. Read it: it lists every allowed field. It has no list of icons: find names with `cartographer icons`.
 - Output file: {output_path}. Write one JSON object there that validates against the schema and includes
   "inputs_sha256": "{inputs_sha256}" exactly. If the file already exists, start from it and change only what the facts
-  or code no longer support, so the diff stays small. Write nothing else and run no commands.
+  or code no longer support, so the diff stays small. Write nothing else and run no commands except `cartographer icons`.
 - `format` is 2. `system` is the display name of the system (for example "GIP") and `view` is "l7". Never write a title: the tool
   derives "Layer 7 diagram for <system>". Leave `drawio_sha256` as it is when the file has one: the tool writes it.
 
@@ -44,7 +44,7 @@ Step 3: produce the curated JSON
   counting what was dropped per kind. Every distinct external system a hint suggests must be drawn as an external whose
   evidence is a code citation (file, line, contains) naming the hint value, or be listed in `omitted` as
   {"hint": <hint id or value>, "reason": <at most 80 characters>}. Several hints for one system (its host, its
-  parameter and its folder) need one external. A cloud's own hosts (amazonaws.com, azure.com, windows.net, azure.net) are not externals. Read the hinted file
+  parameter and its folder) need one external. A cloud's own hosts (amazonaws.com, azure.com, windows.net, azure.net) are not externals and are never hinted. Read the hinted file
   and line before deciding; verify reports every hint that is neither cited nor omitted.
 - A cloud managed service the stack calls but Terraform does not create (Bedrock foundation models, Azure OpenAI in
   another subscription, a shared service in another account) is an external with `tf_type` set to the

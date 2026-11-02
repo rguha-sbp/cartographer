@@ -69,7 +69,7 @@ evidence.
   .drawio is stored in the curated file, and the folder `README.md` index is regenerated.
 - Exit 1: verify dropped something or left a node without a line. The report is printed. Fix the curated file and
   rebuild. A drop with the reason "looks like a secret" means the curation quoted a credential: remove that text.
-- Exit 3: Terraform changed since curation (Terraform flow only). Go back to step 4.
+- Exit 3: Terraform changed since curation, or there is no curated file (no `model.json` for C4). Go back to step 4.
 - Exit 2: no facts for a Terraform diagram. Run step 3. A described diagram never needs facts.
 - Exit 4: the .drawio was edited by hand and nothing was written. Ask the user which to do: keep it (do nothing, skip
   regeneration), replace it (rerun build with `--replace`), or write a side file to compare (rerun build with
@@ -131,7 +131,7 @@ C4 runs differ from the Layer 7 flow:
 
 ## 6. Review loop (at most 3 rounds)
 
-1. Snapshot (C4: `<name>-c4.drawio`, which gives every view): `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" snapshot docs/architecture/diagrams/<name>.drawio -o SNAP_DIR`, with `SNAP_DIR` set to `${CLAUDE_PLUGIN_DATA}/<name>/snap`. It prints `view: <page name>`, then the full PNG and four tiles, one path per line, for every page. Exit 2 means the bundled draw.io could not be downloaded or Chrome is missing.
+1. Snapshot (C4: `<name>-c4.drawio`, which gives every view): `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" snapshot docs/architecture/diagrams/<name>.drawio -o SNAP_DIR`, with `SNAP_DIR` set to `${CLAUDE_PLUGIN_DATA}/<name>/snap`. It prints `view: <page name>`, then the full PNG and four tiles, one path per line, for every page. Exit 2 means the bundled draw.io could not be downloaded; exit 1 with `Chrome not found` or `Chrome failed` means Chrome is missing or broke. Show the user the message and stop.
 2. Layer 7 only: Read `${CLAUDE_PLUGIN_DATA}/<name>/review.json` first, then `tiles.json` in `SNAP_DIR`. State which diagram you review (`view_name`, `clouds`) and, for every tile, which resource each icon in it stands for (its `icons` entry: `tf`, `icon_title`, `marked`).
 3. Look: Read the full PNG, then every tile. Do not skip tiles: small defects show only there. Layer 7: judge each icon against its `review.json` entry, `marked` entries first.
 4. Get the checklist path with `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" docs review`, Read that file, and list findings against it, applying the rules its "How to pick the rules" section selects for the `view:` line. Each finding names the view, the rule, the tile (for example `r0c1`) and the element (node, caption or line). `docs rules` (same launcher) prints the drawing rules the tool already enforces.

@@ -12,8 +12,11 @@ BANNED = "—–‘’“”"
 def test_versions_agree() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
     plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
-    pins = set(re.findall(r"cartographer@v(\d+\.\d+\.\d+)", (ROOT / "README.md").read_text()))
-    assert pins == {pyproject} == {plugin["version"]}
+    assert pyproject == plugin["version"]
+
+
+def test_readme_pins_no_release_tag() -> None:
+    assert not re.search(r"@v\d|rev: v\d", (ROOT / "README.md").read_text())
 
 
 def test_marketplace_lists_the_plugin_at_the_repo_root() -> None:

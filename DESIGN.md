@@ -95,8 +95,10 @@ per tile, and fills the `tiles` of each sheet entry. The reviewer reads the shee
      "icon": "aws:lambda", "marked": false, "decided_by": "catalog aws_lambda_function",
      "multi": false, "file": "infra/orders_api.tf", "line": 12}
   ],
-  "networks": [{"id": "n1", "cloud": "aws", "name": "main", "cidrs": ["10.0.0.0/16"], "remote": false}],
-  "placements": [{"id": "p1", "resource": "aws_lambda_function.orders_api", "network": "n1", "tier": "private"}],
+  "networks": [{"id": "n1", "cloud": "aws", "name": "main", "cidrs": ["10.0.0.0/16"], "remote": false,
+                "address": "aws_vpc.main"}],
+  "placements": [{"id": "p1", "resource": "aws_lambda_function.orders_api", "network": "n1", "tier": "private",
+                  "cloud": "aws"}],
   "edges": [
     {"id": "f12", "src": "aws_lambda_function.orders_api", "dst": "aws_dynamodb_table.orders",
      "kind": "iam", "detail": "dynamodb:Query,dynamodb:GetItem", "file": "infra/orders_api.tf", "line": 40}
@@ -207,7 +209,7 @@ per tile, and fills the `tiles` of each sheet entry. The reviewer reads the shee
 - Report (text, sorted): dropped nodes, dropped edges with reason, and `unshown` facts of kind
   iam/trigger/route between two shown nodes that no curated edge covers (recall hints), and IAM-only vs
   code-only mismatches for code-cited edges.
-- Exit 0 always; the report is the artefact. `--strict` exits 1 when anything was dropped.
+- Exit 0 always; the report is the artefact. `--strict` exits 1 when anything was dropped or a node has no edge.
 
 ## tf_layout.py (stage 4)
 
@@ -294,7 +296,7 @@ nothing curated is committed. A view's curated data uses the Layer 7 keys (forma
 | `c4_views.py`, `c4_boxes.py` | one `Diagram` per view, boxes sized from their three text blocks |
 | `c4_deploy.py` | the Deployment view: nested nodes and container instances; frames carry their `cloud` and are drawn in that cloud's frame styles, infrastructure keeps its qualified `icon` |
 
-Views, written as pages of `docs/architecture/diagrams/<name>-c4.drawio` (page id `<name>-<slug>`, in slug order)
+Views, written as pages of `docs/architecture/diagrams/<name>-c4.drawio` (the page id is the slug, in slug order)
 and drawn into `<name>-c4-<slug>.svg`:
 
 | Slug | Page title |
@@ -312,8 +314,8 @@ produces and the per-view `<name>-<slug>.drawio` and `.svg` files of earlier bui
 views.
 
 Pages (`files.pages`): a one-page .drawio is drawn whole into its sibling `.svg`, as an L7 diagram always was. Each
-page of a file of several is drawn alone, as a one-page mxfile, into `<stem>-<page>.svg`, where `<page>` is the page id
-less the file name up to its last dash. Every image is stamped with the sha256 of the whole file, so `check` wants a
+page of a file of several is drawn alone, as a one-page mxfile, into `<stem>-<page id>.svg`: page `1-context` of
+`shop-c4.drawio` into `shop-c4-1-context.svg`. Every image is stamped with the sha256 of the whole file, so `check` wants a
 fresh image per page, `image` and `view` regenerate them all, the index lists one row per page and `snapshot` shoots
 each page alone. The layout, router and checker are shared with Layer 7.
 

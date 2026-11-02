@@ -259,7 +259,7 @@ the latest release at https://github.com/rguha-sbp/cartographer/releases/latest:
 |---|---|---|
 | 1 | verify dropped something or left a node without a line | read the report, fix the curated file, rebuild |
 | 2 | no facts for a Terraform diagram | run `extract` first |
-| 3 | stale or missing curated file: Terraform changed since curation | curate again |
+| 3 | stale or missing curated file (or no `model.json` for C4): Terraform changed since curation | curate again |
 | 4 | the `.drawio` was edited by hand, nothing written | keep it, or rerun with `--replace` or `--side-file` |
 | 5 | the bundled draw.io could not be downloaded or the render failed, nothing written | read the message (download blocked, sha256 mismatch, Chrome missing), fix it, rerun |
 
@@ -277,6 +277,6 @@ uv run --locked pytest -q
 
 To try the plugin from a working tree, run `claude --plugin-dir /path/to/checkout`: the plugin launcher
 (`scripts/cartographer`) runs the checkout itself, so no tag or git access is involved. Bump the version in
-`pyproject.toml`, `.claude-plugin/plugin.json` and the `@vX.Y.Z` pins in this README together; a test checks that
-they agree. Design docs: [DESIGN.md](DESIGN.md), `docs/superpowers/specs/`, and
+`pyproject.toml` and `.claude-plugin/plugin.json` together; a test checks that they agree. The README names no
+release tag, so it needs no change for a release. Design docs: [DESIGN.md](DESIGN.md), `docs/superpowers/specs/`, and
 [src/cartographer/RULES.md](src/cartographer/RULES.md) for the drawing rules.

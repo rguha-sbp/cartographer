@@ -19,7 +19,7 @@ TEST_FILE = re.compile(r"^(test_.*|.*_test\.\w+|.*\.test\.\w+|conftest\.py)$")
 INTEGRATION_DIRS = re.compile(r"^(integrations?|processors?|clients?|connectors?|event_processors?)$")
 URL = re.compile(r"https?://([A-Za-z0-9{}_.\-]+\.[A-Za-z]{2,})")
 NOT_EXTERNAL = re.compile(
-    r"(^|\.)(amazonaws\.com|amazonaws\.com\.cn|localhost|w3\.org|json-schema\.org|xmlsoap\.org|purl\.org)$"
+    r"(^|\.)(amazonaws\.com|amazonaws\.com\.cn|azure\.com|azure\.net|windows\.net|localhost|w3\.org|json-schema\.org|xmlsoap\.org|purl\.org)$"
     r"|^example\.(com|org|net)$"
 )
 PARAM_CONTEXT = re.compile(r"ssm|param|secret", re.IGNORECASE)
