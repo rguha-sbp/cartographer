@@ -42,6 +42,12 @@ class AwsCloud(Cloud):
     def permission_edges(self, ex):
         permission_edges(ex)
 
+    def icon_style(self, name: str) -> str:
+        return (f"sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor={self.icons[name]['fill']};"
+                f"strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;"
+                f"fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;"
+                f"resIcon=mxgraph.aws4.{name};")
+
 
 AWS = AwsCloud(
     "aws", "AWS", ("aws",), load_json(__file__, "icons.json"), FRAME_STYLES, "AWS managed services",

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from stub_cloud import StubCloud
 
 from cartographer import clouds, icons
 from cartographer.clouds import aws as aws_package
@@ -112,7 +113,7 @@ def test_scope(tf_type, scope):
 
 
 def test_drop_row():
-    cloud = Cloud("x", "X", ("x",), {}, {}, "m", catalog=Catalog({"x_noise": {"drop": True}}))
+    cloud = StubCloud("x", "X", ("x",), {}, {}, "m", catalog=Catalog({"x_noise": {"drop": True}}))
     assert cloud.resolve("x_noise_thing", no_attrs) == Resolution("drop", decided_by="catalog x_noise")
 
 
@@ -190,3 +191,8 @@ def test_a_declared_type_with_a_presence_rule_resolves() -> None:
     assert clouds.resolve_declared("azurerm_lb", {}).marked is True
     internal = clouds.resolve_declared("azurerm_lb", {"frontend_ip_configuration.subnet_id": "x"})
     assert internal.decided_by == "rule azurerm_lb frontend subnet_id set (internal)"
+
+
+def test_a_cloud_must_define_its_icon_style() -> None:
+    with pytest.raises(TypeError, match="icon_style"):
+        Cloud("x", "X", ("x",), {}, {}, "m")

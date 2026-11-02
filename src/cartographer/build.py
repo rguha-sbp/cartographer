@@ -99,8 +99,16 @@ def _icon_styles(mxfile: str) -> dict[str, str]:
     return found
 
 
-def icon_changes(old: str, new: str) -> list[str]:
-    before, after = _icon_styles(old), _icon_styles(new)
+def _previous_icons(target: Path) -> dict[str, str]:
+    """The icons of the diagram about to be replaced; none when there is none or a hand edit left it unparseable."""
+    try:
+        return _icon_styles(target.read_text()) if target.is_file() else {}
+    except ElementTree.ParseError:
+        return {}
+
+
+def icon_changes(before: dict[str, str], new: str) -> list[str]:
+    after = _icon_styles(new)
     return [f"{cid}: {before[cid]} -> {after[cid]}" for cid in sorted(before.keys() & after.keys())
             if before[cid] != after[cid]]
 
@@ -158,11 +166,11 @@ def run(args: argparse.Namespace) -> int:
     diagram = tf_layout.layout({**verified, "title": title}, edge_labels=args.edge_labels == "on")
     mxfile = gen_drawio.render(diagram, page_id=f"{args.name}-architecture", page_name=title)
     target = out / f"{args.name}.generated.drawio" if args.side_file else drawio_path
+    before = _previous_icons(target)
     images = render_images(target, mxfile, args.drawio_url)
-    previous = target.read_text() if target.is_file() else None
     review_sheet.write(cache, verified, facts, diagram)
     sections = [("Marked icons", _marked(verified)), ("Overrides", [*problems, *applied]),
-                ("Icon changes", icon_changes(previous, mxfile) if previous else [])]
+                ("Icon changes", icon_changes(before, mxfile))]
     print(render_report("", sections).removeprefix("\n"), end="")
     publish(target, mxfile, images)
     if not args.side_file:

@@ -15,7 +15,12 @@ DOCS = {"review": HERE / "REVIEW.md", "rules": HERE / "RULES.md", "interview": H
 def _extract(args: argparse.Namespace) -> int:
     repo = args.repo.resolve()
     facts_path = cache_dir(args.name) / "facts.json"
-    write_json(facts_path, tf_extract.extract(repo / args.infra_dir, repo))
+    try:
+        facts = tf_extract.extract(repo / args.infra_dir, repo)
+    except FileNotFoundError as err:
+        print(err, file=sys.stderr)
+        return 1
+    write_json(facts_path, facts)
     print(f"facts: {facts_path}")
     print(f"inputs key: {tfdiagram.inputs_sha256(facts_path)}")
     return 0

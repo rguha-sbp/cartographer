@@ -294,3 +294,18 @@ def test_overrides_are_applied_reported_and_leave_the_cache_key_alone(
     assert _build(tmp_path, curated) == 0
     assert "Overrides (1)" in capsys.readouterr().out
     assert "mxgraph.aws4.sqs" not in (out / "mini.drawio").read_text()
+
+
+def test_build_over_a_malformed_old_drawio_treats_it_as_having_no_icons(tmp_path: Path, capsys, renderer) -> None:
+    curated = _built(tmp_path, capsys)
+    out = tmp_path / "out"
+    (out / "mini.drawio").write_text("<mxfile><broken")
+    assert _build(tmp_path, curated, "--replace") == 0
+    assert ElementTree.parse(out / "mini.drawio").getroot().tag == "mxfile"
+    assert "Icon changes (0)" in capsys.readouterr().out
+
+
+def test_extract_of_an_infra_dir_without_terraform_files_is_one_line_and_exit_1(capsys) -> None:
+    assert cli.main(["extract", "nope", "--repo", str(FIXTURES), "--name", "mini"]) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("no .tf files in") and err.count("\n") == 1 and "Traceback" not in err

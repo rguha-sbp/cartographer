@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -61,7 +62,7 @@ class Catalog:
 Rule = Callable[[Getter], Resolution | None]
 
 
-class Cloud:
+class Cloud(ABC):
     def __init__(self, name: str, label: str, providers: tuple[str, ...], icons: dict[str, dict],
                  frame_styles: dict[str, str], managed_label: str, *, provider_types: list[str] | None = None,
                  catalog: Catalog | None = None, rules: dict[str, Rule] | None = None,
@@ -132,8 +133,6 @@ class Cloud:
             return replace(base, marked=True, reason=f"{unresolved[0]} is not a literal")
         return ruled or base
 
+    @abstractmethod
     def icon_style(self, name: str) -> str:
-        return (f"sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor={self.icons[name]['fill']};"
-                f"strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;"
-                f"fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;"
-                f"resIcon=mxgraph.aws4.{name};")
+        """The complete draw.io style of the icon `name`."""

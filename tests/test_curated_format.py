@@ -2,9 +2,10 @@ import copy
 import json
 from pathlib import Path
 
+from stub_cloud import StubCloud
+
 from cartographer import gen_drawio, tf_layout, tfdiagram, verify_description
 from cartographer.clouds import CLOUDS
-from cartographer.clouds.base import Cloud
 from cartographer.curated_format import upgrade
 from cartographer.tf_externals import adopt
 from cartographer.verify_shared import shape_warnings
@@ -54,7 +55,7 @@ def test_a_legacy_file_still_verifies_and_lays_out() -> None:
 
 def _stub_cloud(monkeypatch) -> None:
     aws = CLOUDS["aws"]
-    stub = Cloud("stub", "Stub", ("stub",), {"vm": {"fill": "#000000", "title": "VM"}}, aws.frame_styles,
+    stub = StubCloud("stub", "Stub", ("stub",), {"vm": {"fill": "#000000", "title": "VM"}}, aws.frame_styles,
                  "Stub managed services")
     monkeypatch.setitem(CLOUDS, "stub", stub)
 
