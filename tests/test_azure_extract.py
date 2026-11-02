@@ -138,6 +138,11 @@ def test_a_module_providers_map_carries_the_aliased_providers_subscription_into_
                    "hub": ("northeurope", "22222222-2222-2222-2222-222222222222")}
 
 
+def test_a_remote_module_call_takes_the_subscription_of_its_providers_map_alias():
+    got = {m: resource("remote_module_alias", f"module.{m}")["subscription"] for m in ("plain", "hub")}
+    assert got == {"plain": "11111111-1111-1111-1111-111111111111", "hub": "22222222-2222-2222-2222-222222222222"}
+
+
 def test_inline_key_vault_access_policies_are_iam_edges_like_the_standalone_resource():
     assert edges("key_vault_inline_policy", "iam") == {
         ("azurerm_linux_web_app.app", "azurerm_key_vault.kv", "key:Get,secret:Get,secret:List"),

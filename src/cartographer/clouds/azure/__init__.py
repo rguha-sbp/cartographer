@@ -6,6 +6,7 @@ from cartographer.clouds.azure.rules import RULES
 from cartographer.clouds.azure.specs import EDGE_SPECS
 from cartographer.clouds.base import Catalog, Cloud, load_json
 from cartographer.diagram_model import FRAME_TITLE_LEFT
+from cartographer.tf_policies import unq
 from cartographer.tf_values import text
 
 ALIAS = re.compile(r"\b(?:azurerm|azapi)\.(\w+)")
@@ -64,8 +65,13 @@ class AzureCloud(Cloud):
     @staticmethod
     def subscription(ex, res):
         """The `subscription_id` literal of the provider block the resource uses, by alias; None when it is not one."""
-        provider = res.type.split("_", 1)[0]
-        alias = ALIAS.search(text(res.block.body.get("provider", "")))
+        body = res.block.body
+        if res.type == "module":
+            provider, mapped = "azurerm", body.get("providers")
+            chosen = next((v for k, v in mapped.items() if unq(k) == provider), "") if isinstance(mapped, dict) else ""
+        else:
+            provider, chosen = res.type.split("_", 1)[0], body.get("provider", "")
+        alias = ALIAS.search(text(chosen))
         key = f"{provider}.{alias[1]}" if alias else provider
         inst = res.inst
         while inst is not None and key not in inst.mod.providers:
