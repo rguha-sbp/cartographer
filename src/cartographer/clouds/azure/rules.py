@@ -78,6 +78,8 @@ def _azapi(tf_type: str) -> Rule:
         if not isinstance(arm_type, str):
             return Resolution("none", marked=True, reason="type is absent", decided_by=f"rule {tf_type} type absent")
         name = arm_type.split("@", 1)[0]
+        if name.lower() == "microsoft.resources/resourcegroups":
+            return Resolution("drop", decided_by=f"rule {tf_type} type = \"{name}\"")
         icon = arm_icon(arm_type)
         if icon is None:
             return Resolution("none", marked=True, reason=f"ARM type {name} not in arm_types",

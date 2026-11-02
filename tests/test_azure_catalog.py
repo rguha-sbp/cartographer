@@ -198,3 +198,27 @@ def test_catalog_class_is_shared_with_aws():
 def test_an_azapi_action_on_another_resource_folds_into_it_and_is_not_marked():
     r = AZURE.resolve("azapi_resource_action", no_attrs)
     assert (r.kind, r.marked, r.decided_by) == ("fold", False, "catalog azapi_resource_action")
+
+
+@pytest.mark.parametrize(("arm_type", "icon"), [
+    ("Microsoft.CloudHealth/healthmodels", "monitor_health_models"),
+    ("Microsoft.CloudHealth/healthmodels/entities", "monitor_health_models"),
+    ("Microsoft.CloudHealth/healthmodels/relationships", "monitor_health_models"),
+    ("Microsoft.CloudHealth/healthmodels/authenticationsettings", "monitor_health_models"),
+    ("Microsoft.ContainerService/fleets/autoUpgradeProfiles", "kubernetes_fleet_manager"),
+    ("Microsoft.ContainerService/fleets/members", "kubernetes_fleet_manager"),
+    ("Microsoft.ContainerService/fleets/updateStrategies", "kubernetes_fleet_manager"),
+    ("Microsoft.ContainerService/fleets/managedNamespaces", "kubernetes_fleet_manager"),
+    ("Microsoft.EventHub/namespaces/networkRuleSets", "event_hubs"),
+    ("Microsoft.StorageActions/storageTasks", "storage_tasks"),
+    ("Microsoft.Storage/storageAccounts/blobServices/containers", "blob_block"),
+])
+def test_arm_types_seen_in_the_quickstarts_have_an_icon(arm_type, icon):
+    assert arm_icon(arm_type) == icon
+
+
+def test_an_azapi_resource_group_is_dropped_like_the_azurerm_one():
+    def get(attr):
+        return "Microsoft.Resources/resourceGroups@2024-03-01" if attr == "type" else None
+
+    assert AZURE.resolve("azapi_resource", get).kind == "drop"
