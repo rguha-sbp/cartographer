@@ -32,6 +32,9 @@ EDGE_SPECS = {
     "aws_cloudfront_distribution": [Spec("route", None, "origin")],
     "aws_lambda_function_url": [Spec("route", None, "function_name")],
 }
+# The provider documents these old names on the aws_lb pages, so the type list from the docs has no entry for them.
+ALIASES = ["aws_alb", "aws_alb_listener", "aws_alb_listener_certificate", "aws_alb_listener_rule", "aws_alb_target_group",
+           "aws_alb_target_group_attachment"]
 NETWORK_ATTRS = frozenset({"vpc_config", "network_configuration", "subnet_ids", "security_group_ids", "subnet_id", "vpc_id"})
 
 
@@ -51,7 +54,7 @@ class AwsCloud(Cloud):
 
 AWS = AwsCloud(
     "aws", "AWS", ("aws",), load_json(__file__, "icons.json"), FRAME_STYLES, "AWS managed services",
-    provider_types=load_json(__file__, "provider_types.json"), catalog=Catalog(load_json(__file__, "catalog.json")),
+    provider_types=sorted(load_json(__file__, "provider_types.json") + ALIASES), catalog=Catalog(load_json(__file__, "catalog.json")),
     rules=RULES, modules=load_json(__file__, "modules.json"), edge_specs=EDGE_SPECS, network_attrs=NETWORK_ATTRS,
     data_ref_types=frozenset({"aws_iam_policy_document"}),
     param_types=frozenset({"aws_ssm_parameter", "aws_secretsmanager_secret"}),

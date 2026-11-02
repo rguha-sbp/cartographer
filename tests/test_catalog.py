@@ -46,7 +46,9 @@ def test_every_aws_provider_type_has_a_row():
 
 
 def test_provider_types_are_the_sorted_pinned_list():
-    assert len(AWS.provider_types) == 1740
+    from cartographer.clouds.aws import ALIASES
+
+    assert len(AWS.provider_types) == 1740 + len(ALIASES)
     assert AWS.provider_types == sorted(set(AWS.provider_types))
 
 
@@ -123,8 +125,8 @@ def test_rules_only_apply_to_their_own_type_not_the_family():
 
 
 def test_rule_with_unresolved_attribute_marks_and_keeps_base_icon():
-    r = AWS.resolve("aws_lb", lambda a: UNRESOLVED)
-    assert r.marked and r.icon == "aws:elastic_load_balancing" and r.reason == "load_balancer_type is not a literal"
+    r = AWS.resolve("aws_db_instance", lambda a: UNRESOLVED)
+    assert r.marked and r.icon == "aws:rds" and r.reason == "engine is not a literal"
 
 
 def test_every_rule_row_names_a_rule_and_every_rule_is_used():

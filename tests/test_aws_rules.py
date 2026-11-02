@@ -11,13 +11,16 @@ def attrs(**values):
 
 
 @pytest.mark.parametrize("tf_type", ["aws_lb", "aws_alb"])
-@pytest.mark.parametrize(("value", "decided_by"), [
-    (None, "absent"), ("application", '= "application"'), ("network", '= "network"'), ("gateway", '= "gateway"'),
-])
-def test_lb_rule(tf_type, value, decided_by):
+@pytest.mark.parametrize("value", [None, "application", "network", "gateway", "${var.kind}"])
+def test_a_load_balancer_has_one_icon_whatever_its_type(tf_type, value):
     r = AWS.resolve(tf_type, attrs(load_balancer_type=value))
-    assert (r.kind, r.icon, r.marked) == ("icon", LB, False)
-    assert r.decided_by == f"rule {tf_type} load_balancer_type {decided_by}"
+    assert (r.kind, r.icon, r.marked, r.decided_by) == ("icon", LB, False, f"catalog {tf_type}")
+
+
+@pytest.mark.parametrize("tf_type", ["aws_alb_listener", "aws_alb_listener_certificate", "aws_alb_listener_rule",
+                                     "aws_alb_target_group", "aws_alb_target_group_attachment"])
+def test_the_provider_aws_alb_aliases_are_listed_types(tf_type):
+    assert not AWS.resolve(tf_type, attrs()).marked
 
 
 @pytest.mark.parametrize(("attributes", "icon"), [

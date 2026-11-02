@@ -54,10 +54,9 @@ def test_uses_edges_skip_folded_types(neutral_facts: dict) -> None:
     assert by_address(neutral_facts, "aws_cloudwatch_log_group.fn")["fold"] == "owner"
 
 
-def test_a_non_literal_rule_attribute_marks_the_resource(neutral_facts: dict) -> None:
+def test_a_load_balancer_with_a_non_literal_type_is_not_marked(neutral_facts: dict) -> None:
     lb = by_address(neutral_facts, "aws_lb.front")
-    assert lb["icon"] == "aws:elastic_load_balancing" and lb["marked"] is True
-    assert lb["reason"] == "load_balancer_type is not a literal"
+    assert lb["icon"] == "aws:elastic_load_balancing" and lb["marked"] is False
 
 
 def test_a_relative_repo_root_is_resolved(monkeypatch):
