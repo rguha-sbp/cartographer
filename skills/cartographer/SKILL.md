@@ -1,6 +1,6 @@
 ---
 name: cartographer
-description: Build a verified AWS architecture diagram or a C4 diagram set (draw.io and svg) either from the Terraform in this repo or from an engineer's description of a new solution, then review the rendered result visually and fix curation findings until it is clean. Use when asked to generate, refresh, design or check an architecture diagram.
+description: Build a verified AWS architecture diagram or a C4 diagram set (draw.io and svg) either from the Terraform in this repo or from an engineer's description of a new solution, then review the rendered result visually and fix curation findings until it is clean. Use when asked to generate, refresh, design or check an architecture diagram, or a C4 model, system context, container, component, code, deployment or dynamic diagram.
 ---
 
 # Cartographer diagram loop

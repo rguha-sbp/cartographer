@@ -1,7 +1,8 @@
 # cartographer
 
-cartographer draws Layer 7 AWS architecture diagrams as draw.io files, either from the Terraform in your repo or from
-a solution you describe to Claude. Claude does the curation and, in describe mode, an interview. The tool does layout,
+cartographer draws Layer 7 AWS architecture diagrams and C4 diagram sets (System Context, Container, Component, Code,
+Deployment and Dynamic views, to the C4 model standard) as draw.io files, either from the code and Terraform in your
+repo or from a solution you describe to Claude. Claude does the curation and, in describe mode, an interview. The tool does layout,
 routing and verification and never calls a model. A diagram is only called ready after a visual review loop in which
 Claude looks at the rendered image, fixes what is wrong and looks again.
 
