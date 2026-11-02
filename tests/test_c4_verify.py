@@ -172,6 +172,15 @@ def test_compute_resource_missing_from_deployment_fails(tmp_path):
     assert "aws_lambda_function.other: not on any view and not omitted" in verify(m, facts, tmp_path)
 
 
+@pytest.mark.parametrize(("resource", "missing"), [("azurerm_linux_function_app.other", True),
+                                                   ("azurerm_storage_account.other", True),
+                                                   ("azurerm_resource_group.rg", False)])
+def test_azure_compute_or_store_missing_from_deployment_fails(tmp_path, resource, missing):
+    facts = _facts("aws_lambda_function.fn", "aws_db_instance.db", resource,
+                   edges=[_edge("aws_lambda_function.fn", "aws_db_instance.db")])
+    assert (f"{resource}: not on any view and not omitted" in verify(_tf(), facts, tmp_path)) is missing
+
+
 def test_omitted_resource_passes(tmp_path):
     m = _tf()
     m["omitted"] = [{"tf": "aws_lambda_function.other", "reason": "unused"}]

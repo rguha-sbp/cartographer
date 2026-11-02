@@ -91,4 +91,12 @@ AZURE = AzureCloud(
     "azure", "Azure", ("azurerm", "azapi"), load_json(__file__, "icons.json"), FRAME_STYLES, "Azure managed services",
     provider_types=load_json(__file__, "provider_types.json"), catalog=Catalog(load_json(__file__, "catalog.json")),
     rules=RULES, modules=load_json(__file__, "modules.json"), edge_specs=EDGE_SPECS, network_attrs=NETWORK_ATTRS,
+    deployed_types=frozenset({
+        "azurerm_linux_function_app", "azurerm_windows_function_app", "azurerm_linux_web_app", "azurerm_windows_web_app",
+        "azurerm_container_app", "azurerm_kubernetes_cluster", "azurerm_linux_virtual_machine",
+        "azurerm_windows_virtual_machine", "azurerm_linux_virtual_machine_scale_set",
+        "azurerm_windows_virtual_machine_scale_set", "azurerm_mssql_database", "azurerm_postgresql_flexible_server",
+        "azurerm_mysql_flexible_server", "azurerm_cosmosdb_account", "azurerm_storage_account",
+        "azurerm_servicebus_queue", "azurerm_servicebus_topic", "azurerm_eventhub", "azurerm_redis_cache",
+    }),
 )

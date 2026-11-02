@@ -68,7 +68,7 @@ class Cloud(ABC):
                  catalog: Catalog | None = None, rules: dict[str, Rule] | None = None,
                  modules: dict[str, str] | None = None, edge_specs: dict[str, list[Spec]] | None = None,
                  network_attrs: frozenset[str] = frozenset(), data_ref_types: frozenset[str] = frozenset(),
-                 param_types: frozenset[str] = frozenset()) -> None:
+                 param_types: frozenset[str] = frozenset(), deployed_types: frozenset[str] = frozenset()) -> None:
         self.name = name
         self.label = label
         self.providers = providers
@@ -84,6 +84,7 @@ class Cloud(ABC):
         self.network_attrs = network_attrs  # attribute names whose references are `network` edges
         self.data_ref_types = data_ref_types  # data source types whose body the reference scan follows
         self.param_types = param_types  # parameter and secret resources whose `name` is an integration hint
+        self.deployed_types = deployed_types  # compute, store and queue types a C4 Deployment view places or omits
 
     def network_facts(self, ex: Extractor) -> dict:
         """{"networks": [...], "placements": [...]} without ids; a placement names its network by address.

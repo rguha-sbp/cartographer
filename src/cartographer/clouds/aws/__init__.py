@@ -55,4 +55,9 @@ AWS = AwsCloud(
     rules=RULES, modules=load_json(__file__, "modules.json"), edge_specs=EDGE_SPECS, network_attrs=NETWORK_ATTRS,
     data_ref_types=frozenset({"aws_iam_policy_document"}),
     param_types=frozenset({"aws_ssm_parameter", "aws_secretsmanager_secret"}),
+    deployed_types=frozenset({
+        "aws_lambda_function", "aws_ecs_service", "aws_instance", "aws_autoscaling_group", "aws_db_instance",
+        "aws_rds_cluster", "aws_dynamodb_table", "aws_s3_bucket", "aws_sqs_queue", "aws_sns_topic",
+        "aws_kinesis_stream", "aws_elasticache_cluster", "aws_elasticache_replication_group",
+    }),
 )

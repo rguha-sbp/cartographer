@@ -77,8 +77,10 @@ Deployment
   belongs to (aws or azure); a subnet frame always has a `tier`. Infrastructure that hosts no container may have an
   `icon`, a qualified name found with `cartographer icons --cloud <aws|azure|generic|brand> --search <words>`. A node's
   `parent` is the node it sits in; parents never form a loop. An instance's `container` is a `container` element.
-- Every compute, store and queue resource in the facts (Lambda, ECS service, EC2 or autoscaling group, RDS or Aurora,
-  DynamoDB, S3, SQS, SNS, Kinesis, ElastiCache) is a deployment node or is listed in `omitted` as
+- Every compute, store and queue resource in the facts (AWS: Lambda, ECS service, EC2 or autoscaling group, RDS or
+  Aurora, DynamoDB, S3, SQS, SNS, Kinesis, ElastiCache; Azure: Function and Web Apps, Container Apps, AKS, virtual
+  machines and scale sets, SQL Database, PostgreSQL and MySQL flexible servers, Cosmos DB, storage accounts, Service
+  Bus, Event Hubs, Redis) is a deployment node or is listed in `omitted` as
   {"tf": <address>, "reason": <at most 80 characters>}.
 
 Before finishing, re-check: ids are unique, every parent and relationship end exists, every `tf` address is in the

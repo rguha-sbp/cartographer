@@ -9,11 +9,6 @@ from cartographer.clouds import CLOUDS
 from cartographer.secret_patterns import contains_secret
 from cartographer.verify_shared import SECRET_REASON, code_hit, shape_warnings
 
-COMPLETE_TYPES = (
-    "aws_lambda_function", "aws_ecs_service", "aws_instance", "aws_autoscaling_group", "aws_db_instance",
-    "aws_rds_cluster", "aws_dynamodb_table", "aws_s3_bucket", "aws_sqs_queue", "aws_sns_topic",
-    "aws_kinesis_stream", "aws_elasticache_cluster", "aws_elasticache_replication_group",
-)
 INSIDE = {"container", "component", "code"}
 PARENT_TYPE = {"container": "system", "component": "container", "code": "component"}
 STATED_HEADING = "Stated by the engineer, not found in the repo"
@@ -177,8 +172,9 @@ def _deployment(model: Model, facts: dict | None) -> list[str]:
     out = [f"{n['id']}: needs terraform addresses" for n in _nodes(model) if not n.get("tf") and "frame" not in n]
     out += [f"{n['id']}: {a} is not in the facts" for n in _nodes(model) for a in n.get("tf", []) if a not in addresses]
     placed = {a for n in _nodes(model) for a in n.get("tf", [])} | {o["tf"] for o in model.get("omitted", [])}
+    deployed = {t for cloud in CLOUDS.values() for t in cloud.deployed_types}
     out += [f"{r['address']}: not on any view and not omitted" for r in facts["resources"]
-            if r["type"] in COMPLETE_TYPES and r["address"] not in placed]
+            if r["type"] in deployed and r["address"] not in placed]
     return out
 
 
