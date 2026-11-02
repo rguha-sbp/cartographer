@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from xml.etree import ElementTree
 
 from cartographer import drift, files, index
 from cartographer.svg_export import SOURCE_SHA_ATTR
@@ -60,6 +61,23 @@ def test_check_reports_missing_unparsable_and_stale_images(tmp_path: Path) -> No
     assert any("plain.drawio" in p and "does not match" in p for p in found)
 
 
+def _book(folder: Path, stamp: str | None = None) -> Path:
+    drawio = folder / "shop-c4.drawio"
+    drawio.write_text(BOOK)
+    for page in files.pages(drawio, BOOK):
+        page.image.write_text(f'<svg {SOURCE_SHA_ATTR}="{stamp or files.sha256_file(drawio)}"/>')
+    return drawio
+
+
+def test_check_wants_an_image_of_the_whole_file_for_every_page_of_a_book(tmp_path: Path) -> None:
+    drawio = _book(tmp_path)
+    assert drift.problems(tmp_path) == []
+    (tmp_path / "shop-c4-2-container.svg").unlink()
+    assert drift.problems(tmp_path) == [f"{drawio}: no image, run `cartographer image {drawio}`"]
+    _book(tmp_path, stamp="0" * 64)
+    assert len(drift.problems(tmp_path)) == 2
+
+
 def test_check_ignores_side_files_and_curated_files(tmp_path: Path) -> None:
     (tmp_path / "a.generated.drawio").write_text("<mxfile/>")
     (tmp_path / "a.curated.json").write_text("{}")
@@ -81,6 +99,14 @@ def test_index_lists_one_line_per_drawio(tmp_path: Path) -> None:
     assert rows == [f"| {title} | [{s}.drawio]({s}.drawio) | [{s}.svg]({s}.svg) |" for title, s in expected]
 
 
+def test_index_lists_one_line_per_page_of_a_book(tmp_path: Path) -> None:
+    _book(tmp_path)
+    index.write_index(tmp_path)
+    rows = [line for line in (tmp_path / "README.md").read_text().splitlines() if ".drawio](" in line]
+    assert rows == [f"| {title} | [shop-c4.drawio](shop-c4.drawio) | [shop-c4-{s}.svg](shop-c4-{s}.svg) |"
+                    for title, s in (("Context", "1-context"), ("Container", "2-container"))]
+
+
 def test_index_text_has_no_dashes_or_smart_quotes(tmp_path: Path) -> None:
     (tmp_path / "a-l7.drawio").write_text('<mxfile><diagram name="Layer 7 diagram for A"/></mxfile>')
     index.write_index(tmp_path)
@@ -97,10 +123,30 @@ def test_index_titles_a_drawio_without_a_page_name_by_its_file_name(tmp_path: Pa
     assert "| a-l7 | [a-l7.drawio]" in readme and "| b | [b.drawio]" in readme
 
 
-def test_page_name_is_the_first_diagram_name_else_empty(tmp_path: Path) -> None:
+BOOK = ('<mxfile host="h"><diagram id="shop-1-context" name="Context"><mxGraphModel/></diagram>'
+        '<diagram id="shop-2-container" name="Container"><mxGraphModel/></diagram></mxfile>')
+
+
+def test_a_one_page_file_is_drawn_whole_into_its_sibling_image(tmp_path: Path) -> None:
     d = tmp_path / "a.drawio"
-    d.write_text('<mxfile><diagram name="System Context diagram for S"/><diagram name="Other"/></mxfile>')
-    assert files.page_name(d) == "System Context diagram for S"
-    for text in ("<mxfile/>", "<mxfile><diagram/></mxfile>", "not xml"):
-        d.write_text(text)
-        assert files.page_name(d) == ""
+    for text, name in (('<mxfile><diagram name="S"/></mxfile>', "S"), ("<mxfile/>", ""),
+                       ("<mxfile><diagram/></mxfile>", ""), ("not xml", "")):
+        assert files.pages(d, text) == [files.Page(name, tmp_path / "a.svg", text)]
+
+
+def test_each_page_of_a_book_is_drawn_alone_into_an_image_named_for_its_page(tmp_path: Path) -> None:
+    context, container = files.pages(tmp_path / "shop-c4.drawio", BOOK)
+    assert (context.name, context.image) == ("Context", tmp_path / "shop-c4-1-context.svg")
+    assert (container.name, container.image) == ("Container", tmp_path / "shop-c4-2-container.svg")
+    assert context.mxfile == ('<mxfile host="h">\n  <diagram id="shop-1-context" name="Context">\n'
+                              "    <mxGraphModel />\n  </diagram>\n</mxfile>\n")
+
+
+def test_a_page_split_from_a_book_is_the_one_page_file_of_that_page() -> None:
+    def page(n: str) -> ElementTree.Element:
+        p = ElementTree.Element("diagram", id=f"x-{n}", name=f"it's {n}")
+        ElementTree.SubElement(ElementTree.SubElement(p, "mxGraphModel"), "root")
+        return p
+
+    book = files.pages(Path("x-c4.drawio"), files.mxfile([page("a"), page("b")]))
+    assert [p.mxfile for p in book] == [files.mxfile([page("a")]), files.mxfile([page("b")])]

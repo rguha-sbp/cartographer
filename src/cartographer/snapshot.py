@@ -1,4 +1,4 @@
-"""Screenshot a .drawio file in the local draw.io viewer so it can be reviewed visually (see REVIEW.md)."""
+"""Screenshot every page of a .drawio file in the local draw.io viewer so it can be reviewed visually (see REVIEW.md)."""
 
 import argparse
 import base64
@@ -150,21 +150,16 @@ def _tile_html(png: Path, size: tuple[int, int], tile: Tile) -> str:
     )
 
 
-def snapshot(drawio: Path, out_dir: Path, drawio_url: str, tiles: str) -> list[Path]:
-    rows, cols = parse_tiles(tiles)
-    xml = drawio.read_text()
-    size = window_size(xml)
-    if not drawio_up(drawio_url):
-        raise SnapshotError(DRAWIO_DOWN)
-    chrome = find_chrome()
-    out_dir.mkdir(parents=True, exist_ok=True)
-    full = out_dir / f"{drawio.stem}.png"
-    _shoot(chrome, viewer_url(drawio_url, xml), size, full)
+def _shots(chrome: str, page: files.Page, size: tuple[int, int], out_dir: Path, drawio_url: str,
+           rows: int, cols: int) -> list[Path]:
+    """The full PNG of the page, named for its image, then its tiles when there are several."""
+    full = out_dir / f"{page.image.stem}.png"
+    _shoot(chrome, viewer_url(drawio_url, page.mxfile), size, full)
     written = [full]
     if rows * cols == 1:
         return written
     for tile in tile_rects(*size, rows, cols):
-        stem = f"{drawio.stem}.tile-r{tile.row}c{tile.col}"
+        stem = f"{page.image.stem}.tile-r{tile.row}c{tile.col}"
         html = out_dir / f"{stem}.html"
         html.write_text(_tile_html(full, size, tile))
         try:
@@ -173,6 +168,18 @@ def snapshot(drawio: Path, out_dir: Path, drawio_url: str, tiles: str) -> list[P
             html.unlink(missing_ok=True)
         written.append(out_dir / f"{stem}.png")
     return written
+
+
+def snapshot(drawio: Path, out_dir: Path, drawio_url: str, tiles: str) -> list[tuple[files.Page, list[Path]]]:
+    """The PNGs of every page of the .drawio, each page shot alone."""
+    rows, cols = parse_tiles(tiles)
+    pages = files.pages(drawio, drawio.read_text())
+    sizes = [window_size(page.mxfile) for page in pages]
+    if not drawio_up(drawio_url):
+        raise SnapshotError(DRAWIO_DOWN)
+    chrome = find_chrome()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return [(page, _shots(chrome, page, size, out_dir, drawio_url, rows, cols)) for page, size in zip(pages, sizes, strict=True)]
 
 
 def add_arguments(ap: argparse.ArgumentParser) -> None:
@@ -185,7 +192,7 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
 def run(args: argparse.Namespace) -> int:
     try:
         with drawio_app.drawio_at(args.drawio_url) as url:
-            paths = snapshot(args.drawio, args.out_dir, url, args.tiles)
+            shot = snapshot(args.drawio, args.out_dir, url, args.tiles)
     except drawio_app.DrawioError as err:
         print(err, file=sys.stderr)
         return 2
@@ -195,7 +202,7 @@ def run(args: argparse.Namespace) -> int:
     except ValueError as err:
         print(err, file=sys.stderr)
         return 1
-    print("\n".join([f"view: {files.page_name(args.drawio)}", *map(str, paths)]))
+    print("\n".join(line for page, paths in shot for line in (f"view: {page.name}", *map(str, paths))))
     return 0
 
 

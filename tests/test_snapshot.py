@@ -90,6 +90,28 @@ def test_main_writes_full_and_tiles(tmp_path, monkeypatch, capsys, bundled_app):
     assert calls[0][-1].startswith(bundled_app)
 
 
+def test_main_shoots_every_page_of_a_book_alone(tmp_path, monkeypatch, capsys, bundled_app):
+    model = XML[XML.index("<mxGraphModel>"):XML.index("</diagram>")]
+    wide = model.replace('width="400"', 'width="900"')
+    d = tmp_path / "shop-c4.drawio"
+    d.write_text(f'<mxfile><diagram id="shop-1-context" name="Context">{model}</diagram>'
+                 f'<diagram id="shop-2-container" name="Container">{wide}</diagram></mxfile>')
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        Path(next(a for a in cmd if a.startswith("--screenshot=")).split("=", 1)[1]).write_bytes(b"png")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
+    monkeypatch.setattr(snapshot, "find_chrome", lambda: "/bin/chrome")
+    monkeypatch.setattr(snapshot.subprocess, "run", fake_run)
+    assert snapshot.main([str(d), "-o", str(tmp_path), "--tiles", "1x1"]) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "view: Context", str(tmp_path / "shop-c4-1-context.png"),
+        "view: Container", str(tmp_path / "shop-c4-2-container.png")]
+    assert ["--window-size=640,540" in calls[0], "--window-size=1140,540" in calls[1]] == [True, True]
+
 
 def test_find_chrome_missing(monkeypatch):
     monkeypatch.setattr(snapshot.Path, "exists", lambda self: False)

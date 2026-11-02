@@ -4,6 +4,7 @@ them."""
 import html
 import xml.etree.ElementTree as ET
 
+from cartographer import files
 from cartographer.diagram_model import (
     AWS_ICONS,
     BRAND_ICONS,
@@ -117,7 +118,8 @@ class DrawioRenderer:
         self._vertex("legend", _legend_html(lg), LEGEND_STYLE, lg.x, lg.y, lg.w, lg.h, None)
 
 
-def render(diagram: Diagram, *, page_id: str, page_name: str, notation: Notation = AWS) -> str:
+def page(diagram: Diagram, *, page_id: str, page_name: str, notation: Notation = AWS) -> ET.Element:
+    """The diagram as one page of an mxfile."""
     r = DrawioRenderer(notation)
     r.title(diagram.title)
     for n in diagram.nodes:
@@ -125,12 +127,14 @@ def render(diagram: Diagram, *, page_id: str, page_name: str, notation: Notation
     for e in diagram.edges:
         r.edge(e)
     r.legend(diagram.legend)
-    mxfile = ET.Element("mxfile", host="app.diagrams.net")
-    page = ET.SubElement(mxfile, "diagram", id=page_id, name=page_name)
-    model = ET.SubElement(page, "mxGraphModel", dx="2977", dy="1683", grid="1", gridSize="10", guides="1",
+    result = ET.Element("diagram", id=page_id, name=page_name)
+    model = ET.SubElement(result, "mxGraphModel", dx="2977", dy="1683", grid="1", gridSize="10", guides="1",
                           tooltips="1", connect="1", arrows="1", fold="1", page="1", pageScale="1", pageWidth="2620",
                           pageHeight="1640", math="0", shadow="0")
     model.append(r.root)
-    ET.indent(mxfile, space="  ")
-    return ET.tostring(mxfile, encoding="unicode").replace("'", "&#39;") + "\n"
+    return result
 
+
+def render(diagram: Diagram, *, page_id: str, page_name: str, notation: Notation = AWS) -> str:
+    """The diagram as a one-page mxfile."""
+    return files.mxfile([page(diagram, page_id=page_id, page_name=page_name, notation=notation)])
