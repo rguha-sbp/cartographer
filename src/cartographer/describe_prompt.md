@@ -22,14 +22,14 @@ Fields for a described diagram
 - Groups: always nest the cloud nodes in frames, one group of kind `cloud`, inside it `region`, inside it
   `account` (an Azure subscription is the account). Every frame group (`cloud`, `region`, `account`, `network`, `subnet`)
   carries `cloud` (`aws` or `azure`). Users and third-party systems are externals and sit outside the frames. If the engineer did not name the
-  region or account, label them with your best guess and record it in `assumptions`.
+  region or account, ask.
 - Networks and subnets: a `network` group (the VPC or virtual network, parent the account) holds what runs in it. Inside it, one `subnet` group per
   tier that holds a node, with `tier` `public`, `private` or `isolated` and the label "Public subnets", "Private
   subnets" or "Isolated subnets". Never draw Availability Zones or resource groups. Only network-attached services go in a subnet group;
   regional services (S3, DynamoDB, Bedrock, SQS, Azure Storage, Key Vault) sit under the account. On Azure a private
   endpoint sits in its subnet and the service it exposes stays outside; an app with VNet integration stays outside too.
-- Tier: from what the engineer said. When they did not say: gateways and public load balancers public, compute and data
-  private (on Azure too). Record each such default in `assumptions`; the tier is never marked on the diagram. A subnet group's `evidence` is a
+- Tier: from what the engineer said. When they did not say, ask; propose gateways and public load balancers public, compute
+  and data private (on Azure too). The tier is never marked on the diagram. A subnet group's `evidence` is a
   `stated` item when the engineer named the tier.
 - CIDR: set `cidrs` on the `network` group only when the engineer stated the address range, with a `stated` or `file`
   item in the group's `evidence`. Never guess or invent an address range; leave `cidrs` out instead.
@@ -50,13 +50,14 @@ Evidence
 - Edges: a direction that follows the request or data, a `label` of a specific verb plus protocol where it matters
   (at most 28 characters), `dashed` true only for asynchronous, optional or control paths, and a `flow`.
 
-Best guesses
-- Where the engineer did not say, choose the most likely answer and draw it normally. Never write "assumed",
-  "draft", "TBD" or "unverified" in a label, group name or anywhere else on the diagram.
-- Record each guess in `assumptions` as {"about": ..., "guess": ...}. `about` is a node or external id, or an edge
+Ask, never guess
+- Where the engineer did not say, ask, as the playbook's "Ask, never guess" rule says. Draw a proposal only after the
+  engineer confirms it or tells you to go with it. Never write "assumed", "draft", "TBD" or "unverified" in a label,
+  group name or anywhere else on the diagram.
+- Record each proposal the engineer told you to go with in `assumptions` as {"about": ..., "guess": ...}. `about` is a node or external id, or an edge
   written as `src->dst` with the ids of its two ends. Assumptions are never drawn. Tell the engineer about them in
   chat at the end so they can correct them.
-- A guess still needs evidence on its edge: a `stated` item for the nearest thing the engineer did say.
+- Such an edge cites the engineer's go-ahead as a `stated` item.
 
 Every node and external needs at least one edge, and every group must hold a node. Do not nest a frame around a
 single node just because the model allows it. Before each write, re-check: ids

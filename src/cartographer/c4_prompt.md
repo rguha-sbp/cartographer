@@ -58,11 +58,15 @@ Asking the engineer
   "For the Component diagram of the `api` container I need its main internal parts, because a C4 Component view shows what is inside one container."
 - Ask while you curate, before the first build. An `assumptions` entry is only for a question the engineer was asked
   and could not answer.
-- Record each answer as `stated` evidence. Where the engineer does not know, choose the most likely answer and record
-  it in `assumptions` as {"about": ..., "guess": ...}; assumptions are never drawn.
+- Record each answer as `stated` evidence. Never draw a guess: follow the playbook's "Ask, never guess" rule. A
+  proposal the engineer told you to go with goes in `assumptions` as {"about": ..., "guess": ...}; assumptions are
+  never drawn.
 - Before you add any `component`, ask which containers to open up. Offer the main application container first (the
   one the people or other systems use), even when its code is not in the repo; then ask what is inside it and record
   the parts as `stated`. Never open up only the containers whose code happens to be easy to read.
+- Third-party software inside a container (a vendor product, an appliance image) is one black-box component. Around
+  it, add the components the repo configures or runs next to it (its TLS listener, start-up and secrets wiring,
+  database connection, agents), each citing the `file` line that sets it up.
 
 Code level
 - Before you add any `code` element, ask whether the engineer wants Code-level diagrams; C4 treats them as optional.

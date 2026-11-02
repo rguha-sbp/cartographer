@@ -1,7 +1,8 @@
-# Describe mode playbook
+# Interview playbook
 
 How Claude gets a cloud engineer from "I have a design" to a complete, reviewed Layer 7 diagram when there is no
-Terraform to read. The diagram ends up in official documents, so it must be correct and look finished.
+Terraform to read. The diagram ends up in official documents, so it must be correct and look finished. Section 2
+and its "Ask, never guess" rule apply on every path: Terraform, described and C4.
 
 ## 1. Opening
 
@@ -17,6 +18,10 @@ Terraform to read. The diagram ends up in official documents, so it must be corr
 - Then targeted questions, one open decision at a time. Each carries your recommended answer:
   "I'd put API Gateway in front of the Lambda; does that match?"
 - Read the repo or the supplied file instead of asking when it can answer.
+- Ask, never guess. When the repo, a supplied file or an earlier answer does not settle something the diagram needs,
+  ask before you draw it. You may offer your likely answer inside the question; it is drawn only after a yes. When
+  the engineer does not know, ask who does. If nobody can answer now, leave it off the diagram and list it as open.
+  Only when the engineer says to go with your proposal is it drawn and recorded under `assumptions`.
 - No leading questions. Vary the wording of "why": "What made you pick X?", "What would break without X?", "What
   does X buy you over Y?"
 
@@ -40,23 +45,22 @@ current diagram against it:
 - Where data lives: every store and what it holds.
 - Workloads: how the solution splits into applications or services (one targeted question, with your recommended
   split). Each workload becomes its own frame, so separate workloads read as separate.
-- Network placement: which services run in a VPC or virtual network and in which subnet tier (public, private, isolated). When the
-  engineer does not say, default to gateways and public load balancers public, compute and data private, and record each default in
-  `assumptions`. Ask for a CIDR only if the engineer brings one up; draw a CIDR only when stated, never guess one.
+- Network placement: which services run in a VPC or virtual network and in which subnet tier (public, private, isolated). Ask when the
+  engineer has not said; propose gateways and public load balancers public, compute and data private. Ask for a CIDR only if the engineer brings one up; draw a CIDR only when stated, never guess one.
 - Outside the cloud: third-party and on-premises systems, and the account or subscription and network boundaries.
 - Identity and auth: how callers and services prove who they are.
 
 Rank the gaps by how badly each would mislead the diagram: wrong or missing boxes and arrows first, labels and
-protocols last. Ask at most about 8 targeted questions in total. Settle everything still open with your best guess.
+protocols last. Keep asking, one question per message, until nothing on the checklist is unclear.
 
 ## 5. No visible assumptions
 
 - Never mark anything as assumed, draft, TBD or unverified on the diagram: no label text, styling, block or footer.
-- Draw each best guess like any other fact. Record it in the curated file under `assumptions`
+- A proposal the engineer told you to go with is drawn like any other fact and recorded under `assumptions`
   (`{"about": <id or src->dst>, "guess": <what you chose>}`). Assumptions are never rendered.
 - Evidence still applies: `stated` is a short paraphrase of what the engineer said, `file` is
-  `{file, line, contains}` from a supplied document. Never invent evidence; a guess hangs on the nearest thing the
-  engineer actually said.
+  `{file, line, contains}` from a supplied document. Never invent evidence; an accepted proposal cites the engineer's go-ahead
+  as `stated`.
 
 ## 6. Finishing
 
@@ -65,15 +69,14 @@ protocols last. Ask at most about 8 targeted questions in total. Settle everythi
    by asking them, rebuild. Repeat until a round has no findings, at most 3 rounds.
 2. Run `cartographer check docs/architecture/diagrams`.
 3. Tell the engineer which files to commit, and list every entry of `assumptions` in chat, one line each
-   ("Payments go through a queue: I guessed this"), so they can correct anything before the diagram is published.
+   ("Payments go through a queue: you told me to go with this") and every open question, so nothing unconfirmed is published.
 4. Never say the diagram is ready while a review finding is open.
 
 ## 7. C4 set
 
 Use this section when the engineer chose a C4 set at step 0 of SKILL.md. Sections 1 to 3 and 5 to 6 apply as written,
 with `model.json` instead of the curated file and `cartographer build --c4` instead of `build`. The diagrams end up in
-official documents, so the same care applies. Where section 4 or 5 says to settle a gap with a best guess, in a C4
-set you ask first and guess only when the engineer cannot answer.
+official documents, so the same care applies.
 
 ### Question rule
 
@@ -84,8 +87,7 @@ service does that?" One question per message. Read the repo first and ask only w
 ### C4 gap checklist
 
 Before each question, check the model against the level it feeds. When the repo does not answer something C4 needs,
-ask the engineer first, as the question rule says. Record an assumption only when the engineer cannot answer, and
-never mark it on the diagram.
+ask the engineer first, as the question rule and section 2 say. Never mark an assumption on the diagram.
 
 - Context: the people and their roles; every external system the system talks to; one sentence on what the system is
   for.
@@ -93,7 +95,9 @@ never mark it on the diagram.
   scheduled jobs); the technology of each; who calls whom and over which protocol.
 - Component: the internal parts of one container when the code is missing or unclear; each part's responsibility and
   technology. Ask which containers to open up, offering the main application container first even when its code is
-  not in the repo; never pick only the containers whose code is easy to read.
+  not in the repo; never pick only the containers whose code is easy to read. Third-party software (a vendor
+  product, an appliance image) is one black-box component; around it, draw the parts the repo configures or runs
+  next to it (its TLS listener, start-up and secrets wiring, database connection, agents), each citing the file.
 - Deployment: the environments (production, staging); the nesting of the deployment nodes (account, region, cluster,
   host); which container runs on which node and how many instances.
 - Dynamic: the scenarios worth showing, and the order of the calls in each.
