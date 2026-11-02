@@ -70,7 +70,10 @@ class AzureCloud(Cloud):
         key = f"{provider}.{alias[1]}" if alias else provider
         inst = res.inst
         while inst is not None and key not in inst.mod.providers:
+            key = inst.provider_map.get(key, key)
             inst = inst.parent
+        if not key:
+            return None
         found = ex.value(inst, inst.mod.providers[key].get("subscription_id")) if inst else None
         return found if isinstance(found, str) else None
 

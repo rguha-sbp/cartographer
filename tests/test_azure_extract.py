@@ -128,3 +128,11 @@ def test_load_balancer_is_public_or_internal_by_its_frontend_blocks():
         "no_frontend": ("azure:load_balancers", True, "rule azurerm_lb frontend_ip_configuration absent"),
     }
     assert got["no_frontend"]["reason"] == "frontend_ip_configuration absent"
+
+
+def test_a_module_providers_map_carries_the_aliased_providers_subscription_into_the_module():
+    case = "module_provider_alias"
+    got = {m: (resource(case, f"module.{m}.azurerm_storage_account.sa")["location"],
+               resource(case, f"module.{m}.azurerm_storage_account.sa")["subscription"]) for m in ("plain", "hub")}
+    assert got == {"plain": ("westeurope", "11111111-1111-1111-1111-111111111111"),
+                   "hub": ("northeurope", "22222222-2222-2222-2222-222222222222")}

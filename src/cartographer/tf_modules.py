@@ -77,6 +77,7 @@ class Inst:
     parent: Inst | None
     multi: bool
     instances: list[str] | None = None
+    provider_map: dict[str, str] = field(default_factory=dict)  # a provider key of this module -> the parent's key; "" when calls disagree
     children: dict[str, Inst] = field(default_factory=dict)
 
     def walk(self) -> Iterator[Inst]:
@@ -86,6 +87,12 @@ class Inst:
             if id(child := self.children[name]) not in done:
                 done.add(id(child))
                 yield from child.walk()
+
+
+def provider_map(calls: list[Block]) -> dict[str, str]:
+    maps = [{unq(k): unq(v).removeprefix("${").removesuffix("}") for k, v in b.body.get("providers", {}).items() if k != "__is_block__"}
+            for b in calls]
+    return {key: found.pop() if len(found := {m.get(key) for m in maps}) == 1 else "" for key in {k for m in maps for k in m}}
 
 
 def local_source(blk: Block) -> str | None:
@@ -113,6 +120,7 @@ def build(directory: Path, repo_root: Path, prefix: str, args: list, parent: Ins
             multi or family or any("count" in c.body or "for_each" in c.body for c in calls), depth + 1,
             sorted(names) if family else None,
         )
+        child.provider_map = provider_map(calls)
         inst.children.update(dict.fromkeys(names, child))
     return inst
 
