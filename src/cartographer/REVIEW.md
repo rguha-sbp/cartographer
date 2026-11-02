@@ -1,5 +1,7 @@
 # Visual review checklist
 
+For a Layer 7 diagram, read `review.json` in the diagram's cache folder first (`cartographer build` writes it). Review the `marked` entries first and judge each icon against its `tf` types and `icon_title`. An icon fix is `cartographer icons` to find the right name, then an override with a reason in `icons.json`, then `cartographer build`; never re-curate for an icon.
+
 What Claude checks on the `cartographer snapshot` PNGs (full image and every tile) before calling a diagram ready.
 One line per rule. A finding names the view, the rule, the tile and the element. The tag says how a finding is fixed:
 
@@ -14,7 +16,7 @@ Drawing rules the tool already enforces are in `RULES.md` (`cartographer docs ru
 page name starts with the view type:
 
 - `System Context diagram for ...`, `Container diagram for ...`, `Component diagram for ...`, `Code diagram for ...`, `Deployment diagram for ...`, `Dynamic diagram for ...`: a C4 view. Apply "Every diagram", "C4: every view" and the section named like the page.
-- Anything else: an AWS Layer 7 diagram. Apply "Every diagram" and "Layer 7".
+- Anything else: a Layer 7 diagram. Apply "Every diagram" and "Layer 7".
 
 The numbers of the Layer 7 rules did not change when the list was split, so a finding can still be quoted as "rule 10".
 
@@ -31,9 +33,9 @@ The numbers of the Layer 7 rules did not change when the list was split, so a fi
 
 ## Layer 7
 
-2. [curation] Every icon is a real icon: no empty box, and not the generic four-squares icon when a brand or AWS icon fits (`brand_icons.json`, `clouds/aws/icons.json`).
+2. [curation] Every icon is a real icon: no empty box, and not the generic four-squares icon when a brand or cloud icon fits (find it with `cartographer icons`).
 5. [tool] Lines in a bundle are distinguishable by colour (RULES.md: an arrow takes the colour of its destination).
-7. [curation] AWS services sit inside the AWS Cloud frame; third parties (brands, SaaS, users) sit outside it (RULES.md: AWS managed services are externals with `service` set).
+7. [curation] Cloud services sit inside their cloud's frame; third parties (brands, SaaS, users) sit outside it (RULES.md: managed services are externals with a cloud `icon`).
 9. [tool] The legend matches what is drawn: colour meaning and solid versus dashed (RULES.md: line style is explained in words).
 11. [curation] Every VPC-attached node (load balancer, compute, database, endpoint) sits in a subnet frame inside its VPC; regional services (S3, DynamoDB, SQS) sit outside the VPC. Fix: add the `subnet` group and move the node.
 12. [curation] Workloads are visually separate: each application or service boundary has its own frame, and unrelated services do not share one. Fix: split or merge role groups.

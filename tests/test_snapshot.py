@@ -164,3 +164,14 @@ def test_find_chrome_prefers_install_path_over_path(monkeypatch):
     monkeypatch.setattr(snapshot.Path, "exists", lambda self: self == mac)
     monkeypatch.setattr(snapshot.shutil, "which", lambda n: "/usr/bin/chromium")
     assert snapshot.find_chrome() == str(mac)
+
+
+def test_tiles_json_maps_icons_to_tiles() -> None:
+    xml = """<mxfile><diagram><mxGraphModel><root>
+<mxCell id="0"/><mxCell id="1" parent="0"/>
+<mxCell id="left" parent="1" vertex="1"><mxGeometry x="0" y="0" width="60" height="60" as="geometry"/></mxCell>
+<mxCell id="right" parent="1" vertex="1"><mxGeometry x="940" y="440" width="60" height="60" as="geometry"/></mxCell>
+<mxCell id="frame" parent="1" vertex="1"><mxGeometry x="0" y="0" width="1000" height="500" as="geometry"/></mxCell>
+</root></mxGraphModel></diagram></mxfile>"""
+    size = snapshot.window_size(xml)
+    assert snapshot.tile_map(xml, "a", size, 2, 2) == {"a.tile-r0c0.png": ["left"], "a.tile-r1c1.png": ["right"]}

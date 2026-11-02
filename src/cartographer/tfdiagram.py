@@ -9,6 +9,7 @@ SCHEMA = HERE / "curated.schema.json"
 PROMPT = HERE / "curate_prompt.md"
 DESCRIBE_PROMPT = HERE / "describe_prompt.md"
 VIEW_NAMES = {"l7": "Layer 7"}
+VIEW_SUMMARIES = {"l7": "Layer 7: services and how they call each other"}
 
 
 def schema_text() -> str:

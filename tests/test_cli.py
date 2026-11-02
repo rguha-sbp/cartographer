@@ -272,3 +272,25 @@ def test_icons_command_finds_a_named_icon_and_is_silent_without_a_match(capsys) 
     assert capsys.readouterr().out.splitlines()[0].startswith("aws:lambda\t")
     assert cli.main(["icons", "--cloud", "aws", "--search", "zzzzqq"]) == 0
     assert capsys.readouterr().out == ""
+
+
+def test_overrides_are_applied_reported_and_leave_the_cache_key_alone(
+    cache: Path, tmp_path: Path, capsys, renderer
+) -> None:
+    curated = _setup_build(tmp_path, capsys)
+    key = json.loads(curated.read_text())["inputs_sha256"]
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "icons.json").write_text(json.dumps({"overrides": [
+        {"cloud": "aws", "type": "aws_s3_bucket", "icon": "sqs", "reason": "test"},
+        {"cloud": "aws", "type": "aws_s3_bucket", "icon": "no_such_icon", "reason": "test"}]}))
+    assert _build(tmp_path, curated) == 0
+    report = capsys.readouterr().out
+    assert "Overrides (2)" in report and "refused" in report
+    assert "mxgraph.aws4.sqs" in (out / "mini.drawio").read_text()
+    assert tfdiagram.inputs_sha256(cache / "facts.json") == key
+    assert (cache / "review.json").is_file()
+    (out / "icons.json").write_text("{bad")
+    assert _build(tmp_path, curated) == 0
+    assert "Overrides (1)" in capsys.readouterr().out
+    assert "mxgraph.aws4.sqs" not in (out / "mini.drawio").read_text()
