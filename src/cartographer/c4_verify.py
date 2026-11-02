@@ -1,7 +1,6 @@
 """Check a C4 model against its structure, its evidence and the Terraform facts before any diagram is drawn."""
 
 from collections import Counter
-from collections.abc import Callable
 from pathlib import Path
 
 from cartographer.c4_model import Model, ancestors, elements
@@ -99,25 +98,21 @@ def _hosts(model: Model, eid: str) -> set[str]:
     return {a for n in _nodes(model) if n["id"] in hosting for a in n.get("tf", [])}
 
 
-def _joins(model: Model, rel: dict) -> Callable[[dict], bool]:
-    ends = _hosts(model, rel["src"]), _hosts(model, rel["dst"])
-
-    def joins(fact: dict) -> bool:
-        pair = fact.get("src"), fact.get("dst")
-        return pair[0] in ends[0] and pair[1] in ends[1] or pair[0] in ends[1] and pair[1] in ends[0]
-
-    return joins
+def _joins(ends: tuple[set[str], set[str]], fact: dict) -> bool:
+    """True when the fact's src and dst sit on the hosts of the two ends, in either direction."""
+    src, dst = fact.get("src"), fact.get("dst")
+    return src in ends[0] and dst in ends[1] or src in ends[1] and dst in ends[0]
 
 
-def _evidence(item: dict, facts: dict | None, repo: Path, joins: Callable[[dict], bool] | None = None) -> list[str]:
-    known = {f["id"]: f for key in ("edges", "vpcs", "placements") for f in (facts or {}).get(key, [])}
+def _evidence(item: dict, known: dict[str, dict] | None, repo: Path, ends: tuple[set[str], set[str]] | None = None) -> list[str]:
+    """Problems with item's evidence; known maps fact ids to facts, None without facts."""
     out = []
     for ev in item["evidence"]:
-        if "fact" in ev and facts is None:
+        if "fact" in ev and known is None:
             out.append(f"{item['id']}: fact {ev['fact']} needs Terraform facts")
         elif "fact" in ev and ev["fact"] not in known:
             out.append(f"{item['id']}: fact {ev['fact']} not found")
-        elif "fact" in ev and joins and not joins(known[ev["fact"]]):
+        elif "fact" in ev and ends and not _joins(ends, known[ev["fact"]]):
             out.append(f"{item['id']}: fact {ev['fact']} does not join the nodes hosting its two ends")
         elif "file" in ev and (reason := code_hit(repo, ev)):
             out.append(f"{item['id']}: {reason}")
@@ -125,10 +120,12 @@ def _evidence(item: dict, facts: dict | None, repo: Path, joins: Callable[[dict]
 
 
 def _evidence_rules(model: Model, facts: dict | None, repo: Path) -> list[str]:
-    out = [e for item in (*model["elements"], *_nodes(model)) for e in _evidence(item, facts, repo)]
+    known = None if facts is None else {f["id"]: f for key in ("edges", "vpcs", "placements") for f in facts.get(key, [])}
+    by_id = elements(model)
+    out = [e for item in (*model["elements"], *_nodes(model)) for e in _evidence(item, known, repo)]
     for r in model["relationships"]:
-        known_ends = r["src"] in elements(model) and r["dst"] in elements(model)
-        out += _evidence(r, facts, repo, _joins(model, r) if known_ends else None)
+        ends = (_hosts(model, r["src"]), _hosts(model, r["dst"])) if r["src"] in by_id and r["dst"] in by_id else None
+        out += _evidence(r, known, repo, ends)
     return out
 
 
@@ -155,6 +152,7 @@ def _secrets(model: Model) -> list[str]:
 def verify(model: Model, facts: dict | None, repo: Path) -> list[str]:
     """Every problem found, sorted; empty means the model passes. facts is None for source description."""
     parents = _parents(model)
+    # Ancestor walks loop or raise on broken parent links, so the later rules wait until the parents are sound.
     errors = _ids(model) + parents + _structure(model) + _secrets(model)
     if not parents:
         errors += _nesting(model) + _evidence_rules(model, facts, repo) + _deployment(model, facts)

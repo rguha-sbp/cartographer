@@ -170,9 +170,15 @@ def test_omitted_resource_passes(tmp_path):
 def test_secret_in_text_fails(tmp_path):
     m = _valid()
     m["elements"][2]["description"] = "password = hunter2hunter2"
-    m["assumptions"] = [{"about": "api", "guess": "password = hunter2hunter2"}]
+    m["assumptions"] = [{"about": "db", "guess": "password = hunter2hunter2"}]
     errs = verify(m, None, tmp_path)
-    assert "api: looks like a secret" in errs
+    assert {"api: looks like a secret", "db: looks like a secret"} <= set(errs)
+
+
+def test_no_in_scope_system_is_an_error_not_a_crash(tmp_path):
+    m = _valid()
+    m["elements"][1]["external"] = True
+    assert "model: exactly one in-scope system is needed, found 0" in verify(m, None, tmp_path)
 
 
 def test_report_first_line():
