@@ -2,8 +2,9 @@
 
 from dataclasses import dataclass
 
+from cartographer.c4_boxes import element_node
+from cartographer.c4_deploy import deployment
 from cartographer.c4_model import Model, edge_text, in_scope, rollup, type_line, visible
-from cartographer.c4_styles import element_label, element_size
 
 
 @dataclass(frozen=True)
@@ -13,21 +14,8 @@ class View:
     curated: dict
 
 
-def _kind(element: dict) -> str:
-    if element["type"] == "container":
-        return {"store": "container_store", "queue": "container_queue"}.get(element.get("shape"), "container")
-    return f"{element['type']}_ext" if element.get("external") else element["type"]
-
-
-def _element_node(element: dict, group: str | None) -> dict:
-    label = element_label(element["name"], type_line(element), element["description"])
-    kind = _kind(element)
-    return {"id": element["id"], "label": label, "service": "other", "group": group, "tf": [], "multi": False,
-            "box": list(element_size(label, kind)), "c4": kind}
-
-
 def _element_external(element: dict) -> dict:
-    node = _element_node(element, None)
+    node = element_node(element, None)
     return {"id": node["id"], "label": node["label"], "icon": "none", "box": node["box"], "c4": node["c4"],
             "evidence": []}
 
@@ -44,7 +32,7 @@ def _curated(model: Model, title: str, group: dict | None, inside: list[dict], e
     return {
         "title": title,
         "groups": [_boundary(group)] if group else [],
-        "nodes": [_element_node(e, group["id"] if group else None) for e in inside],
+        "nodes": [element_node(e, group["id"] if group else None) for e in inside],
         "externals": [_element_external(e) for e in model["elements"] if e["id"] in reached],
         "edges": [{**edge, "evidence": []} for edge in edges],
     }
@@ -101,7 +89,10 @@ def views(model: Model) -> list[View]:
             siblings = [c for c in containers if c['id'] != container['id']]
             result.append(View(f"3-component-{container['id']}", title,
                                _rolled_up(model, title, container, components, siblings)))
-    # 4-code-<component id> (code level) and 5-deployment go here, between the component and dynamic views
+    # 4-code-<component id> (code level) goes here, before the deployment and dynamic views
+    if "deployment" in model:
+        title = f"Deployment diagram for {name}: {model['deployment']['environment']}"
+        result.append(View("5-deployment", title, deployment(model, title)))
     for scenario in model.get("scenarios", []):
         title = f"Dynamic diagram for {name}: {scenario['name']}"
         result.append(View(f"6-dynamic-{scenario['id']}", title, _dynamic(model, system, scenario, title)))
