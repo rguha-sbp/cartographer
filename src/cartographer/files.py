@@ -41,8 +41,8 @@ def mxfile(pages: list[ElementTree.Element], attrs: dict[str, str] = MXFILE) -> 
 
 def pages(drawio: Path, xml: str) -> list[Page]:
     """The pages of `xml`, the content of `drawio`. A file of one page (or none, or not XML) is drawn whole into the
-    sibling image. Each page of a file of several is drawn alone into `<stem>-<page>.svg`, where <page> is the page id
-    less the file name up to its last dash: page `shop-1-context` of `shop-c4.drawio` into `shop-c4-1-context.svg`."""
+    sibling image. Each page of a file of several is drawn alone into `<stem>-<page id>.svg`: page `1-context` of
+    `shop-c4.drawio` into `shop-c4-1-context.svg`."""
     try:
         root = ElementTree.fromstring(xml)
     except ElementTree.ParseError:
@@ -50,8 +50,7 @@ def pages(drawio: Path, xml: str) -> list[Page]:
     diagrams = root.findall("diagram")
     if len(diagrams) < 2:
         return [Page(diagrams[0].get("name", "") if diagrams else "", image_path(drawio), xml)]
-    base = drawio.stem.rsplit("-", 1)[0] + "-"
-    return [Page(d.get("name", ""), drawio.with_name(f"{drawio.stem}-{d.get('id', '').removeprefix(base)}.svg"),
+    return [Page(d.get("name", ""), drawio.with_name(f"{drawio.stem}-{d.get('id', '')}.svg"),
                  mxfile([d], root.attrib)) for d in diagrams]
 
 

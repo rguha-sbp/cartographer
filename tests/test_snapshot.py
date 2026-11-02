@@ -94,8 +94,8 @@ def test_main_shoots_every_page_of_a_book_alone(tmp_path, monkeypatch, capsys, b
     model = XML[XML.index("<mxGraphModel>"):XML.index("</diagram>")]
     wide = model.replace('width="400"', 'width="900"')
     d = tmp_path / "shop-c4.drawio"
-    d.write_text(f'<mxfile><diagram id="shop-1-context" name="Context">{model}</diagram>'
-                 f'<diagram id="shop-2-container" name="Container">{wide}</diagram></mxfile>')
+    d.write_text(f'<mxfile><diagram id="1-context" name="Context">{model}</diagram>'
+                 f'<diagram id="2-container" name="Container">{wide}</diagram></mxfile>')
     calls = []
 
     def fake_run(cmd, **kw):

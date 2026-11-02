@@ -220,8 +220,8 @@ def test_image_regenerates_the_sibling_svg_and_the_index(tmp_path: Path, rendere
 
 def test_image_regenerates_an_image_per_page_of_a_book(tmp_path: Path, capsys, renderer) -> None:
     drawio = tmp_path / "shop-c4.drawio"
-    drawio.write_text('<mxfile><diagram id="shop-1-context" name="Context"/>'
-                      '<diagram id="shop-2-container" name="Container"/></mxfile>')
+    drawio.write_text('<mxfile><diagram id="1-context" name="Context"/>'
+                      '<diagram id="2-container" name="Container"/></mxfile>')
     assert cli.main(["image", str(drawio)]) == 0
     images = [tmp_path / "shop-c4-1-context.svg", tmp_path / "shop-c4-2-container.svg"]
     assert capsys.readouterr().out.splitlines() == [str(image) for image in images]

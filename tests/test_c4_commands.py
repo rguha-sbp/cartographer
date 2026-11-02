@@ -90,7 +90,7 @@ def test_build_c4_writes_one_file_with_a_page_and_an_image_per_view(tmp_path: Pa
     assert sorted(p.name for p in out.iterdir()) == sorted(["README.md", DRAWIO, *IMAGES])
     drawio = out / DRAWIO
     pages = ElementTree.parse(drawio).getroot().findall("diagram")
-    assert [p.get("id") for p in pages] == [f"{NAME}-{slug}" for slug in SLUGS]
+    assert [p.get("id") for p in pages] == SLUGS
     assert pages[1].get("name") == "Container diagram for Shop"
     for image in IMAGES:
         assert (out / image).read_text() == f"<svg>{files.sha256_file(drawio)}</svg>"
@@ -103,7 +103,7 @@ def test_build_c4_draws_each_image_from_its_view_alone(tmp_path: Path, monkeypat
     monkeypatch.setattr(svg_export, "export_svg", lambda mxfile, sha, url: drawn.append(mxfile) or "<svg/>")
     _model(_shop())
     assert _build(tmp_path) == 0
-    assert drawn == [gen_drawio.render(tf_layout.layout(v.curated, notation=c4_styles.C4), page_id=f"{NAME}-{v.slug}",
+    assert drawn == [gen_drawio.render(tf_layout.layout(v.curated, notation=c4_styles.C4), page_id=v.slug,
                                        page_name=v.title, notation=c4_styles.C4) for v in c4_views.views(_shop())]
 
 

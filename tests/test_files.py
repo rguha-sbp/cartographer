@@ -123,8 +123,8 @@ def test_index_titles_a_drawio_without_a_page_name_by_its_file_name(tmp_path: Pa
     assert "| a-l7 | [a-l7.drawio]" in readme and "| b | [b.drawio]" in readme
 
 
-BOOK = ('<mxfile host="h"><diagram id="shop-1-context" name="Context"><mxGraphModel/></diagram>'
-        '<diagram id="shop-2-container" name="Container"><mxGraphModel/></diagram></mxfile>')
+BOOK = ('<mxfile host="h"><diagram id="1-context" name="Context"><mxGraphModel/></diagram>'
+        '<diagram id="2-container" name="Container"><mxGraphModel/></diagram></mxfile>')
 
 
 def test_a_one_page_file_is_drawn_whole_into_its_sibling_image(tmp_path: Path) -> None:
@@ -138,7 +138,7 @@ def test_each_page_of_a_book_is_drawn_alone_into_an_image_named_for_its_page(tmp
     context, container = files.pages(tmp_path / "shop-c4.drawio", BOOK)
     assert (context.name, context.image) == ("Context", tmp_path / "shop-c4-1-context.svg")
     assert (container.name, container.image) == ("Container", tmp_path / "shop-c4-2-container.svg")
-    assert context.mxfile == ('<mxfile host="h">\n  <diagram id="shop-1-context" name="Context">\n'
+    assert context.mxfile == ('<mxfile host="h">\n  <diagram id="1-context" name="Context">\n'
                               "    <mxGraphModel />\n  </diagram>\n</mxfile>\n")
 
 
