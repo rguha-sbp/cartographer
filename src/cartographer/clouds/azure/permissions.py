@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from cartographer.clouds.refs import blocks
 from cartographer.tf_policies import unq
 from cartographer.tf_values import attrs, text
 
@@ -63,7 +64,6 @@ def permission_edges(ex: Extractor) -> None:
         elif r.type == "azurerm_key_vault_access_policy":
             grant(ex, r, holders(ex, r, body.get("object_id"), by_identity), body.get("key_vault_id"), policy_permissions(body))
         elif r.type == "azurerm_key_vault":
-            inline = body.get("access_policy") or []
-            for policy in (p for p in (inline if isinstance(inline, list) else [inline]) if isinstance(p, dict)):
+            for policy in blocks(body.get("access_policy")):
                 for src in holders(ex, r, policy.get("object_id"), by_identity):
                     ex.add(src, r.address, "iam", policy_permissions(policy), r)

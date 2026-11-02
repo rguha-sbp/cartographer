@@ -58,6 +58,11 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
     return out
 
 
+def blocks(value: Any) -> list[dict]:
+    """The nested blocks of an attribute; one set as an expression (`subnet = var.x`) has none that can be read."""
+    return [b for b in (value if isinstance(value, list) else [value]) if isinstance(b, dict)]
+
+
 def derive(name: str, suffixes: str = "ids?") -> str:
     """The network name a remote output or data source name implies: `shared_vpc_id` -> `shared-vpc`."""
     return re.sub(rf"_({suffixes})$", "", name).replace("_", "-")

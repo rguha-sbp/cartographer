@@ -172,3 +172,7 @@ def test_each_resource_body_is_scanned_for_references_once(monkeypatch):
     monkeypatch.setattr(network.Network, "refs", counting)
     tf_extract.extract(Path("."), FIXTURES / "vm_via_nic")
     assert len(seen) == len({id(o) for o in seen})
+
+
+def test_blocks_given_as_expressions_are_skipped_not_crashed_on():
+    assert placements("subnet_expression") == {}

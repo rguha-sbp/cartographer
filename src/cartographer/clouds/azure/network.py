@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from cartographer.clouds.refs import CIDR, Ref, derive, sources, tier_in, token
+from cartographer.clouds.refs import CIDR, Ref, blocks, derive, sources, tier_in, token
 from cartographer.tf_policies import unq
 from cartographer.tf_values import find, text
 
@@ -89,8 +89,7 @@ class Network:
                 owner = next((x.address for x in self.refs(r.inst, body.get("virtual_network_name")) if x.address in self.nets), None)
                 self.subnets[r.address] = Subnet(r.address, owner, body, r)
             elif r.type == "azurerm_virtual_network":
-                inline = body.get("subnet") or []
-                for i, block in enumerate(inline if isinstance(inline, list) else [inline]):
+                for i, block in enumerate(blocks(body.get("subnet"))):
                     address = f"{r.address}.subnet[{i}]"
                     self.subnets[address] = Subnet(address, r.address, block, r)
 
@@ -119,8 +118,7 @@ class Network:
         body = r.block.body
         if not self.has_public_ip(body):
             return []
-        raw = body.get(FRONTEND) or []
-        frontends = raw if isinstance(raw, list) else [raw]
+        frontends = blocks(body.get(FRONTEND))
         exposed = [{k: v for k, v in body.items() if k != FRONTEND}, *(f for f in frontends if self.has_public_ip(f))]
         shared = {s.address for part in exposed for s in self.direct_subnets(r, part)}
         internal = {s.address for f in frontends if not self.has_public_ip(f) for s in self.direct_subnets(r, f)} - shared
@@ -176,8 +174,7 @@ class Network:
         tables: set[str] = set()
         for r in self.ex.res:
             if r.type == "azurerm_route_table":
-                inline = r.block.body.get("route") or []
-                if any(to_appliance(r, route) for route in (inline if isinstance(inline, list) else [inline])):
+                if any(to_appliance(r, route) for route in blocks(r.block.body.get("route"))):
                     tables.add(r.address)
             elif r.type == "azurerm_route" and to_appliance(r, r.block.body):
                 tables |= {x.address for x in self.refs(r.inst, r.block.body.get("route_table_name"))}
