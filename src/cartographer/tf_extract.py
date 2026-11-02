@@ -46,7 +46,6 @@ class Extractor:
         self.owner = {r.address: self.owner_of(r) for r in self.res}
         self.clouds = [c for c in CLOUDS.values() if c in self.owner.values()]
         self.edge_specs = {t: specs for c in self.clouds for t, specs in c.edge_specs.items()}
-        self.network_attrs = frozenset().union(*(c.network_attrs for c in self.clouds))
         self.data_ref_types = frozenset().union(*(c.data_ref_types for c in self.clouds))
         self.param_types = frozenset().union(*(c.param_types for c in self.clouds))
         self.types = {r.address: r.type for r in self.res}
@@ -187,7 +186,8 @@ class Extractor:
         for attr, value in body.items():
             if attr in consumed or attr in SKIP_ATTRS or (r.type == "module" and attr in META):
                 continue
-            kind = "network" if attr in self.network_attrs else "uses"
+            owner = self.owner[r.address]
+            kind = "network" if owner and attr in owner.network_attrs else "uses"
             for dst in sorted(self.refs(r.inst, value)):
                 if kind == "network" or not (self.folded(r.address) or (dst in self.resolution and self.folded(dst))):
                     self.add(r.address, dst, kind, {attr}, r)

@@ -68,3 +68,18 @@ def test_a_relative_repo_root_is_resolved(monkeypatch):
 def test_an_infra_dir_without_terraform_files_is_an_error_not_an_empty_diagram():
     with pytest.raises(FileNotFoundError, match="no .tf files in .*nope"):
         tf_extract.extract(Path("nope"), FIXTURES)
+
+
+AWS_ENI_USER = '''
+resource "aws_network_interface" "eni" {}
+resource "aws_instance" "i" {
+  network_interface { network_interface_id = aws_network_interface.eni.id }
+}
+'''
+
+
+@pytest.mark.parametrize("other_cloud", ["", 'resource "azurerm_key_vault" "kv" {}'])
+def test_an_edge_kind_does_not_depend_on_another_cloud_being_present(tmp_path: Path, other_cloud: str) -> None:
+    (tmp_path / "main.tf").write_text(AWS_ENI_USER + other_cloud)
+    kinds = {(e["src"], e["dst"]): e["kind"] for e in tf_extract.extract(Path("."), tmp_path)["edges"]}
+    assert kinds[("aws_instance.i", "aws_network_interface.eni")] == "uses"
