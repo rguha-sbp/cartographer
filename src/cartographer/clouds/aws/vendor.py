@@ -54,6 +54,9 @@ def parse_generic(source: str, taken: dict[str, dict[str, str]]) -> dict[str, st
 if __name__ == "__main__":
     text = (drawio_app.ensure() / SIDEBAR).read_text(encoding="utf-8")
     aws = parse(text)
-    for out, icons in ((OUT, aws), (GENERIC_OUT, parse_generic(text, aws))):
-        out.write_text(json.dumps(icons, indent=2) + "\n", encoding="utf-8")
-        print(f"{len(icons)} icons -> {out}")
+    lines = [f"  {json.dumps(name)}: {json.dumps(icon)}" for name, icon in aws.items()]
+    OUT.write_text("{\n" + ",\n".join(lines) + "\n}\n", encoding="utf-8")
+    print(f"{len(aws)} icons -> {OUT}")
+    generic = parse_generic(text, aws)
+    GENERIC_OUT.write_text(json.dumps(generic, indent=2) + "\n", encoding="utf-8")
+    print(f"{len(generic)} icons -> {GENERIC_OUT}")
