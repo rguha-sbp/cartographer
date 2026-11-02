@@ -55,6 +55,7 @@ class Cloud:
         self.frame_styles = frame_styles  # complete draw.io styles, keyed by frame kind
         self.managed_label = managed_label
         self.provider_types = provider_types or []
+        self._listed = frozenset(self.provider_types)
         self.catalog = catalog or Catalog({})
         self.rules = rules or {}
         self.modules = modules or {}  # module source prefix -> icon name
@@ -71,6 +72,8 @@ class Cloud:
             return Resolution("drop", decided_by=decided_by)
         icon = f"generic:{row['generic']}" if "generic" in row else f"{self.name}:{row['icon']}"
         base = Resolution("icon", icon, decided_by, scope="global" if row.get("global") else "regional")
+        if self._listed and key != tf_type and tf_type not in self._listed:
+            return replace(base, marked=True, reason="type newer than provider list")
         if "rule" not in row or key != tf_type:
             return base
         unresolved: list[str] = []

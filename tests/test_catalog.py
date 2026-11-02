@@ -69,8 +69,20 @@ def test_longest_prefix_wins():
     assert AWS.resolve("aws_iam_policy_attachment", no_attrs).kind == "icon"
 
 
+@pytest.mark.parametrize(("tf_type", "icon"), [
+    ("aws_lambda_brand_new_thing", "aws:lambda"), ("aws_s3_bucket_new_configuration", "aws:s3"),
+])
+def test_type_newer_than_the_list_keeps_the_family_icon_but_is_marked(tf_type, icon):
+    r = AWS.resolve(tf_type, no_attrs)
+    assert (r.kind, r.icon, r.marked, r.reason) == ("icon", icon, True, "type newer than provider list")
+
+
+def test_listed_types_and_exact_rows_are_not_marked():
+    assert not AWS.resolve("aws_lambda_function", no_attrs).marked
+    assert not AWS.resolve("aws_alb", no_attrs).marked
+
+
 def test_type_newer_than_the_list_resolves_to_family_or_none():
-    assert AWS.resolve("aws_lambda_brand_new_thing", no_attrs).icon == "aws:lambda"
     r = AWS.resolve("aws_zzz_unknown", no_attrs)
     assert (r.kind, r.marked, r.reason) == ("none", True, "type not in catalog")
 
