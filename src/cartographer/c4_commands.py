@@ -10,6 +10,7 @@ from cartographer.build import EXIT_STALE, EXIT_VERIFY, Refusal, cached_facts, r
 from cartographer.workdir import cache_dir
 
 PROMPT = Path(__file__).with_name("c4_prompt.md")
+EXIT_USAGE = 2  # as argparse exits on a bad command line
 
 
 def prompt(args: argparse.Namespace, interview_path: Path) -> int:
@@ -23,13 +24,15 @@ def prompt(args: argparse.Namespace, interview_path: Path) -> int:
 
 
 def build(args: argparse.Namespace) -> int:
+    if args.side_file or args.curated or args.replace:
+        raise Refusal(EXIT_USAGE, "--side-file/--curated/--replace do not apply to --c4")
     repo = args.repo.resolve()
     out = repo / args.out
     model_path = cache_dir(args.name) / "model.json"
     if not model_path.is_file():
         raise Refusal(EXIT_STALE, f"no C4 model at {model_path}: run the curation (cartographer prompt --c4)")
     model = json.loads(model_path.read_text())
-    facts = json.loads(cached_facts(args.name).read_text()) if model["source"] == "terraform" else None
+    facts = json.loads(cached_facts(args.name).read_text()) if model.get("source") == "terraform" else None
 
     errors = c4_verify.verify(model, facts, repo)
     try:
@@ -56,7 +59,7 @@ def build(args: argparse.Namespace) -> int:
     for (drawio, mxfile), svg in zip(mxfiles.items(), svgs, strict=True):
         drawio.write_bytes(mxfile.encode())
         files.image_path(drawio).write_text(svg)
-    for stale in out.glob(f"{args.name}-*.drawio"):
+    for stale in out.glob(f"{args.name}-[1-6]-*.drawio"):
         if stale not in mxfiles and not files.is_side_file(stale):
             stale.unlink()
             files.image_path(stale).unlink(missing_ok=True)

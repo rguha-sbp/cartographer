@@ -117,7 +117,8 @@ def test_build_c4_overwrites_without_asking(tmp_path: Path, renderer) -> None:
 def test_build_deletes_stale_views_only_of_this_model(tmp_path: Path, renderer) -> None:
     out = tmp_path / "out"
     out.mkdir()
-    keep = ["gip.drawio", "shop-c4.drawio", "shop-c4-old.generated.drawio", "shop-c5-1-context.drawio"]
+    keep = ["gip.drawio", "shop-c4.drawio", "shop-c4-old.generated.drawio", "shop-c5-1-context.drawio",
+            "shop-c4-legacy.drawio", "shop-l7.drawio"]
     for name in keep:
         (out / name).write_text("y")
     (out / "shop-c4-3-component-old.drawio").write_text("x")
@@ -128,6 +129,33 @@ def test_build_deletes_stale_views_only_of_this_model(tmp_path: Path, renderer) 
     assert not (out / "shop-c4-3-component-old.svg").exists()
     assert all((out / name).read_text() == "y" for name in keep)
     assert "[gip.drawio](gip.drawio)" in (out / "README.md").read_text()
+
+
+def test_build_c4_of_model_shop_keeps_its_l7_diagram(tmp_path: Path, renderer) -> None:
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "shop-l7.drawio").write_text("y")
+    (cache_dir("shop") / "model.json").write_text(json.dumps(_shop()))
+    assert cli.main(["build", "--c4", "--name", "shop", "--repo", str(tmp_path), "--out", "out"]) == 0
+    assert (out / "shop-l7.drawio").read_text() == "y" and (out / "shop-1-context.drawio").is_file()
+
+
+@pytest.mark.parametrize("flag", [["--side-file"], ["--replace"], ["--curated", "x.json"]])
+def test_build_c4_refuses_l7_only_flags(tmp_path: Path, capsys, flag: list[str]) -> None:
+    _model(_shop())
+    assert _build(tmp_path, *flag) == 2
+    assert capsys.readouterr().err.strip() == "--side-file/--curated/--replace do not apply to --c4"
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("key", ["source", "elements", "relationships"])
+def test_build_c4_model_without_a_required_key_fails_verify(tmp_path: Path, capsys, key: str) -> None:
+    model = _shop()
+    del model[key]
+    _model(model)
+    assert _build(tmp_path) == 1
+    out = capsys.readouterr().out
+    assert out.startswith("C4 model: 1 problems") and f"model: {key} is required" in out
 
 
 def test_build_c4_without_model_exits_3(tmp_path: Path, cache: Path, capsys) -> None:

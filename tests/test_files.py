@@ -82,6 +82,16 @@ def test_index_lists_one_line_per_drawio(tmp_path: Path) -> None:
 
 
 def test_index_text_has_no_dashes_or_smart_quotes(tmp_path: Path) -> None:
-    (tmp_path / "a-l7.curated.json").write_text(json.dumps({"system": "A", "view": "l7"}))
+    (tmp_path / "a-l7.drawio").write_text('<mxfile><diagram name="Layer 7 diagram for A"/></mxfile>')
     index.write_index(tmp_path)
+    assert "| Layer 7 diagram for A | [a-l7.drawio]" in (tmp_path / "README.md").read_text()
     assert not [c for c in (tmp_path / "README.md").read_text() if c in "—–‘’“”"]
+
+
+def test_index_titles_a_drawio_without_a_page_name_by_its_file_name(tmp_path: Path) -> None:
+    (tmp_path / "a-l7.curated.json").write_text(json.dumps({"system": "A", "view": "l7"}))
+    (tmp_path / "a-l7.drawio").write_text("<mxfile/>")
+    (tmp_path / "b.drawio").write_text("not xml")
+    index.write_index(tmp_path)
+    readme = (tmp_path / "README.md").read_text()
+    assert "| a-l7 | [a-l7.drawio]" in readme and "| b | [b.drawio]" in readme

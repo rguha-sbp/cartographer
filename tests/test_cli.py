@@ -211,7 +211,7 @@ def test_view_refuses_anything_but_a_drawio(tmp_path: Path, capsys) -> None:
 
 def test_image_regenerates_the_sibling_svg_and_the_index(tmp_path: Path, renderer) -> None:
     drawio = tmp_path / "a-l7.drawio"
-    drawio.write_text("<mxfile/>")
+    drawio.write_text('<mxfile><diagram name="Layer 7 diagram for A"/></mxfile>')
     (tmp_path / "a-l7.curated.json").write_text(json.dumps({"system": "A", "view": "l7"}))
     assert cli.main(["image", str(drawio)]) == 0
     assert (tmp_path / "a-l7.svg").read_text() == f"<svg>{files.sha256_file(drawio)}</svg>"
