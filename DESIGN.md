@@ -298,7 +298,7 @@ container, and a relationship's must run between the hosts of its two ends. A su
 report: "C4 model: ok", then every container, component, code element, relationship and deployment node that rests
 only on `stated`.
 
-Review: `snapshot` prints `view: <page name>` first (`snapshot.page_name` reads the first `<diagram name=...>`).
+Review: `snapshot` prints `view: <page name>` first (`files.page_name` reads the first `<diagram name=...>`; the README index uses it too).
 `REVIEW.md` picks the rules from it: "Every diagram" plus "Layer 7" or "C4: every view" plus the section named like the page.
 
 ## Non-goals

@@ -95,3 +95,12 @@ def test_index_titles_a_drawio_without_a_page_name_by_its_file_name(tmp_path: Pa
     index.write_index(tmp_path)
     readme = (tmp_path / "README.md").read_text()
     assert "| a-l7 | [a-l7.drawio]" in readme and "| b | [b.drawio]" in readme
+
+
+def test_page_name_is_the_first_diagram_name_else_empty(tmp_path: Path) -> None:
+    d = tmp_path / "a.drawio"
+    d.write_text('<mxfile><diagram name="System Context diagram for S"/><diagram name="Other"/></mxfile>')
+    assert files.page_name(d) == "System Context diagram for S"
+    for text in ("<mxfile/>", "<mxfile><diagram/></mxfile>", "not xml"):
+        d.write_text(text)
+        assert files.page_name(d) == ""

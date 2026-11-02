@@ -119,8 +119,7 @@ def _nesting(model: Model) -> list[str]:
 
 def _hosts(model: Model, eid: str) -> set[str]:
     """Terraform addresses of the nodes hosting the container that eid is, or sits in."""
-    by_id = elements(model)
-    container = next((e for e in [eid, *ancestors(model, eid)] if by_id[e]["type"] == "container"), None)
+    container = _container_of(model, eid)
     hosting = {i["node"] for i in _instances(model) if i["container"] == container}
     return {a for n in _nodes(model) if n["id"] in hosting for a in n.get("tf", [])}
 

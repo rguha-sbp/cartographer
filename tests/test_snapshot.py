@@ -90,13 +90,6 @@ def test_main_writes_full_and_tiles(tmp_path, monkeypatch, capsys, bundled_app):
     assert calls[0][-1].startswith(bundled_app)
 
 
-def test_page_name_is_the_first_diagram_name(tmp_path):
-    d = tmp_path / "a.drawio"
-    d.write_text('<mxfile><diagram name="System Context diagram for S"/><diagram name="Other"/></mxfile>')
-    assert snapshot.page_name(d) == "System Context diagram for S"
-    d.write_text(XML)
-    assert snapshot.page_name(d) == ""
-
 
 def test_find_chrome_missing(monkeypatch):
     monkeypatch.setattr(snapshot.Path, "exists", lambda self: False)

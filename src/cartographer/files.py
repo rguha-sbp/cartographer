@@ -3,6 +3,7 @@
 import hashlib
 import json
 from pathlib import Path
+from xml.etree import ElementTree
 
 SIDE_FILE_SUFFIX = ".generated.drawio"
 
@@ -17,6 +18,15 @@ def sha256_file(path: Path) -> str:
 
 def image_path(drawio: Path) -> Path:
     return drawio.with_suffix(".svg")
+
+
+def page_name(drawio: Path) -> str:
+    """Name of the first page (the view type and scope of a C4 diagram), else empty, also for a file that is not XML."""
+    try:
+        page = ElementTree.parse(drawio).getroot().find("diagram")
+    except ElementTree.ParseError:
+        return ""
+    return "" if page is None else page.get("name", "")
 
 
 def is_side_file(drawio: Path) -> bool:
