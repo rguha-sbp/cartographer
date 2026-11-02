@@ -50,9 +50,9 @@ def test_instances_sit_in_their_deployment_node():
     c = _view().curated
     node_ = next(n for n in c["nodes"] if n["id"] == "fn.api")
     group = next(g for g in c["groups"] if g["id"] == "fn")
-    assert node_["group"] == "fn" and node_["service"] == "container" and group["kind"] == "deployment"
+    assert node_["group"] == "fn" and node_["icon"] == "container" and group["kind"] == "deployment"
     assert group["label"] == "fn\n[Deployment Node: Lambda]"
-    assert next(n for n in c["nodes"] if n["id"] == "tbl.orders")["service"] == "container_store"
+    assert next(n for n in c["nodes"] if n["id"] == "tbl.orders")["icon"] == "container_store"
 
 
 def test_frames_keep_aws_kinds():
@@ -64,7 +64,7 @@ def test_frames_keep_aws_kinds():
 
 def test_infrastructure_without_instances_is_an_aws_icon():
     nodes = {n["id"]: n for n in _view().curated["nodes"]}
-    assert nodes["alb"]["service"] == "elastic_load_balancing"
+    assert nodes["alb"]["icon"] == "aws:elastic_load_balancing"
     assert nodes["alb"]["group"] == "priv"
 
 
@@ -75,7 +75,7 @@ def test_infrastructure_without_an_icon_is_an_infrastructure_node_box(service):
     model["deployment"]["nodes"].append(kms | ({"service": service} if service else {}))
     view = next(v for v in views(model) if v.slug == "5-deployment")
     box = next(n for n in view.curated["nodes"] if n["id"] == "kms")
-    assert (box["service"], box["label"], box["group"]) == ("infrastructure", "Key\n[Infrastructure Node: AWS KMS]", "priv")
+    assert (box["icon"], box["label"], box["group"]) == ("infrastructure", "Key\n[Infrastructure Node: AWS KMS]", "priv")
     xml = gen_drawio.render(tf_layout.layout(view.curated, notation=C4), page_id="p", page_name="t", notation=C4)
     assert "Infrastructure node" in xml
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from stub_cloud import StubCloud
 
-from cartographer import gen_drawio, tf_layout, tfdiagram, verify_description
+from cartographer import gen_drawio, notation, tf_layout, tfdiagram, verify_description
 from cartographer.clouds import CLOUDS
 from cartographer.curated_format import upgrade
 from cartographer.tf_externals import adopt
@@ -103,9 +103,9 @@ def test_a_frame_without_a_known_cloud_fails_to_render_with_a_clear_error() -> N
     from cartographer.diagram_model import Group
 
     with pytest.raises(ValueError, match="group g_x.*cloud None"):
-        gen_drawio._group_style(Group("g_x", "X", 0, 0, 10, 10, kind="region"))
+        notation.cloud_group(Group("g_x", "X", 0, 0, 10, 10, kind="region"))
     with pytest.raises(ValueError, match="group g_x.*cloud 'nope'"):
-        gen_drawio._group_style(Group("g_x", "X", 0, 0, 10, 10, kind="region", cloud="nope"))
+        notation.cloud_group(Group("g_x", "X", 0, 0, 10, 10, kind="region", cloud="nope"))
 
 
 def test_upgrade_rejects_an_unknown_format() -> None:

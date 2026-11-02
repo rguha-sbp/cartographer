@@ -5,11 +5,12 @@ import pytest
 
 from cartographer import c4_styles, gen_drawio, notation, tf_layout
 from cartographer.c4_styles import C4, element_label, element_size
+from cartographer.clouds import CLOUDS
 from cartographer.diagram_model import Box, Diagram, Edge, Group, Legend, Title
 
 
 def _container(nid: str) -> dict:
-    return {"id": nid, "label": element_label(nid, "[Container: Python]", "Serves the shop"), "service": "container",
+    return {"id": nid, "label": element_label(nid, "[Container: Python]", "Serves the shop"), "icon": "container",
             "group": None, "tf": [], "multi": False, "box": [260, 112]}
 
 
@@ -130,9 +131,11 @@ def test_c4_groups_render_with_c4_styles() -> None:
     assert "fillColor=#FFFFFF" in xml and "dashed=0" in xml
 
 
-def test_c4_deployment_frames_keep_the_aws_frame_style() -> None:
-    frame = (Group("r", "eu-west-1", 0, 0, 300, 200, kind="region"),)
+@pytest.mark.parametrize("cloud", ["aws", "azure"])
+def test_c4_deployment_frames_keep_their_cloud_frame_style(cloud: str) -> None:
+    frame = (Group("r", "west", 0, 0, 300, 200, kind="region", cloud=cloud),)
     assert _render_nodes(frame, c4_styles.C4) == _render_nodes(frame, notation.AWS)
+    assert html.escape(CLOUDS[cloud].frame_styles["region"]) in _render_nodes(frame, c4_styles.C4)
 
 
 @pytest.mark.parametrize(("note", "fill"), [(notation.AWS, "#F2F3F3"), (c4_styles.C4, "#438DD5")])
