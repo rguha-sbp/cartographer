@@ -126,9 +126,10 @@ def _hosts(model: Model, eid: str) -> set[str]:
 
 def _joins(fact: dict, ends: tuple[set[str], ...]) -> bool:
     """The fact's src and dst, in either order, land on the host sets in `ends`: none for a deployment node, the
-    hosts of an element, or the hosts of a relationship's two ends."""
+    hosts of an element, or the hosts of a relationship's two ends. An empty set is an end not deployed in this
+    environment (or never deployed, like a person), so there is nothing to land on and any address will do."""
     src, dst = fact.get("src"), fact.get("dst")
-    return any(all(a in hosts for a, hosts in zip(pair, ends)) for pair in ((src, dst), (dst, src)))
+    return any(all(not hosts or a in hosts for a, hosts in zip(pair, ends)) for pair in ((src, dst), (dst, src)))
 
 
 def _evidence(item: dict, known: dict[str, dict] | None, repo: Path, ends: tuple[set[str], ...]) -> list[str]:

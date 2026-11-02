@@ -227,6 +227,16 @@ def test_element_fact_must_touch_the_nodes_hosting_its_container(tmp_path):
     assert "c1: fact f1 does not join the deployment nodes hosting it" in errs
 
 
+def test_element_not_deployed_in_this_environment_may_cite_any_fact(tmp_path):
+    m = _tf()
+    m["elements"][2]["evidence"] = FACT
+    m["deployment"]["instances"] = [i for i in m["deployment"]["instances"] if i["container"] != "api"]
+    m["deployment"]["nodes"] = [n for n in m["deployment"]["nodes"] if n["id"] != "n1"]
+    m["omitted"] = [{"tf": "aws_lambda_function.fn", "reason": "dev only"}]
+    facts = _facts("aws_lambda_function.fn", "aws_db_instance.db", edges=[_edge("aws_sqs_queue.q", "aws_db_instance.db")])
+    assert not any(e.startswith("api: fact") for e in verify(m, facts, tmp_path))
+
+
 def test_relationship_ending_at_a_system_with_containers_fails(tmp_path):
     m = _valid()
     m["relationships"].append(rel("r2", "u", "s", "uses"))
