@@ -1,6 +1,7 @@
 {
   "azapi_data_plane_resource": {"generic": "generic_application", "why": "the icon comes from the ARM type", "rule": "azapi_data_plane_resource"},
   "azapi_resource": {"generic": "generic_application", "why": "the icon comes from the ARM type", "rule": "azapi_resource"},
+  "azapi_resource_action": {"fold": "owner"},
   "azapi_update_resource": {"generic": "generic_application", "why": "the icon comes from the ARM type", "rule": "azapi_update_resource"},
   "azurerm_aadb2c": {"icon": "azure_ad_b2c"},
   "azurerm_active_directory": {"icon": "azure_ad_domain_services"},

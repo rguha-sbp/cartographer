@@ -193,3 +193,8 @@ def test_vendor_parses_names_paths_and_titles(tmp_path):
 
 def test_catalog_class_is_shared_with_aws():
     assert isinstance(AZURE.catalog, Catalog)
+
+
+def test_an_azapi_action_on_another_resource_folds_into_it_and_is_not_marked():
+    r = AZURE.resolve("azapi_resource_action", no_attrs)
+    assert (r.kind, r.marked, r.decided_by) == ("fold", False, "catalog azapi_resource_action")
