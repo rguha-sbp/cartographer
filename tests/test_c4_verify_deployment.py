@@ -56,3 +56,26 @@ def test_an_instance_must_place_a_container(tmp_path, container):
     m = _model()
     m["deployment"]["instances"].append({"container": container, "node": "fnnode"})
     assert f"{container}: instance names no container" in verify(m, _facts(), tmp_path)
+
+
+def test_a_node_fact_must_touch_its_own_addresses(tmp_path):
+    m = _model()
+    _nodes(m)[1]["evidence"] = [{"fact": "f2"}]
+    elsewhere = _facts(("edges", [*_facts()["edges"], {"id": "f2", "src": FN, "dst": "aws_sqs_queue.q", "kind": "uses"}]))
+    assert verify(m, elsewhere, tmp_path) == ["bucket: fact f2 does not join the deployment nodes hosting it"]
+
+
+def test_a_frame_may_cite_its_vpc_fact(tmp_path):
+    m = _model()
+    _nodes(m).append(_frame("vpc", "vpc", tf=["aws_vpc.main"]) | {"evidence": [{"fact": "v1"}]})
+    facts = _facts(("vpcs", [{"id": "v1", "address": "aws_vpc.main", "name": "main"}]))
+    facts["resources"].append({"address": "aws_vpc.main", "type": "aws_vpc"})
+    assert verify(m, facts, tmp_path) == []
+
+
+@pytest.mark.parametrize(("resource", "ok"), [(FN, True), ("aws_lambda_function.other", False)])
+def test_an_element_may_cite_a_placement_of_its_hosts(tmp_path, resource, ok):
+    m = _model()
+    m["elements"][3]["evidence"] = [{"fact": "p1"}]
+    facts = _facts(("placements", [{"id": "p1", "resource": resource, "vpc": "v1", "tier": "private"}]))
+    assert verify(m, facts, tmp_path) == ([] if ok else ["fn: fact p1 does not join the deployment nodes hosting it"])

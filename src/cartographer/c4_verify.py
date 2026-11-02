@@ -129,9 +129,12 @@ def _hosts(model: Model, eid: str) -> set[str]:
 
 
 def _joins(fact: dict, ends: tuple[set[str], ...]) -> bool:
-    """The fact's src and dst, in either order, land on the host sets in `ends`: none for a deployment node, the
-    hosts of an element, or the hosts of a relationship's two ends. An empty set is an end not deployed in this
-    environment (or never deployed, like a person), so there is nothing to land on and any address will do."""
+    """The fact lands on the Terraform addresses in `ends`. One end, a deployment node's own addresses or the hosts of
+    an element: the fact names one of them, as an edge end, a placed resource or a vpc. A relationship's two ends: the
+    fact's src and dst, in either order. An empty set is an end not deployed in this environment (or never deployed,
+    like a person), so there is nothing to land on and any address will do."""
+    if len(ends) == 1:
+        return not ends[0] or not ends[0].isdisjoint(fact.get(k) for k in ("src", "dst", "resource", "address"))
     src, dst = fact.get("src"), fact.get("dst")
     return any(all(not hosts or a in hosts for a, hosts in zip(pair, ends)) for pair in ((src, dst), (dst, src)))
 
@@ -154,7 +157,7 @@ def _evidence(item: dict, known: dict[str, dict] | None, repo: Path, ends: tuple
 def _evidence_rules(model: Model, facts: dict | None, repo: Path) -> list[str]:
     known = None if facts is None else {f["id"]: f for key in ("edges", "vpcs", "placements") for f in facts.get(key, [])}
     hosts = {e["id"]: _hosts(model, e["id"]) for e in model["elements"]}
-    out = [p for n in _nodes(model) for p in _evidence(n, known, repo, ())]
+    out = [p for n in _nodes(model) for p in _evidence(n, known, repo, (set(n.get("tf", [])),))]
     out += [p for e in model["elements"] for p in _evidence(e, known, repo, (hosts[e["id"]],))]
     out += [p for r in model["relationships"]
             for p in _evidence(r, known, repo, (hosts.get(r["src"], set()), hosts.get(r["dst"], set())))]
