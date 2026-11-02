@@ -40,7 +40,7 @@ def test_search_is_capped_and_ranked():
 
 
 def test_namespaces_and_cloud_of():
-    assert icons.namespaces() == ("aws", "generic", "brand")
+    assert icons.namespaces() == ("aws", "azure", "generic", "brand")
     assert icons.cloud_of("aws:lambda") == "aws" and icons.cloud_of("generic:users") is None
 
 

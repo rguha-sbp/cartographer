@@ -1,7 +1,8 @@
 from cartographer.clouds.aws import AWS
+from cartographer.clouds.azure import AZURE
 from cartographer.clouds.base import Cloud, Resolution
 
-CLOUDS: dict[str, Cloud] = {cloud.name: cloud for cloud in (AWS,)}
+CLOUDS: dict[str, Cloud] = {cloud.name: cloud for cloud in (AWS, AZURE)}
 IGNORED_PROVIDERS = ("random", "tls", "time", "null", "local", "archive")
 
 
