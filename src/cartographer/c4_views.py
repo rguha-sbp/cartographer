@@ -6,6 +6,8 @@ from cartographer.c4_boxes import element_node
 from cartographer.c4_deploy import deployment
 from cartographer.c4_model import Model, edge_text, in_scope, rollup, type_line, visible
 
+HEADS = {"uses": "open", "inherits": "inherits", "implements": "implements"}
+
 
 @dataclass(frozen=True)
 class View:
@@ -72,6 +74,16 @@ def _dynamic(model: Model, system: dict, scenario: dict, title: str) -> dict:
     return _curated(model, title, system, [c for c in containers if c["id"] in ends], edges)
 
 
+def _code(model: Model, component: dict, classes: list[dict], title: str) -> dict:
+    """The component's code elements and the relationships between them; links that leave it are not drawn."""
+    ids = {c["id"] for c in classes}
+    edges = [{"src": r["src"], "dst": r["dst"], "label": edge_text(r["label"], r.get("technology")),
+              "dashed": r["dashed"] and r.get("kind", "uses") == "uses",  # the head draws inherits and implements
+              "head": HEADS[r.get("kind", "uses")]}
+             for r in model["relationships"] if {r["src"], r["dst"]} <= ids]
+    return _curated(model, title, component, classes, edges)
+
+
 def views(model: Model) -> list[View]:
     """Every diagram the model supports, in slug order."""
     system = in_scope(model)
@@ -89,7 +101,10 @@ def views(model: Model) -> list[View]:
             siblings = [c for c in containers if c['id'] != container['id']]
             result.append(View(f"3-component-{container['id']}", title,
                                _rolled_up(model, title, container, components, siblings)))
-    # 4-code-<component id> (code level) goes here, before the deployment and dynamic views
+    for component in (e for e in model["elements"] if e["type"] == "component"):
+        if classes := _children(model, component, "code"):
+            title = f"Code diagram for {name}: {component['name']}"
+            result.append(View(f"4-code-{component['id']}", title, _code(model, component, classes, title)))
     if "deployment" in model:
         title = f"Deployment diagram for {name}: {model['deployment']['environment']}"
         result.append(View("5-deployment", title, deployment(model, title)))

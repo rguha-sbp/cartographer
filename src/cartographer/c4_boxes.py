@@ -11,7 +11,8 @@ def kind(element: dict) -> str:
 
 
 def element_node(element: dict, group: str | None) -> dict:
-    label = element_label(element["name"], type_line(element), element["description"])
+    description = "" if element["type"] == "code" else element["description"]  # a class is named, not described
+    label = element_label(element["name"], type_line(element), description)
     shape = kind(element)
     return {"id": element["id"], "label": label, "service": "other", "group": group, "tf": [], "multi": False,
             "box": list(element_size(label, shape)), "c4": shape}

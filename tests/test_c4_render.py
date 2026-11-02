@@ -120,3 +120,12 @@ def test_c4_groups_render_with_c4_styles() -> None:
     xml = gen_drawio.render(Diagram(Title(0, 0, 100, 40, "t"), (Group("n", "Node", 0, 0, 300, 200, kind="deployment"),),
                                     (), Legend(0, 300, 100, 40, "Key", (), "")), page_id="p", page_name="t")
     assert "fillColor=#FFFFFF" in xml and "dashed=0" in xml
+
+
+def test_c4_legend_explains_arrowheads_that_appear() -> None:
+    curated = _two_container_curated()
+    curated["edges"][0]["head"] = "implements"
+    footnote = tf_layout.layout(curated, notation=c4_styles.C4).legend.footnote
+    assert "Dashed line, hollow triangle: implements" in footnote and "inherits" not in footnote
+    curated["edges"][0]["head"] = "inherits"
+    assert "Hollow triangle: inherits" in tf_layout.layout(curated, notation=c4_styles.C4).legend.footnote

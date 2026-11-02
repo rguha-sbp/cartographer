@@ -47,6 +47,8 @@ ELEMENTS = {
     "code": Element("Code element", "a class, interface or module", ROUNDED, WHITE, LINE, DARK),
 }
 
+HEAD_KEYS = {"inherits": "Hollow triangle: inherits", "implements": "Dashed line, hollow triangle: implements"}
+
 
 @dataclass(frozen=True)
 class GroupKind:
@@ -98,9 +100,11 @@ def _legend(curated: Curated, y: int) -> Legend:
     shown = {n["c4"] for n in leaves if "c4" in n} | {g["kind"] for g in curated["groups"]}
     entries = [LegendEntry(e.stroke, e.name, e.meaning) for k, e in ELEMENTS.items() if k in shown]
     entries += [LegendEntry(LINE, f.name, f.meaning) for k, f in GROUP_KINDS.items() if k in shown]
-    dashed = {e["dashed"] for e in curated["edges"]}
+    dashed = {e["dashed"] for e in curated["edges"] if e.get("head", "open") == "open"}
+    heads = {e.get("head") for e in curated["edges"]}
     lines = [text for flag, text in ((False, "Solid line: synchronous"), (True, "Dashed line: asynchronous"))
              if flag in dashed]
+    lines += [text for head, text in HEAD_KEYS.items() if head in heads]
     return Legend(ORIGIN[0], y, LEGEND_W, LEGEND_LINE * (2 + len(entries) + len(lines)) + 8, "Key",
                   tuple(entries), "\n".join(lines))
 

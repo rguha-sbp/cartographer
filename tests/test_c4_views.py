@@ -128,3 +128,41 @@ def test_verified_dynamic_view_numbers_steps_without_gaps(tmp_path):
     assert [e for e in verify(model, None, tmp_path) if e.startswith("mix")] == []
     labels = [e["label"].split(".")[0] for e in _view(model, "6-dynamic-mix").curated["edges"]]
     assert labels == ["1", "2", "3"]
+
+
+def _shop_with_code():
+    model = _shop()
+    model["elements"] += [
+        el("svc", "code", "auth", name="OrderService", stereotype="class"),
+        el("repo", "code", "auth", name="Repository", stereotype="interface"),
+        el("base", "code", "auth", name="BaseService"),
+    ]
+    model["relationships"] += [
+        rel("c1", "svc", "repo", "persists via", kind="implements", dashed=True),
+        rel("c2", "svc", "base", "extends", kind="inherits"),
+        rel("c3", "svc", "cart", "calls"),
+    ]
+    return model
+
+
+def test_no_code_view_without_code_elements():
+    assert not [v for v in views(_shop()) if v.slug.startswith("4-code")]
+
+
+def test_code_view_shows_type_names_and_stereotypes_only():
+    v = _view(_shop_with_code(), "4-code-auth")
+    assert {n["label"] for n in v.curated["nodes"]} == {
+        "OrderService\n<<class>>", "Repository\n<<interface>>", "BaseService\n<<class>>"}
+    assert {n["c4"] for n in v.curated["nodes"]} == {"code"}
+    assert v.curated["groups"][0]["label"] == "Auth\n[Component]"
+
+
+def test_code_view_heads_follow_relationship_kind():
+    edges = _view(_shop_with_code(), "4-code-auth").curated["edges"]
+    assert {(e["dst"], e["head"], e["dashed"]) for e in edges} == {("repo", "implements", False),
+                                                                   ("base", "inherits", False)}
+
+
+def test_code_view_omits_links_leaving_the_component():
+    curated = _view(_shop_with_code(), "4-code-auth").curated
+    assert not curated["externals"] and "cart" not in {e["dst"] for e in curated["edges"]}
