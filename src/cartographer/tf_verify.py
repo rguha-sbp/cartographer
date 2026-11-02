@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from cartographer import icons
 from cartographer.curated_format import upgrade
 from cartographer.secret_patterns import contains_secret
 from cartographer.tf_hint_check import unaccounted
@@ -91,9 +92,11 @@ def _mismatches(edges: list[dict], facts_by_id: dict) -> list[str]:
 
 
 def _facts_icon(node: dict, resources: dict[str, dict]) -> list[str]:
-    """The node's icon from the first of its resources that resolves to one; warnings for what the curator set."""
+    """The node's icon from the first of its resources that resolves to a cloud icon, else to any icon (a resource
+    group's generic folder never beats a service); warnings for what the curator set."""
     found = [resources[a] for a in node["tf"]]
-    if resolved := next((r for r in found if "icon" in r), None):
+    iconed = [r for r in found if "icon" in r]
+    if resolved := next((r for r in iconed if icons.cloud_of(r["icon"])), next(iter(iconed), None)):
         overridden = "icon" in node
         node.update(icon=resolved["icon"], decided_by=resolved.get("decided_by", ""), marked=resolved["marked"])
         return [f"{node['id']}: curator icon is set but the resources resolve, resolved icon wins"] if overridden else []

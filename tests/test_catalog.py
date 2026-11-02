@@ -184,3 +184,9 @@ def test_description_verify_sets_icons_from_tf_type_and_marks_a_direct_cloud_ico
     assert (a["icon"], a["decided_by"], a["marked"]) == ("aws:sqs", "catalog aws_sqs", False)
     assert (b["decided_by"], b["marked"]) == ("curator", True)
     assert out["externals"][0]["icon"] == "aws:s3"
+
+
+def test_a_declared_type_with_a_presence_rule_resolves() -> None:
+    assert clouds.resolve_declared("azurerm_lb", {}).marked is True
+    internal = clouds.resolve_declared("azurerm_lb", {"frontend_ip_configuration.subnet_id": "x"})
+    assert internal.decided_by == "rule azurerm_lb frontend subnet_id set (internal)"

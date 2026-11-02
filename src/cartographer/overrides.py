@@ -51,7 +51,7 @@ def _refusal(o: Override, facts: dict | None) -> str | None:
 
 def _targets(items: list[dict], o: Override, types: dict[str, str] | None) -> list[dict]:
     if o.address:
-        return [i for i in items if o.address in i["tf"]]
+        return [i for i in items if o.address in i.get("tf", [])]
     if types is None:
         return [i for i in items if i.get("tf_type") == o.type]
     return [i for i in items if any(types.get(a) == o.type for a in i.get("tf", []))]

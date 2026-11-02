@@ -68,8 +68,8 @@ def frame_cloud(groups: dict[str, dict], gid: str | None) -> str | None:
 def cloud_warnings(diagram: dict) -> list[str]:
     groups = {g["id"]: g for g in diagram["groups"]}
     out = []
-    for n in diagram["nodes"]:
-        icon_cloud, frame = icons.cloud_of(n.get("icon", "")), frame_cloud(groups, n["group"])
+    for n in (*diagram["nodes"], *diagram["externals"]):
+        icon_cloud, frame = icons.cloud_of(n.get("icon", "")), frame_cloud(groups, n.get("group"))
         if icon_cloud and frame and icon_cloud != frame:
             out.append(f"{n['id']}: icon {n['icon']} belongs to {icon_cloud}, its frame to {frame}")
     return out

@@ -25,4 +25,8 @@ def resolve_declared(tf_type: str, attributes: dict[str, str]) -> Resolution:
     cloud = cloud_of_type(tf_type)
     if cloud is None:
         return Resolution("none", marked=True, reason="type not in catalog", decided_by="curator, unknown type")
-    return cloud.resolve(tf_type, attributes.get)
+
+    def get(attr: str, present: bool = False) -> str | None | bool:
+        return attr in attributes if present else attributes.get(attr)
+
+    return cloud.resolve(tf_type, get)

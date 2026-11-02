@@ -237,5 +237,19 @@ def test_verify_warns_on_a_node_built_only_from_folds() -> None:
 def test_a_node_icon_of_another_cloud_than_its_frame_is_a_warning() -> None:
     frame = {"id": "f", "label": "f", "kind": "region", "cloud": "azure", "parent": None, "column": 0}
     diagram = {"groups": [frame, {**frame, "id": "g", "kind": None, "parent": "f"}],
-               "nodes": [{"id": "n", "group": "g", "icon": "aws:lambda"}, {"id": "m", "group": "g", "icon": "brand:github"}]}
+               "nodes": [{"id": "n", "group": "g", "icon": "aws:lambda"}, {"id": "m", "group": "g", "icon": "brand:github"}], "externals": []}
     assert cloud_warnings(diagram) == ["n: icon aws:lambda belongs to aws, its frame to azure"]
+
+
+def test_verify_prefers_a_service_icon_over_a_generic_one() -> None:
+    facts = _facts_with(aws_lb__front=LB, aws_instance__misc={"icon": "generic:folder", "marked": False})
+    curated = _curated()
+    curated["nodes"] = [{**_node("n", MISC, "shop"), "tf": [MISC, "aws_lb.front"]}]
+    assert tf_verify.verify(facts, curated, REPO)[0]["nodes"][0]["icon"] == "aws:ec2"
+
+
+def test_an_external_icon_of_another_cloud_than_its_frame_is_a_warning() -> None:
+    frame = {"id": "f", "label": "f", "kind": "region", "cloud": "azure", "parent": None, "column": 0}
+    diagram = {"groups": [frame], "nodes": [],
+               "externals": [{"id": "x", "group": "f", "icon": "aws:lambda"}, {"id": "y", "group": None, "icon": "aws:lambda"}]}
+    assert cloud_warnings(diagram) == ["x: icon aws:lambda belongs to aws, its frame to azure"]

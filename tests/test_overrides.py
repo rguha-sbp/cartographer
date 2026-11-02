@@ -57,3 +57,11 @@ def test_described_diagram_takes_type_wide_overrides_on_tf_type() -> None:
                                              Override("aws", "aws_s3_bucket", "sqs", "r", "aws_s3_bucket.a")])
     assert verified["nodes"][0]["icon"] == "aws:lambda"
     assert any("refused" in line for line in lines)
+
+
+def test_an_address_override_skips_externals_that_carry_no_tf() -> None:
+    verified = _verified()
+    verified["externals"] = [{"id": "ext", "label": "outside", "icon": "generic:users"}]
+    lines = overrides.apply(verified, FACTS, [Override("aws", "aws_s3_bucket", "lambda", "why", "aws_s3_bucket.a")])
+    assert verified["nodes"][0]["icon"] == "aws:lambda" and verified["externals"][0]["icon"] == "generic:users"
+    assert lines[0].startswith("applied")
