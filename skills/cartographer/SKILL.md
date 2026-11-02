@@ -98,7 +98,8 @@ engineer's consent, Code. Ask for the system name (lowercase kebab-case, for exa
 5. Review every produced view with step 6 below. The snapshot prints `view: <page name>` first. Apply "Every diagram"
    and "C4: every view" from the checklist, plus the section named like the view. A finding names the view, the rule,
    the tile and the element.
-6. Run the `check` command from Stopping.
+6. Show it (step 7) applies to C4: open each produced view .drawio the same way as for an AWS diagram.
+7. Run the `check` command from Stopping.
 
 C4 runs differ from the AWS flow:
 

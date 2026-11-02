@@ -71,7 +71,8 @@ protocols last. Ask at most about 8 targeted questions in total. Settle everythi
 
 Use this section when the engineer chose a C4 set at step 0 of SKILL.md. Sections 1 to 3 and 5 to 6 apply as written,
 with `model.json` instead of the curated file and `cartographer build --c4` instead of `build`. The diagrams end up in
-official documents, so the same care applies.
+official documents, so the same care applies. Where section 4 or 5 says to settle a gap with a best guess, in a C4
+set you ask first and guess only when the engineer cannot answer.
 
 ### Question rule
 
@@ -81,8 +82,9 @@ service does that?" One question per message. Read the repo first and ask only w
 
 ### C4 gap checklist
 
-Before each question, check the model against the level it feeds. Settle what is still open with your best guess and
-record it as an assumption, never on the diagram.
+Before each question, check the model against the level it feeds. When the repo does not answer something C4 needs,
+ask the engineer first, as the question rule says. Record an assumption only when the engineer cannot answer, and
+never mark it on the diagram.
 
 - Context: the people and their roles; every external system the system talks to; one sentence on what the system is
   for.
