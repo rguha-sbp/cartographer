@@ -5,6 +5,7 @@ import argparse
 import json
 import re
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -198,6 +199,9 @@ class Extractor:
         placements: list[dict] = []
         for cloud in self.clouds:
             found = cloud.network_facts(self)
+            for address, reason in found.get("unplaced", {}).items():
+                if not (res := self.resolution[address]).marked:
+                    self.resolution[address] = replace(res, marked=True, reason=reason)
             ids = {}
             for n in found["networks"]:
                 ids[n["address"]] = f"n{len(networks) + 1}"
@@ -215,12 +219,13 @@ class Extractor:
         for i, ((src, dst, kind), e) in enumerate(sorted(self.edges.items())):
             edges.append({"id": f"f{i + 1}", "src": src, "dst": dst, "kind": kind,
                           "detail": ",".join(sorted(e["detail"])), "file": e["at"][0], "line": e["at"][1]})
+        networks = self.networks()
         return {
             "infra_dir": str(self.infra_dir),
             "resources": [self.entry(r) for r in self.res],
             "edges": edges,
             **collect_hints(self.insts, self.res, self.repo_root, self.param_types),
-            **self.networks(),
+            **networks,
             "services": [
                 {"service": s, "actions": sorted(v["actions"]), "principals": sorted(v["principals"])}
                 for s, v in sorted(self.services.items())

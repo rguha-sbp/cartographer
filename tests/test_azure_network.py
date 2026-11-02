@@ -114,3 +114,19 @@ def test_every_network_and_placement_names_azure_and_ids_do_not_clash():
 def test_a_public_ip_on_an_application_gateway_frontend_or_nic_makes_its_subnet_public():
     assert tier_of("lb_exposure", "azurerm_application_gateway.gw") == ("public", "azurerm_subnet.gw public ip")
     assert tier_of("lb_exposure", "azurerm_linux_virtual_machine.vm") == ("public", "azurerm_subnet.edge public ip")
+
+
+@pytest.mark.parametrize(("resource", "tier", "via"), [
+    ("by_name", "isolated", "azurerm_virtual_network.v.subnet[1] name"),
+    ("by_prefix", "public", "azurerm_virtual_network.v.subnet[0] name"),
+])
+def test_a_reference_that_carries_a_subnet_name_or_prefix_picks_that_inline_subnet(resource, tier, via):
+    assert tier_of("several_inline_subnets", f"azurerm_linux_virtual_machine_scale_set.{resource}") == (tier, via)
+
+
+@pytest.mark.parametrize("resource", ["ambiguous", "unknown_name"])
+def test_an_unindexed_reference_to_several_inline_subnets_is_marked_not_placed(resource):
+    address = f"azurerm_linux_virtual_machine_scale_set.{resource}"
+    assert address not in placements("several_inline_subnets")
+    entry = next(r for r in facts("several_inline_subnets")["resources"] if r["address"] == address)
+    assert (entry["marked"], entry["reason"]) == (True, "azurerm_virtual_network.v has 3 inline subnets and the reference does not single out one")

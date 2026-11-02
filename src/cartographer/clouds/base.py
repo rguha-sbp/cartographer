@@ -84,7 +84,8 @@ class Cloud:
         self.param_types = param_types  # parameter and secret resources whose `name` is an integration hint
 
     def network_facts(self, ex: Extractor) -> dict:
-        """{"networks": [...], "placements": [...]} without ids; a placement names its network by address."""
+        """{"networks": [...], "placements": [...]} without ids; a placement names its network by address.
+        An optional "unplaced" maps a resource address to the reason it could not be placed; the resource is then marked."""
         return {"networks": [], "placements": []}
 
     def permission_edges(self, ex: Extractor) -> None:

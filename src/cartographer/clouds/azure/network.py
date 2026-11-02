@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from cartographer.clouds.refs import CIDR, Ref, derive, sources, tier_in, token
 from cartographer.tf_policies import unq
-from cartographer.tf_values import find
+from cartographer.tf_values import find, text
 
 if TYPE_CHECKING:
     from cartographer.tf_extract import Extractor
@@ -41,6 +41,7 @@ class Network:
         self.subnets: dict[str, Subnet] = {}
         self.public: dict[str, str] = {}
         self.outbound: dict[str, str] = {}
+        self.ambiguous: dict[str, str] = {}  # resource -> why a subnet reference could not be placed
 
     def refs(self, inst: Inst, obj: Any) -> dict[Ref, None]:
         return sources(inst, obj, TOKEN)
@@ -89,17 +90,29 @@ class Network:
             nic = self.by_address.get(ref.address)
             if nic is not None and nic.type == "azurerm_network_interface":
                 found |= {s.address: s for s in self.direct_subnets(nic)}
+                if nic.address in self.ambiguous:
+                    self.ambiguous.setdefault(r.address, self.ambiguous[nic.address])
         found |= {s.address: s for s in self.direct_subnets(r)}
         return list(found.values())
 
     def direct_subnets(self, r: Res) -> list[Subnet]:
-        return [s for value in find(r.block.body, SUBNET_KEY) for ref in self.refs(r.inst, value) for s in self.subnet_of(ref)]
+        return [s for value in find(r.block.body, SUBNET_KEY) for ref in self.refs(r.inst, value) for s in self.subnet_of(r, ref, value)]
 
-    def subnet_of(self, ref: Ref) -> list[Subnet]:
+    def subnet_of(self, r: Res, ref: Ref, value: Any) -> list[Subnet]:
         if ref.address in self.subnets:
             return [self.subnets[ref.address]]
         inline = [s for s in self.subnets.values() if s.address.startswith(f"{ref.address}.subnet[")]
-        return inline if len(inline) == 1 else []  # a reference to a virtual network with several inline subnets cannot say which
+        if len(inline) > 1 and len(named := [s for s in inline if self.quoted_in(s, value)]) != 1:
+            self.ambiguous.setdefault(r.address, f"{ref.address} has {len(inline)} inline subnets and the reference does not single out one")
+            return []
+        return named if len(inline) > 1 else inline
+
+    def quoted_in(self, s: Subnet, expr: Any) -> bool:
+        """Whether the reference expression quotes the inline subnet's name or one of its address prefixes."""
+        quoted = text(expr).replace('\\"', '"')
+        prefixes = s.body.get("address_prefixes")
+        literals = [self.literal(s.owner, v) for v in [s.body.get("name"), *(prefixes if isinstance(prefixes, list) else [prefixes])]]
+        return any(f'"{lit}"' in quoted for lit in literals if lit)
 
     def collect_evidence(self) -> None:
         default_route = self.appliance_route_tables()
@@ -191,4 +204,4 @@ def network_facts(ex: Extractor) -> dict:
     net.collect_networks()
     net.collect_subnets()
     net.collect_evidence()
-    return {"networks": [v for _, v in sorted(net.nets.items())], "placements": net.placements()}
+    return {"networks": [v for _, v in sorted(net.nets.items())], "placements": net.placements(), "unplaced": net.ambiguous}
