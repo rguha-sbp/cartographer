@@ -1,4 +1,4 @@
-"""Azure permission edges: role assignments and Key Vault access policies become `iam` edges from the principal that
+"""Azure permission edges: role assignments and Key Vault access policies (standalone or inline) become `iam` edges from the principal that
 holds them to the resource they name. A resource group or subscription scope is a cloud-wide service entry."""
 from __future__ import annotations
 
@@ -47,6 +47,11 @@ def grant(ex: Extractor, r: Res, who: list[str], scope: object, detail: set[str]
             ex.add(src, dst, "iam", detail, r)
 
 
+def policy_permissions(policy: dict) -> set[str]:
+    return {f"{key.removesuffix('_permissions')}:{unq(p)}" for key in PERMISSION_KEYS
+            for p in (policy.get(key) if isinstance(policy.get(key), list) else []) if "${" not in text(p)}
+
+
 def permission_edges(ex: Extractor) -> None:
     by_identity = carriers(ex)
     for r in ex.res:
@@ -56,6 +61,9 @@ def permission_edges(ex: Extractor) -> None:
             detail = {role} if isinstance(role, str) else {"role_definition_id"}
             grant(ex, r, holders(ex, r, body.get("principal_id"), by_identity), body.get("scope"), detail)
         elif r.type == "azurerm_key_vault_access_policy":
-            perms = {f"{key.removesuffix('_permissions')}:{unq(p)}" for key in PERMISSION_KEYS
-                     for p in (body.get(key) if isinstance(body.get(key), list) else []) if "${" not in text(p)}
-            grant(ex, r, holders(ex, r, body.get("object_id"), by_identity), body.get("key_vault_id"), perms)
+            grant(ex, r, holders(ex, r, body.get("object_id"), by_identity), body.get("key_vault_id"), policy_permissions(body))
+        elif r.type == "azurerm_key_vault":
+            inline = body.get("access_policy") or []
+            for policy in inline if isinstance(inline, list) else [inline]:
+                for src in holders(ex, r, policy.get("object_id"), by_identity):
+                    ex.add(src, r.address, "iam", policy_permissions(policy), r)
