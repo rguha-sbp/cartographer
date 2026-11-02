@@ -251,5 +251,6 @@ def test_docs_print_packaged_paths(capsys) -> None:
 def test_snapshot_subcommand_delegates(tmp_path: Path, monkeypatch) -> None:
     seen = []
     monkeypatch.setattr(snapshot, "snapshot", lambda *a: seen.append(a) or [])
+    (tmp_path / "a.drawio").write_text('<mxfile><diagram name="Container diagram for Shop"/></mxfile>')
     assert cli.main(["snapshot", str(tmp_path / "a.drawio"), "-o", str(tmp_path / "s")]) == 0
     assert seen[0][3] == "2x2"

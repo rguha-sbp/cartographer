@@ -150,6 +150,12 @@ def _tile_html(png: Path, size: tuple[int, int], tile: Tile) -> str:
     )
 
 
+def page_name(drawio: Path) -> str:
+    """Name of the first page: the view type and scope for C4 diagrams, which picks the review rules."""
+    page = ElementTree.fromstring(drawio.read_text()).find("diagram")
+    return "" if page is None else page.get("name", "")
+
+
 def snapshot(drawio: Path, out_dir: Path, drawio_url: str, tiles: str) -> list[Path]:
     rows, cols = parse_tiles(tiles)
     xml = drawio.read_text()
@@ -195,7 +201,7 @@ def run(args: argparse.Namespace) -> int:
     except ValueError as err:
         print(err, file=sys.stderr)
         return 1
-    print("\n".join(str(p) for p in paths))
+    print("\n".join([f"view: {page_name(args.drawio)}", *map(str, paths)]))
     return 0
 
 
