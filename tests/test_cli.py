@@ -4,7 +4,7 @@ from xml.etree import ElementTree
 
 import pytest
 
-from cartographer import cli, drawio_app, files, snapshot, svg_export, tfdiagram
+from cartographer import cli, drawio_app, files, snapshot, tfdiagram
 
 FIXTURES = Path(__file__).parent / "fixtures"
 STALE = "Terraform changed since curation: rerun the curation"
@@ -78,12 +78,6 @@ def _build(tmp_path: Path, curated: Path, *extra: str) -> int:
     out = tmp_path / "out"
     return cli.main(["build", "--name", "mini", "--repo", str(FIXTURES), "--out", str(out), "--curated", str(curated),
                      *extra])
-
-
-@pytest.fixture
-def renderer(monkeypatch, bundled_app) -> None:
-    monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
-    monkeypatch.setattr(svg_export, "export_svg", lambda mxfile, url: f"<svg>{files.sha256_text(mxfile)}</svg>")
 
 
 def test_build_writes_drawio_svg_fingerprint_and_index(cache: Path, tmp_path: Path, capsys, renderer) -> None:
@@ -217,11 +211,21 @@ def test_view_refuses_anything_but_a_drawio(tmp_path: Path, capsys) -> None:
 
 def test_image_regenerates_the_sibling_svg_and_the_index(tmp_path: Path, renderer) -> None:
     drawio = tmp_path / "a-l7.drawio"
-    drawio.write_text("<mxfile/>")
+    drawio.write_text('<mxfile><diagram name="Layer 7 diagram for A"/></mxfile>')
     (tmp_path / "a-l7.curated.json").write_text(json.dumps({"system": "A", "view": "l7"}))
     assert cli.main(["image", str(drawio)]) == 0
     assert (tmp_path / "a-l7.svg").read_text() == f"<svg>{files.sha256_file(drawio)}</svg>"
     assert "Layer 7 diagram for A" in (tmp_path / "README.md").read_text()
+
+
+def test_image_regenerates_an_image_per_page_of_a_book(tmp_path: Path, capsys, renderer) -> None:
+    drawio = tmp_path / "shop-c4.drawio"
+    drawio.write_text('<mxfile><diagram id="1-context" name="Context"/>'
+                      '<diagram id="2-container" name="Container"/></mxfile>')
+    assert cli.main(["image", str(drawio)]) == 0
+    images = [tmp_path / "shop-c4-1-context.svg", tmp_path / "shop-c4-2-container.svg"]
+    assert capsys.readouterr().out.splitlines() == [str(image) for image in images]
+    assert all(image.read_text() == f"<svg>{files.sha256_file(drawio)}</svg>" for image in images)
 
 
 def test_image_fails_with_exit_5_when_draw_io_is_down(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -251,5 +255,6 @@ def test_docs_print_packaged_paths(capsys) -> None:
 def test_snapshot_subcommand_delegates(tmp_path: Path, monkeypatch) -> None:
     seen = []
     monkeypatch.setattr(snapshot, "snapshot", lambda *a: seen.append(a) or [])
+    (tmp_path / "a.drawio").write_text('<mxfile><diagram name="Container diagram for Shop"/></mxfile>')
     assert cli.main(["snapshot", str(tmp_path / "a.drawio"), "-o", str(tmp_path / "s")]) == 0
     assert seen[0][3] == "2x2"

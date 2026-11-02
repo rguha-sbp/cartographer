@@ -2,8 +2,9 @@
 
 from pathlib import Path
 
+from cartographer import files
+
 DIAGRAMS = Path("docs/architecture/diagrams")
-GENERATED = ".generated.drawio"
 
 
 class TargetError(Exception):
@@ -18,7 +19,7 @@ def resolve(arg: str | None, root: Path = Path(".")) -> Path:
     folder = root / DIAGRAMS
     if arg is not None and not _is_name(arg):
         return Path(arg)
-    found = sorted(p for p in folder.glob("*.drawio") if not p.name.endswith(GENERATED))
+    found = sorted(p for p in folder.glob("*.drawio") if not files.is_side_file(p))
     if arg is not None:
         if (folder / f"{arg}.drawio") not in found:
             raise TargetError(f"no diagram named {arg} in {DIAGRAMS}")

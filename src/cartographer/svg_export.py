@@ -1,4 +1,5 @@
-"""Render a .drawio to an svg image in the local draw.io, stamped with the sha256 of the .drawio it came from."""
+"""Render each page of a .drawio to an svg image in the local draw.io, stamped with the sha256 of the .drawio it came
+from."""
 
 import base64
 import html
@@ -104,7 +105,7 @@ def svg_from_dom(dom: str, source_sha256: str, size: tuple[int, int], drawio_url
     return svg
 
 
-def export_svg(mxfile: str, drawio_url: str, fetch: Fetch = fetch_url) -> str:
+def export_svg(mxfile: str, source_sha256: str, drawio_url: str, fetch: Fetch = fetch_url) -> str:
     if not snapshot.drawio_up(drawio_url):
         raise SvgError(snapshot.DRAWIO_DOWN)
     size = snapshot.window_size(mxfile)
@@ -112,12 +113,19 @@ def export_svg(mxfile: str, drawio_url: str, fetch: Fetch = fetch_url) -> str:
     proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if proc.returncode != 0:
         raise SvgError(f"Chrome failed: {proc.stderr.strip()[-300:]}")
-    return svg_from_dom(proc.stdout, files.sha256_text(mxfile), size, drawio_url, fetch)
+    return svg_from_dom(proc.stdout, source_sha256, size, drawio_url, fetch)
 
 
-def write_image(drawio: Path, drawio_url: str, mxfile: str) -> Path:
-    """Render `mxfile` (the content of `drawio`) to the svg next to it and refresh the folder index."""
-    image = files.image_path(drawio)
-    image.write_text(export_svg(mxfile, drawio_url))
+def images(drawio: Path, mxfile: str, drawio_url: str) -> dict[Path, str]:
+    """The image of every page of `mxfile`, the content of `drawio`, by image path."""
+    source_sha256 = files.sha256_text(mxfile)
+    return {page.image: export_svg(page.mxfile, source_sha256, drawio_url) for page in files.pages(drawio, mxfile)}
+
+
+def write_image(drawio: Path, drawio_url: str, mxfile: str) -> list[Path]:
+    """Render `mxfile` (the content of `drawio`) to the images next to it and refresh the folder index."""
+    rendered = images(drawio, mxfile, drawio_url)
+    for image, svg in rendered.items():
+        image.write_text(svg)
     index.write_index(drawio.parent)
-    return image
+    return list(rendered)

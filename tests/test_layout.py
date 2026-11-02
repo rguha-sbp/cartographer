@@ -62,3 +62,17 @@ def test_gaps_between_blocks_hold_a_channel_of_lines_clear_of_both_blocks() -> N
     assert CHANNEL_TRACKS >= 4
     assert placed["b10"].x - (placed["b00"].x + placed["b00"].w) >= channel
     assert placed["b01"].y - (placed["b00"].y + placed["b00"].h) >= channel
+
+
+def test_legend_drops_below_lines_and_captions_routed_under_the_last_row() -> None:
+    from cartographer.diagram_model import Box, Diagram, Edge, Legend, Title
+    from cartographer.tf_blocks import GAP
+
+    a, b = Box("a", "A", 40, 100), Box("b", "B", 400, 100)
+    under = Edge("a", "b", "calls\n[HTTPS]", points=((140, 300), (500, 300)), out=(0.5, 1), into=(0.5, 1), exact=True)
+    legend = Legend(40, 156 + GAP, 300, 80, "Key", (), "")
+    cleared = tf_layout.clear_legend(Diagram(Title(40, 20, 1400, 60, "t"), (a, b), (under,), legend))
+    assert cleared.legend.y >= 300 + GAP
+    beside = Edge("a", "b", "", out=(1, 0.5), into=(0, 0.5))
+    kept = Diagram(Title(40, 20, 1400, 60, "t"), (a, b), (beside,), legend)
+    assert tf_layout.clear_legend(kept) == kept

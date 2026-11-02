@@ -1,0 +1,251 @@
+{
+  "source": "terraform",
+  "elements": [
+    {
+      "id": "analyst",
+      "type": "person",
+      "name": "Analyst",
+      "description": "Reads the mini data set",
+      "evidence": [
+        {
+          "stated": "described by the engineer"
+        }
+      ]
+    },
+    {
+      "id": "mini",
+      "type": "system",
+      "name": "Mini",
+      "description": "Serves data from a bucket",
+      "evidence": [
+        {
+          "stated": "described by the engineer"
+        }
+      ]
+    },
+    {
+      "id": "mailer",
+      "type": "system",
+      "name": "Mail service",
+      "description": "Sends report mails",
+      "evidence": [
+        {
+          "stated": "described by the engineer"
+        }
+      ],
+      "external": true
+    },
+    {
+      "id": "fn",
+      "type": "container",
+      "name": "Function",
+      "description": "Reads the bucket on request",
+      "evidence": [
+        {
+          "fact": "f1"
+        }
+      ],
+      "parent": "mini",
+      "technology": "Python 3.13"
+    },
+    {
+      "id": "data",
+      "type": "container",
+      "name": "Data bucket",
+      "description": "Holds the data files",
+      "evidence": [
+        {
+          "fact": "f1"
+        }
+      ],
+      "parent": "mini",
+      "technology": "S3",
+      "shape": "store"
+    },
+    {
+      "id": "handler",
+      "type": "component",
+      "name": "Handler",
+      "description": "Receives the request",
+      "evidence": [
+        {
+          "stated": "described by the engineer"
+        }
+      ],
+      "parent": "fn",
+      "technology": "Python"
+    },
+    {
+      "id": "reader",
+      "type": "component",
+      "name": "Reader",
+      "description": "Reads objects from the bucket",
+      "evidence": [
+        {
+          "stated": "described by the engineer"
+        }
+      ],
+      "parent": "fn",
+      "technology": "boto3"
+    },
+    {
+      "id": "report",
+      "type": "component",
+      "name": "Reporter",
+      "description": "Builds the report mail",
+      "evidence": [
+        {
+          "stated": "described by the engineer"
+        }
+      ],
+      "parent": "fn",
+      "technology": "Python"
+    }
+  ],
+  "relationships": [
+    {
+      "id": "r1",
+      "src": "analyst",
+      "dst": "fn",
+      "label": "Requests data",
+      "dashed": false,
+      "evidence": [
+        {
+          "stated": "described by the engineer"
+        }
+      ],
+      "technology": "HTTPS"
+    },
+    {
+      "id": "r2",
+      "src": "fn",
+      "dst": "data",
+      "label": "Reads objects",
+      "dashed": false,
+      "evidence": [
+        {
+          "fact": "f1"
+        }
+      ],
+      "technology": "S3 API"
+    },
+    {
+      "id": "r3",
+      "src": "fn",
+      "dst": "mailer",
+      "label": "Sends reports",
+      "dashed": false,
+      "evidence": [
+        {
+          "stated": "described by the engineer"
+        }
+      ],
+      "technology": "SMTP",
+      "summary": "Sends reports"
+    },
+    {
+      "id": "r4",
+      "src": "handler",
+      "dst": "reader",
+      "label": "Asks for data",
+      "dashed": false,
+      "evidence": [
+        {
+          "stated": "described by the engineer"
+        }
+      ],
+      "technology": "Python call"
+    },
+    {
+      "id": "r5",
+      "src": "handler",
+      "dst": "report",
+      "label": "Asks for a report",
+      "dashed": false,
+      "evidence": [
+        {
+          "stated": "described by the engineer"
+        }
+      ],
+      "technology": "Python call"
+    },
+    {
+      "id": "r6",
+      "src": "reader",
+      "dst": "data",
+      "label": "Reads objects",
+      "dashed": false,
+      "evidence": [
+        {
+          "stated": "described by the engineer"
+        }
+      ],
+      "technology": "S3 API"
+    },
+    {
+      "id": "r7",
+      "src": "report",
+      "dst": "mailer",
+      "label": "Sends mail",
+      "dashed": false,
+      "evidence": [
+        {
+          "stated": "described by the engineer"
+        }
+      ],
+      "technology": "SMTP",
+      "summary": "Sends reports"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "read",
+      "name": "Read data",
+      "steps": [
+        "r1",
+        "r2"
+      ]
+    }
+  ],
+  "deployment": {
+    "environment": "mini",
+    "nodes": [
+      {
+        "id": "fnnode",
+        "name": "Lambda function",
+        "technology": "AWS Lambda",
+        "evidence": [
+          {
+            "fact": "f1"
+          }
+        ],
+        "tf": [
+          "aws_lambda_function.fn"
+        ]
+      },
+      {
+        "id": "bucket",
+        "name": "S3 bucket",
+        "technology": "AWS S3",
+        "evidence": [
+          {
+            "fact": "f1"
+          }
+        ],
+        "tf": [
+          "aws_s3_bucket.data"
+        ]
+      }
+    ],
+    "instances": [
+      {
+        "container": "fn",
+        "node": "fnnode"
+      },
+      {
+        "container": "data",
+        "node": "bucket"
+      }
+    ]
+  }
+}
