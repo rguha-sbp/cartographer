@@ -58,7 +58,7 @@ def permission_edges(ex: Extractor) -> None:
         body = attrs(r.block.body)
         if r.type == "azurerm_role_assignment":
             role = ex.value(r.inst, body.get("role_definition_name"))
-            detail = {role} if isinstance(role, str) else {"role_definition_id"}
+            detail = {role} if isinstance(role, str) else set()
             grant(ex, r, holders(ex, r, body.get("principal_id"), by_identity), body.get("scope"), detail)
         elif r.type == "azurerm_key_vault_access_policy":
             grant(ex, r, holders(ex, r, body.get("object_id"), by_identity), body.get("key_vault_id"), policy_permissions(body))

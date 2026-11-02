@@ -6,11 +6,19 @@ from cartographer.clouds.base import UNRESOLVED
 
 
 def attrs(**values):
-    return lambda attr: values.get(attr.replace(".", "_"))
+    def get(attr, present=False, every=False):
+        found = values.get(attr.replace(".", "_"))
+        return ([] if found is None else [found]) if every else found
+
+    return get
 
 
 def unresolved(*names):
-    return lambda attr: UNRESOLVED if attr.replace(".", "_") in names else None
+    def get(attr, present=False, every=False):
+        found = UNRESOLVED if attr.replace(".", "_") in names else None
+        return ([] if found is None else [found]) if every else found
+
+    return get
 
 
 def frontends(*set_attrs):
@@ -136,3 +144,4 @@ def test_every_rule_icon_exists():
 
 def test_rules_only_apply_to_their_own_type_not_the_family():
     assert not AZURE.resolve("azurerm_lb_probe", unresolved("sku")).marked
+

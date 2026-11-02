@@ -54,10 +54,9 @@ class AzureCloud(Cloud):
         found = ex.value(res.inst, expr)
         if isinstance(found, str):
             return found
-        groups = {r.address: r for r in ex.res if r.type == "azurerm_resource_group"}
         for address in sorted(ex.refs(res.inst, expr)):
-            group = groups.get(address)
-            literal = ex.value(group.inst, group.block.body.get("location")) if group else None
+            group = ex.by_address.get(address)
+            literal = ex.value(group.inst, group.block.body.get("location")) if group and group.type == "azurerm_resource_group" else None
             if isinstance(literal, str):
                 return literal
         return None

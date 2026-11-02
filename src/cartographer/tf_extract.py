@@ -50,6 +50,7 @@ class Extractor:
         self.data_ref_types = frozenset().union(*(c.data_ref_types for c in self.clouds))
         self.param_types = frozenset().union(*(c.param_types for c in self.clouds))
         self.types = {r.address: r.type for r in self.res}
+        self.by_address = {r.address: r for r in self.res}
         self.edges: dict[tuple[str, str, str], dict[str, Any]] = {}
         self.services: dict[str, dict[str, set[str]]] = {}
         self.stats = {"unparsed_policies": 0, "constructed_arns": 0, "missing_outputs": 0}
@@ -92,9 +93,15 @@ class Extractor:
         return UNRESOLVED if got is None else got
 
     def getter(self, r: Res) -> Getter:
-        def get(path: str, present: bool = False) -> str | None | bool | object:
+        def get(path: str, present: bool = False, every: bool = False) -> str | None | bool | list | object:
             if present:
                 return self.is_set(r.block.body, path.split("."))
+            if every:
+                nodes: list[Any] = [r.block.body]
+                for key in path.split("."):
+                    nodes = [item.get(key) for n in nodes for item in (n if isinstance(n, list) else [n])
+                             if isinstance(item, dict)]
+                return [self.value(r.inst, n) for n in nodes if n is not None]
             node: Any = r.block.body
             for key in path.split("."):
                 node = node[0] if isinstance(node, list) and node else node
@@ -110,10 +117,11 @@ class Extractor:
 
     @staticmethod
     def is_set(node: Any, keys: list[str]) -> bool:
-        """Whether `keys` names an attribute in any of the repeated blocks along the path, whatever its value."""
+        """Whether `keys` names an attribute set to something other than a literal `null` in any of the repeated blocks
+        along the path."""
         if isinstance(node, list):
             return any(Extractor.is_set(n, keys) for n in node)
-        if not keys or not isinstance(node, dict) or keys[0] not in node:
+        if not keys or not isinstance(node, dict) or node.get(keys[0]) is None:
             return False
         return len(keys) == 1 or Extractor.is_set(node[keys[0]], keys[1:])
 

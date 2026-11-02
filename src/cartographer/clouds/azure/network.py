@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 NETWORK_KEY = re.compile(r"(\w*_)?virtual_network_(id|name)")
 # virtual_network_subnet_id is VNet integration: outbound only, never a placement
 SUBNET_KEY = re.compile(r"(?!virtual_network_subnet_ids?$)(\w*_)?subnet_ids?")
+FRONTEND = "frontend_ip_configuration"
 PUBLIC_IP_KEY = re.compile(r"public_ip_address(_id)?")
 RESERVED_PUBLIC = {"GatewaySubnet", "AzureBastionSubnet", "AzureFirewallSubnet"}
 NOT_PLACED = {"azurerm_subnet", "azurerm_virtual_network"}
@@ -36,7 +37,9 @@ class Subnet:
 class Network:
     def __init__(self, ex: Extractor) -> None:
         self.ex = ex
-        self.by_address = {r.address: r for r in ex.res}
+        self.by_address = ex.by_address
+        self._body_refs: dict[str, dict[Ref, None]] = {}
+        self._subnet_refs: dict[str, list[Subnet]] = {}
         self.nets: dict[str, dict] = {}
         self.subnets: dict[str, Subnet] = {}
         self.public: dict[str, str] = {}
@@ -45,6 +48,11 @@ class Network:
 
     def refs(self, inst: Inst, obj: Any) -> dict[Ref, None]:
         return sources(inst, obj, TOKEN)
+
+    def body_refs(self, r: Res) -> dict[Ref, None]:
+        if r.address not in self._body_refs:
+            self._body_refs[r.address] = self.refs(r.inst, r.block.body)
+        return self._body_refs[r.address]
 
     def literal(self, res: Res, expr: Any) -> str | None:
         found = self.ex.value(res.inst, expr)
@@ -85,18 +93,31 @@ class Network:
 
     def subnet_refs(self, r: Res) -> list[Subnet]:
         """The local subnets `r` sits in: its own subnet attributes, and those of the network interfaces it uses."""
+        if r.address in self._subnet_refs:
+            return self._subnet_refs[r.address]
         found: dict[str, Subnet] = {}
-        for ref in self.refs(r.inst, r.block.body):
+        for ref in self.body_refs(r):
             nic = self.by_address.get(ref.address)
             if nic is not None and nic.type == "azurerm_network_interface":
                 found |= {s.address: s for s in self.direct_subnets(nic)}
                 if nic.address in self.ambiguous:
                     self.ambiguous.setdefault(r.address, self.ambiguous[nic.address])
         found |= {s.address: s for s in self.direct_subnets(r)}
-        return list(found.values())
+        self._subnet_refs[r.address] = list(found.values())
+        return self._subnet_refs[r.address]
 
-    def direct_subnets(self, r: Res) -> list[Subnet]:
-        return [s for value in find(r.block.body, SUBNET_KEY) for ref in self.refs(r.inst, value) for s in self.subnet_of(r, ref, value)]
+    def direct_subnets(self, r: Res, body: Any = None) -> list[Subnet]:
+        return [s for value in find(r.block.body if body is None else body, SUBNET_KEY)
+                for ref in self.refs(r.inst, value) for s in self.subnet_of(r, ref, value)]
+
+    def public_subnets(self, r: Res) -> list[Subnet]:
+        """The subnets `r` exposes: all of its own when it has a public ip, except those only a frontend without one uses."""
+        if not self.has_public_ip(r.block.body):
+            return []
+        frontends = r.block.body.get(FRONTEND) or []
+        internal = {s.address for f in (frontends if isinstance(frontends, list) else [frontends])
+                    if not self.has_public_ip(f) for s in self.direct_subnets(r, f)}
+        return [s for s in self.subnet_refs(r) if s.address not in internal]
 
     def subnet_of(self, r: Res, ref: Ref, value: Any) -> list[Subnet]:
         if ref.address in self.subnets:
@@ -125,19 +146,19 @@ class Network:
             if r.type == "azurerm_lb_outbound_rule":
                 continue
             subnets = self.subnet_refs(r)
-            if self.has_public_ip(r):
-                self.public.update({s.address: "public ip" for s in subnets})
+            self.public.update({s.address: "public ip" for s in self.public_subnets(r)})
             if r.type == "azurerm_subnet_nat_gateway_association":
                 self.outbound.update({s.address: "nat gateway" for s in subnets})
             if r.type == "azurerm_subnet_route_table_association" and any(
                 ref.address in default_route for ref in self.refs(r.inst, r.block.body.get("route_table_id"))
             ):
                 self.outbound.update({s.address: "route to virtual appliance" for s in subnets})
-            if any(ref.address in outbound_pools for ref in self.refs(r.inst, r.block.body)):
+            if any(ref.address in outbound_pools for ref in self.body_refs(r)):
                 self.outbound.update({s.address: "load balancer outbound rule" for s in subnets})
 
-    def has_public_ip(self, r: Res) -> bool:
-        return any(v is not None and unq(v) not in ("", "null") for v in find(r.block.body, PUBLIC_IP_KEY))
+    @staticmethod
+    def has_public_ip(body: Any) -> bool:
+        return any(v is not None and unq(v) not in ("", "null") for v in find(body, PUBLIC_IP_KEY))
 
     def appliance_route_tables(self) -> set[str]:
         """Route tables with a `0.0.0.0/0` route to a virtual appliance, inline or as a separate azurerm_route."""

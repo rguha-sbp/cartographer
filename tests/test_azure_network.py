@@ -130,3 +130,23 @@ def test_an_unindexed_reference_to_several_inline_subnets_is_marked_not_placed(r
     assert address not in placements("several_inline_subnets")
     entry = next(r for r in facts("several_inline_subnets")["resources"] if r["address"] == address)
     assert (entry["marked"], entry["reason"]) == (True, "azurerm_virtual_network.v has 3 inline subnets and the reference does not single out one")
+
+
+def test_an_internal_frontend_does_not_make_its_subnet_public_because_another_frontend_is():
+    assert tier_of("lb_mixed_frontends", "azurerm_lb.mixed") == ("private", "azurerm_subnet.inner default")
+
+
+def test_each_resource_body_is_scanned_for_references_once(monkeypatch):
+    from cartographer.clouds.azure import network
+
+    seen: list[dict] = []
+    original = network.Network.refs
+
+    def counting(self, inst, obj):
+        if isinstance(obj, dict):
+            seen.append(obj)
+        return original(self, inst, obj)
+
+    monkeypatch.setattr(network.Network, "refs", counting)
+    tf_extract.extract(Path("."), FIXTURES / "vm_via_nic")
+    assert len(seen) == len({id(o) for o in seen})

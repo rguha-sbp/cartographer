@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 UNRESOLVED = object()  # the attribute exists but is not a literal (reference, local, var without default)
 # attribute path such as "sku.tier" -> literal, None (absent) or UNRESOLVED; `present=True` -> whether any block sets it
+# to something other than null; `every=True` -> the values of that path in every repeated block
 Getter = Callable[..., str | None | bool | object]
 
 
@@ -113,9 +114,14 @@ class Cloud:
             return base
         unresolved: list[str] = []
 
-        def watched(attr: str, present: bool = False) -> str | None | bool | object:
+        def watched(attr: str, present: bool = False, every: bool = False) -> str | None | bool | list | object:
             if present:
                 return get(attr, present=True)
+            if every:
+                values = get(attr, every=True)
+                if UNRESOLVED in values:
+                    unresolved.append(attr)
+                return values
             value = get(attr)
             if value is UNRESOLVED:
                 unresolved.append(attr)

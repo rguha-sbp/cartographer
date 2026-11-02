@@ -142,3 +142,33 @@ def test_inline_key_vault_access_policies_are_iam_edges_like_the_standalone_reso
     assert edges("key_vault_inline_policy", "iam") == {
         ("azurerm_linux_web_app.app", "azurerm_key_vault.kv", "key:Get,secret:Get,secret:List"),
         ("azurerm_linux_web_app.worker", "azurerm_key_vault.kv", "secret:Get")}
+
+
+def test_a_role_assignment_by_definition_id_names_no_role_and_adds_no_service():
+    assert facts("role_assignment_role_id")["services"] == []
+    assert edges("role_assignment_role_id", "iam") == set()
+
+
+def test_location_looks_resource_groups_up_by_address_without_rescanning_the_resources():
+    from cartographer.clouds.azure import AZURE
+    from cartographer.tf_extract import Extractor
+
+    scans = []
+
+    class Counting(list):
+        def __iter__(self):
+            scans.append(1)
+            return super().__iter__()
+
+    ex = Extractor(Path("."), FIXTURES / "location_and_subscription")
+    ex.res = Counting(ex.res)
+    for r in list(ex.res):
+        AZURE.location(ex, r)
+    assert len(scans) <= 1
+
+
+def test_a_literal_null_frontend_attribute_is_unset_and_every_capability_counts():
+    assert resource("lb_null_public", "azurerm_lb.conditional")["decided_by"] == (
+        "rule azurerm_lb frontend private_ip_address set (internal)")
+    assert resource("lb_null_public", "azurerm_cosmosdb_account.late")["decided_by"] == (
+        "rule azurerm_cosmosdb_account api = Table")

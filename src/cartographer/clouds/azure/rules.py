@@ -66,8 +66,8 @@ def _storage_account(get: Getter) -> Resolution | None:
 
 
 def _cosmosdb_account(get: Getter) -> Resolution:
-    kind, capability = get("kind"), get("capabilities.name")
-    api = COSMOS_CAPABILITIES.get(capability) if isinstance(capability, str) else None
+    kind, capabilities = get("kind"), get("capabilities.name", every=True)
+    api = next((COSMOS_CAPABILITIES[c] for c in capabilities if c in COSMOS_CAPABILITIES), None)
     api = api or ("MongoDB" if kind == "MongoDB" else "NoSQL")
     return Resolution("icon", "azure:azure_cosmos_db", f"rule azurerm_cosmosdb_account api = {api}")
 
