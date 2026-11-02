@@ -1,5 +1,5 @@
 """A notation decides how a laid-out diagram looks and explains itself: the draw.io value and style of its boxes and
-groups, its legend and the colour of each line. The AWS notation is the layer 7 look."""
+groups, its legend, the colour of each line and the air between boxes stacked one above another. The AWS notation is the layer 7 look."""
 
 import html
 from collections.abc import Callable
@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from cartographer.diagram_model import EDGE_DEFAULT, FRAME_TITLE_LEFT, GROUP_TITLE_LEFT, ORIGIN, Box, Group, Legend
+from cartographer.tf_blocks import GAP
 from cartographer.tf_colors import Colours
 
 LEGEND_W, LEGEND_LINE = 440, 18
@@ -30,6 +31,7 @@ class Notation:
     group: Callable[[Group], Cell]
     legend: Callable[[Curated, int], Legend]  # the legend placed at height y below the drawing
     edge_colour: Callable[[Curated], Callable[[str], str]]  # line colour by destination id
+    row_gap: int  # vertical clearance between boxes stacked one above another
 
 
 def html_value(text: str) -> str:
@@ -67,4 +69,4 @@ def _destination_colour(curated: Curated) -> Callable[[str], str]:
     return Colours(curated).node
 
 
-AWS = Notation(_aws_box, aws_group, _aws_legend, _destination_colour)
+AWS = Notation(_aws_box, aws_group, _aws_legend, _destination_colour, row_gap=GAP)

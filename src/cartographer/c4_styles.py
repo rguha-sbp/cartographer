@@ -17,6 +17,7 @@ WHITE, DARK = "#FFFFFF", "#232F3E"
 DESCRIPTION_WRAP = 32
 TEXT_LINE_H, TEXT_PAD_X, TEXT_PAD_Y, PERSON_HEAD = 16, 24, 32, 60
 MIN_W = 200
+ROW_GAP = 100  # boxes stacked one above another keep room for the captions routed between them
 
 ROUNDED, PERSON = "rounded=1;arcSize=6;", "shape=mxgraph.c4.person2;verticalAlign=bottom;spacingBottom=16;"
 STORE, QUEUE = "shape=cylinder3;", "shape=cylinder3;direction=south;"
@@ -117,4 +118,4 @@ def _neutral(curated: Curated) -> Callable[[str], str]:
     return lambda _dst: LINE
 
 
-C4 = Notation(_box, _group, _legend, _neutral)
+C4 = Notation(_box, _group, _legend, _neutral, row_gap=ROW_GAP)
