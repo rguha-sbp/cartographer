@@ -1,5 +1,6 @@
 import copy
 
+from cartographer import c4_views
 from cartographer.c4_verify import report, stated_only, verify
 
 FACT = [{"fact": "f1"}]
@@ -236,3 +237,15 @@ def test_deployment_node_with_an_unknown_icon_fails(tmp_path):
     m["deployment"]["nodes"][0]["service"] = "application_load_balancer"
     facts = _facts("aws_lambda_function.fn", "aws_db_instance.db", edges=[_edge("aws_db_instance.db", "aws_lambda_function.fn")])
     assert "n1: service 'application_load_balancer' is not a draw.io AWS icon, renders as a box" in verify(m, facts, tmp_path)
+
+
+def test_relationship_no_core_view_draws_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr(c4_views, "core", lambda model: [])
+    assert verify(_valid(), None, tmp_path) == ["r1: drawn on no Context, Container, Component or Code view"]
+
+
+def test_rollup_conflict_is_a_verify_error(tmp_path):
+    m = _valid()
+    m["elements"].append(el("c1", "component", "api", technology="Py", evidence=STATED))
+    m["relationships"].append(rel("r2", "c1", "db", "writes"))
+    assert verify(m, None, tmp_path) == ["api->db: relationships r1, r2 need a shared summary"]

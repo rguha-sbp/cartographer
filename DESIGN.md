@@ -279,6 +279,12 @@ Views and files, written to `docs/architecture/diagrams/<name>-<slug>.drawio` an
 writes a README index with one row per .drawio. There is no hand-edit guard for C4 views; `check` and `image` work as
 before. The layout, router and checker are shared with Layer 7.
 
+Relationships are stated at the lowest level known and `c4_model.rollup` lifts them to the elements a view shows; each
+lifted edge names the relationships behind it. Context and Container views draw every lifted edge, including those
+between people and external systems; a Component view only those that touch its components. `c4_verify` projects
+the core views (Context, Container, Component, Code) last and fails on a rolled-up arrow without a shared label and on
+a relationship that no core view draws.
+
 Review: `snapshot` prints `view: <page name>` first (`snapshot.page_name` reads the first `<diagram name=...>`).
 `REVIEW.md` picks the rules from it: "Every diagram" plus "Layer 7" or "C4: every view" plus the section named like the page.
 

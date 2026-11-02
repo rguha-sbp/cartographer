@@ -71,13 +71,14 @@ def _edge_label(pair: tuple[str, str], parts: list[dict]) -> str:
 
 
 def rollup(model: Model, shown: set[str]) -> list[dict]:
-    """Relationships lifted to the shown elements, one edge per ordered pair."""
+    """Relationships lifted to the shown elements, one edge per ordered pair, naming the relationships behind it."""
     groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for r in model["relationships"]:
         src, dst = visible(model, r["src"], shown), visible(model, r["dst"], shown)
         if src and dst and src != dst:
             groups[src, dst].append(r)
     return [
-        {"src": src, "dst": dst, "label": _edge_label((src, dst), parts), "dashed": all(r["dashed"] for r in parts)}
+        {"src": src, "dst": dst, "label": _edge_label((src, dst), parts), "dashed": all(r["dashed"] for r in parts),
+         "relationships": sorted(r["id"] for r in parts)}
         for (src, dst), parts in sorted(groups.items())
     ]

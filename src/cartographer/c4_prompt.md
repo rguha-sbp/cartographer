@@ -26,6 +26,9 @@ Step 2: propose the whole model
   the protocol where the code shows it, `dashed` true only for asynchronous paths.
 - Higher views roll relationships up. When several relationships roll up onto one arrow (two components of `api`
   both reading `db`), give each of them the same short `summary` for that arrow, else the build fails and names them.
+- Record relationships between people and external systems too ("Customer withdraws cash from ATM"): the Context
+  and Container views draw them. The build fails on a relationship that no Context, Container, Component or Code
+  view draws.
 
 Evidence
 - Every element, relationship and deployment node needs at least one evidence item:

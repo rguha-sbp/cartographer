@@ -44,24 +44,24 @@ def _children(model: Model, parent: dict, kind: str) -> list[dict]:
     return [e for e in model["elements"] if e["type"] == kind and e.get("parent") == parent["id"]]
 
 
-def _outsiders(model: Model) -> list[dict]:
-    """The people and external systems any view may draw around its subject."""
-    return [e for e in model["elements"] if e["type"] == "person" or (e["type"] == "system" and e.get("external"))]
+def _shown(model: Model, *parts: list[dict]) -> set[str]:
+    """Ids of the parts' elements plus the people and external systems any view may draw around its subject."""
+    outsiders = [e for e in model["elements"] if e["type"] == "person" or (e["type"] == "system" and e.get("external"))]
+    return {e["id"] for part in (*parts, outsiders) for e in part}
 
 
-def _rolled_up(model: Model, title: str, group: dict | None, inside: list[dict], siblings: list[dict]) -> dict:
-    """A view whose edges are the model's relationships lifted to `inside`, people, external systems and
-    `siblings`; edges that do not touch `inside` belong to another view."""
-    shown = {e["id"] for e in [*inside, *_outsiders(model), *siblings]}
-    inside_ids = {e["id"] for e in inside}
-    edges = [e for e in rollup(model, shown) if {e["src"], e["dst"]} & inside_ids]
-    return _curated(model, title, group, inside, edges)
+def _component(model: Model, title: str, container: dict, components: list[dict], siblings: list[dict]) -> dict:
+    """The container's components with the people, external systems and sibling containers they reach; edges that
+    do not touch a component belong to the Container view."""
+    inside = {c["id"] for c in components}
+    edges = [e for e in rollup(model, _shown(model, components, siblings)) if {e["src"], e["dst"]} & inside]
+    return _curated(model, title, container, components, edges)
 
 
 def _dynamic(model: Model, system: dict, scenario: dict, title: str) -> dict:
     """The scenario's steps at container level: containers inside the system boundary, the rest outside."""
     containers = _children(model, system, "container")
-    shown = {e["id"] for e in [*containers, *_outsiders(model)]}
+    shown = _shown(model, containers)
     by_id = {r["id"]: r for r in model["relationships"]}
     edges = []
     for number, step in enumerate(scenario["steps"], 1):
@@ -79,32 +79,41 @@ def _code(model: Model, component: dict, classes: list[dict], title: str) -> dic
     ids = {c["id"] for c in classes}
     edges = [{"src": r["src"], "dst": r["dst"], "label": edge_text(r["label"], r.get("technology")),
               "dashed": r["dashed"] and r.get("kind", "uses") == "uses",  # the head draws inherits and implements
-              "head": HEADS[r.get("kind", "uses")]}
+              "head": HEADS[r.get("kind", "uses")], "relationships": [r["id"]]}
              for r in model["relationships"] if {r["src"], r["dst"]} <= ids]
     return _curated(model, title, component, classes, edges)
 
 
-def views(model: Model) -> list[View]:
-    """Every diagram the model supports, in slug order."""
+def core(model: Model) -> list[View]:
+    """The C4 core: Context, Container, a Component view per container with components and a Code view per
+    component with code elements. People and external systems keep their edges to each other on the first two."""
     system = in_scope(model)
     name = system["name"]
     containers = _children(model, system, "container")
     context, container_title = f"System Context diagram for {name}", f"Container diagram for {name}"
     result = [
-        View("1-context", context, _rolled_up(model, context, None, [system], [])),
-        View("2-container", container_title, _rolled_up(model, container_title, system, containers, [])),
+        View("1-context", context, _curated(model, context, None, [system], rollup(model, _shown(model, [system])))),
+        View("2-container", container_title,
+             _curated(model, container_title, system, containers, rollup(model, _shown(model, containers)))),
     ]
     for container in containers:
-        components = _children(model, container, "component")
-        if components:
+        if components := _children(model, container, "component"):
             title = f"Component diagram for {name}: {container['name']}"
-            siblings = [c for c in containers if c['id'] != container['id']]
+            siblings = [c for c in containers if c["id"] != container["id"]]
             result.append(View(f"3-component-{container['id']}", title,
-                               _rolled_up(model, title, container, components, siblings)))
+                               _component(model, title, container, components, siblings)))
     for component in (e for e in model["elements"] if e["type"] == "component"):
         if classes := _children(model, component, "code"):
             title = f"Code diagram for {name}: {component['name']}"
             result.append(View(f"4-code-{component['id']}", title, _code(model, component, classes, title)))
+    return result
+
+
+def views(model: Model) -> list[View]:
+    """Every diagram the model supports, in slug order: the core, then Deployment and Dynamic."""
+    system = in_scope(model)
+    name = system["name"]
+    result = core(model)
     if "deployment" in model:
         title = f"Deployment diagram for {name}: {model['deployment']['environment']}"
         result.append(View("5-deployment", title, deployment(model, title)))

@@ -4,7 +4,8 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from cartographer.c4_model import SCHEMA, Model, ancestors, elements
+from cartographer import c4_views
+from cartographer.c4_model import SCHEMA, Model, RollupError, ancestors, elements
 from cartographer.secret_patterns import contains_secret
 from cartographer.verify_shared import SECRET_REASON, code_hit, shape_warnings
 
@@ -169,17 +170,29 @@ def _secrets(model: Model) -> list[str]:
     return [f"{i}: {SECRET_REASON}" for i, item in items if contains_secret(item)]
 
 
+def _drawn(model: Model) -> list[str]:
+    """Every rolled-up arrow has a label and every relationship is drawn on a core view; needs a sound model."""
+    try:
+        core = c4_views.core(model)
+    except RollupError as err:
+        return [str(err)]
+    drawn = {rid for view in core for edge in view.curated["edges"] for rid in edge["relationships"]}
+    return [f"{r['id']}: drawn on no Context, Container, Component or Code view" for r in model["relationships"]
+            if r["id"] not in drawn]
+
+
 def verify(model: Model, facts: dict | None, repo: Path) -> list[str]:
     """Every problem found, sorted; empty means the model passes. facts is None for source description."""
     missing = [f"model: {key} is required" for key in REQUIRED if key not in model]
     if missing:
         return sorted(missing)
     parents = _parents(model)
-    # Ancestor walks loop or raise on broken parent links, so the later rules wait until the parents are sound.
+    # Ancestor walks loop or raise on broken parent links, so the later rules wait until the parents are sound,
+    # and the views are projected only from a model that passes everything else.
     errors = _ids(model) + parents + _structure(model) + _secrets(model)
     if not parents:
         errors += _nesting(model) + _evidence_rules(model, facts, repo) + _deployment(model, facts)
-    return sorted(set(errors))
+    return sorted(set(errors)) or _drawn(model)
 
 
 def stated_only(model: Model) -> list[str]:

@@ -45,7 +45,13 @@ def _model(rels):
 
 def test_rollup_lifts_component_relationships_to_containers():
     m = _model([rel("r1", "a1", "b1", "reads orders")])
-    assert rollup(m, {"a", "b"}) == [{"src": "a", "dst": "b", "label": "reads orders", "dashed": False}]
+    assert rollup(m, {"a", "b"}) == [{"src": "a", "dst": "b", "label": "reads orders", "dashed": False,
+                                      "relationships": ["r1"]}]
+
+
+def test_rollup_names_the_relationships_behind_each_edge():
+    m = _model([rel("r2", "a2", "b1", "reads"), rel("r1", "a1", "b1", "reads")])
+    assert rollup(m, {"a", "b"})[0]["relationships"] == ["r1", "r2"]
 
 
 def test_rollup_drops_relationships_inside_one_visible_element():

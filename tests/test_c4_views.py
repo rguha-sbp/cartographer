@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from cartographer import tf_layout
@@ -6,6 +9,7 @@ from cartographer.c4_verify import verify
 from cartographer.c4_views import views
 
 FACT = [{"fact": "x"}]
+MINI = Path(__file__).parent / "fixtures" / "c4" / "model.json"
 
 
 def el(eid, kind, parent=None, **extra):
@@ -55,8 +59,23 @@ def _ids(items):
 def test_context_shows_no_containers():
     ctx = _view(_shop(), "1-context").curated
     assert {n["c4"] for n in ctx["nodes"]} == {"system"} and not ctx["groups"]
-    assert _ids(ctx["externals"]) == {"user", "psp"}
-    assert {e["c4"] for e in ctx["externals"]} == {"person", "system_ext"}
+    assert _ids(ctx["externals"]) == {"user", "boss", "psp"}
+    assert {e["c4"] for e in ctx["externals"]} == {"person", "person_ext", "system_ext"}
+
+
+def _pairs(curated):
+    return {(e["src"], e["dst"]) for e in curated["edges"]}
+
+
+@pytest.mark.parametrize("slug", ["1-context", "2-container"])
+def test_relationships_between_outside_elements_are_drawn(slug):
+    model = json.loads(MINI.read_text())
+    model["relationships"].append(rel("r8", "analyst", "mailer", "Reads report mails", technology="IMAP"))
+    assert ("analyst", "mailer") in _pairs(_view(model, slug).curated)
+
+
+def test_component_view_draws_only_edges_that_touch_its_components():
+    assert _pairs(_view(_shop(), "3-component-api").curated) == {("user", "auth"), ("cart", "db"), ("cart", "auth")}
 
 
 def test_container_view_has_the_system_boundary():
@@ -65,7 +84,7 @@ def test_container_view_has_the_system_boundary():
                              "column": 0}]
     assert {n["group"] for n in cv["nodes"]} == {"shop"}
     assert {n["c4"] for n in cv["nodes"]} == {"container", "container_store", "container_queue"}
-    assert _ids(cv["externals"]) == {"user", "psp"}
+    assert _ids(cv["externals"]) == {"user", "boss", "psp"}
 
 
 def test_nodes_have_the_curated_shape():
@@ -161,6 +180,11 @@ def test_code_view_heads_follow_relationship_kind():
     edges = _view(_shop_with_code(), "4-code-auth").curated["edges"]
     assert {(e["dst"], e["head"], e["dashed"]) for e in edges} == {("repo", "implements", False),
                                                                    ("base", "inherits", False)}
+
+
+def test_code_view_edges_name_their_relationship():
+    edges = _view(_shop_with_code(), "4-code-auth").curated["edges"]
+    assert sorted(e["relationships"] for e in edges) == [["c1"], ["c2"]]
 
 
 def test_code_view_omits_links_leaving_the_component():
