@@ -122,6 +122,25 @@ Claude then:
 4. Ends by listing every assumption it made in chat so you can correct them. Assumptions are never shown on the
    diagram.
 
+### C4 mode
+
+Use it for a C4 set instead of an AWS diagram:
+
+```
+/cartographer:cartographer draw the C4 diagrams of this system
+```
+
+Claude asks "AWS architecture diagram or C4 set?" and then:
+
+1. Reads the Terraform if there is some, or interviews you if not. Each question names the C4 level, what is needed
+   and why.
+2. Asks whether you want Code-level diagrams. C4 makes them optional, so they are built only if you say yes.
+3. Curates the model, builds one diagram per view (Context, Container, Component, Deployment, Dynamic) and reviews each
+   one against the checklist, with the rules for its view type.
+
+C4 runs overwrite the diagrams every time and delete the view files the model no longer produces. No curated file is
+kept in the repo.
+
 ## Where files land
 
 Everything goes to `docs/architecture/diagrams/` in your repo:
@@ -133,7 +152,7 @@ Everything goes to `docs/architecture/diagrams/` in your repo:
 | `<name>.curated.json` | the curation: what was drawn and the evidence for it |
 | `README.md` | generated index of the diagrams in the folder |
 
-Commit all four. Intermediates (facts, schema, screenshots) live in the plugin data folder (`~/.cache/cartographer/<name>/` for the
+Commit all four. A C4 set instead writes `<name>-<view>.drawio` and `.svg` per view (for example `shop-1-context`, `shop-2-container`, `shop-3-component-api`, `shop-5-deployment`) and the index `README.md`, with one row per .drawio. There is no curated file to commit. Intermediates (facts, schema, screenshots) live in the plugin data folder (`~/.cache/cartographer/<name>/` for the
 standalone CLI) and are not committed. Claude never commits or pushes for you.
 
 ## Nesting on the diagram
@@ -183,10 +202,12 @@ Without the plugin, prefix each command with
 |---|---|
 | `extract INFRA_DIR --name NAME` | cache the Terraform facts and print the inputs key |
 | `prompt --name NAME [--describe]` | print the curation prompt, or the describe prompt for a new solution |
+| `prompt --name NAME --c4 [--describe]` | print the C4 curation prompt, or the interview-led one |
 | `build --name NAME [--replace \| --side-file]` | verify, then write `.drawio`, `.svg` and the folder index |
+| `build --name NAME --c4` | verify `model.json`, then write a `.drawio` and `.svg` per C4 view; overwrites, deletes stale views |
 | `image FILE.drawio` | regenerate the `.svg` next to a `.drawio` |
 | `check FOLDER` | offline: fail when a `.drawio` has no image or a stale one |
-| `snapshot FILE.drawio -o DIR` | PNG and tiles from the bundled draw.io, for the visual review |
+| `snapshot FILE.drawio -o DIR` | print `view: <page name>`, then the PNG and tiles from the bundled draw.io, for the visual review |
 | `view FILE.drawio` | edit in the bundled draw.io until the tab is closed |
 | `docs interview\|review\|rules` | print the path of a packaged document |
 

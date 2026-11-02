@@ -64,7 +64,7 @@ def test_drawio_not_running_exits_2(tmp_path, monkeypatch, capsys):
 
 def test_main_writes_full_and_tiles(tmp_path, monkeypatch, capsys, bundled_app):
     d = tmp_path / "a.drawio"
-    d.write_text(XML)
+    d.write_text(XML.replace("<diagram>", '<diagram name="Container diagram for Shop">'))
     out = tmp_path / "out"
     calls = []
 
@@ -79,14 +79,23 @@ def test_main_writes_full_and_tiles(tmp_path, monkeypatch, capsys, bundled_app):
     monkeypatch.setattr(snapshot.subprocess, "run", fake_run)
     assert snapshot.main([str(d), "-o", str(out)]) == 0
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0] == str(out / "a.png")
-    assert [Path(p).name for p in lines[1:]] == [
+    assert lines[0] == "view: Container diagram for Shop"
+    assert lines[1] == str(out / "a.png")
+    assert [Path(p).name for p in lines[2:]] == [
         "a.tile-r0c0.png", "a.tile-r0c1.png", "a.tile-r1c0.png", "a.tile-r1c1.png"]
     assert len(calls) == 5
     assert "--window-size=640,540" in calls[0]
     assert "--force-device-scale-factor=2" in calls[0]
     assert f"--host-resolver-rules={snapshot.OFFLINE_RULES}" in calls[0]
     assert calls[0][-1].startswith(bundled_app)
+
+
+def test_page_name_is_the_first_diagram_name(tmp_path):
+    d = tmp_path / "a.drawio"
+    d.write_text('<mxfile><diagram name="System Context diagram for S"/><diagram name="Other"/></mxfile>')
+    assert snapshot.page_name(d) == "System Context diagram for S"
+    d.write_text(XML)
+    assert snapshot.page_name(d) == ""
 
 
 def test_find_chrome_missing(monkeypatch):

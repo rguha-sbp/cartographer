@@ -5,10 +5,12 @@ Python package in `src/cartographer/` (the stage files below live there). Subcom
 ```
 cartographer extract INFRA_DIR --name NAME       facts to $XDG_CACHE_HOME/cartographer/NAME/facts.json
 cartographer prompt --name NAME [--describe]     schema to the cache folder, curation or describe prompt on stdout
+cartographer prompt --name NAME --c4 [--describe]  C4 curation prompt (model.json), schema c4.schema.json
 cartographer build --name NAME                   verify, then docs/architecture/diagrams/NAME.drawio and .svg
+cartographer build --name NAME --c4              verify model.json, then one .drawio and .svg per C4 view
 cartographer image FILE.drawio                   regenerate the .svg next to a .drawio
 cartographer check FOLDER                        fail when a .drawio has no image or a stale one (offline)
-cartographer snapshot FILE -o DIR                PNG and tiles from the local draw.io
+cartographer snapshot FILE -o DIR                `view: <page name>`, then PNG and tiles from the local draw.io
 cartographer view FILE                           open in the local draw.io
 cartographer docs interview|review|rules         path of a packaged document
 ```
@@ -248,6 +250,37 @@ placement). Every number is a module constant
   segment; `tf_layout`'s command line prints it.
 - Legend: colours plus the words "Solid line: primary request path" and "Dashed line: secondary, control or async".
   All text is at least 12 px; arrowheads are open.
+
+## C4 diagrams
+
+A second notation next to the AWS one. The curation writes `model.json` (schema `c4.schema.json`) in the cache folder;
+nothing curated is committed. Modules:
+
+| File | Role |
+|---|---|
+| `c4_model.py` | the model: people, systems, containers, components, code, deployment, scenarios |
+| `c4_verify.py` | structure and evidence checks; no `code` elements without the engineer's consent |
+| `c4_styles.py`, `notation.py` | C4 shapes, palette, key entries and title format, asked by `gen_drawio` |
+| `c4_views.py`, `c4_boxes.py` | one `Diagram` per view, boxes sized from their three text blocks |
+| `c4_deploy.py` | the Deployment view: nested nodes and container instances |
+
+Views and files, written to `docs/architecture/diagrams/<name>-<slug>.drawio` and `.svg`:
+
+| Slug | Page title |
+|---|---|
+| `1-context` | System Context diagram for S |
+| `2-container` | Container diagram for S |
+| `3-component-<id>` | Component diagram for S: C |
+| `4-code-<id>` | Code diagram for S: X (only with consent) |
+| `5-deployment` | Deployment diagram for S: env |
+| `6-dynamic-<id>` | Dynamic diagram for S: scenario |
+
+`build --c4` overwrites every view on each run, deletes the `<name>-*` view files the model no longer produces and
+writes a README index with one row per .drawio. There is no hand-edit guard for C4 views; `check` and `image` work as
+before. The layout, router and checker are shared with Layer 7.
+
+Review: `snapshot` prints `view: <page name>` first (`snapshot.page_name` reads the first `<diagram name=...>`).
+`REVIEW.md` picks the rules from it: "Every diagram" plus "Layer 7" or "C4: every view" plus the section named like the page.
 
 ## Non-goals
 
