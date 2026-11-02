@@ -1,2 +1,2 @@
-Parity goldens: curated diagrams and the `.drawio` they must render to, so refactors prove the output is unchanged.
-Regenerate a pair by running `tf_layout.layout` then `gen_drawio.render(..., page_id="golden", page_name="golden")` on the curated JSON.
+Parity goldens: curated diagrams and the `.drawio` files that they must render to. They show that a refactor does not change the output.
+To regenerate a pair, run `tf_layout.layout` on the curated JSON. Then run `gen_drawio.render(..., page_id="golden", page_name="golden")`.
