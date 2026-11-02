@@ -128,13 +128,13 @@ Claude then:
 
 ### C4 mode
 
-Use it for a C4 set instead of an AWS diagram:
+Use it for a C4 set instead of a Layer 7 diagram:
 
 ```
 /cartographer:cartographer draw the C4 diagrams of this system
 ```
 
-Claude asks "AWS architecture diagram or C4 set?" and then:
+Claude asks "Layer 7 architecture diagram or C4 set?" and then:
 
 1. Reads the Terraform if there is some, or interviews you if not. Each question names the C4 level, what is needed
    and why.

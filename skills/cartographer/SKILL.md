@@ -14,14 +14,14 @@ out in full.
 
 ## 0. Choose the mode
 
-First ask: "AWS architecture diagram or C4 set?" For a C4 set, follow the C4 flow below instead of steps 1 to 5, then
-review (step 6) and stop as in Stopping. For an AWS diagram:
+First ask: "Layer 7 architecture diagram or C4 set?" For a C4 set, follow the C4 flow below instead of steps 1 to 5, then
+review (step 6) and stop as in Stopping. For a Layer 7 diagram:
 
 - The repo has a Terraform folder (`infra/`, `terraform/`, or one the user names): ask whether to draw from it
   (Terraform flow, steps 3 to 5) or describe a new solution (describe flow below). The Terraform may be AWS, Azure or both; the tool reads the cloud of each resource.
 - No Terraform folder: describe mode, go straight to the describe flow.
 
-Both AWS flows end in the same review loop (step 6) and the same checks.
+Both Layer 7 flows end in the same review loop (step 6) and the same checks.
 
 ## 1. Name and folders
 
@@ -102,10 +102,10 @@ engineer's consent, Code. Ask for the system name (lowercase kebab-case, for exa
    `view: <page name>` before the PNGs of each page. Apply "Every diagram"
    and "C4: every view" from the checklist, plus the section named like the view. A finding names the view, the rule,
    the tile and the element.
-6. Show it (step 7) applies to C4: open `<name>-c4.drawio` the same way as for an AWS diagram; each view is a tab.
+6. Show it (step 7) applies to C4: open `<name>-c4.drawio` the same way as for a Layer 7 diagram; each view is a tab.
 7. Run the `check` command from Stopping.
 
-C4 runs differ from the AWS flow:
+C4 runs differ from the Layer 7 flow:
 
 - Each run overwrites `docs/architecture/diagrams/<name>-c4.drawio` (one page per view) and the image of every view,
   `<name>-c4-<view>.svg`. There is no hand-edit guard: do not edit those files by hand.
