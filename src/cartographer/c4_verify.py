@@ -6,7 +6,7 @@ from pathlib import Path
 
 from cartographer.c4_model import SCHEMA, Model, ancestors, elements
 from cartographer.secret_patterns import contains_secret
-from cartographer.verify_shared import SECRET_REASON, code_hit
+from cartographer.verify_shared import SECRET_REASON, code_hit, shape_warnings
 
 COMPLETE_TYPES = (
     "aws_lambda_function", "aws_ecs_service", "aws_instance", "aws_autoscaling_group", "aws_db_instance",
@@ -73,6 +73,7 @@ def _structure(model: Model) -> list[str]:
             out.append(f"{r['id']}: kind {kind} is only for code elements")
     out += [f"{s['id']}: step {step} is not a relationship" for s in model.get("scenarios", []) for step in s["steps"]
             if step not in rels]
+    out += [w for n in _nodes(model) for w in shape_warnings(n)]
     node_ids = {n["id"] for n in _nodes(model)}
     for i in _instances(model):
         if i["container"] not in by_id:

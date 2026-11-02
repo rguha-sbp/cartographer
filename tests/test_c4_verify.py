@@ -229,3 +229,10 @@ def test_scenario_step_inside_one_container_fails(tmp_path):
 
 def test_missing_required_keys_are_errors_not_crashes(tmp_path):
     assert verify({"elements": []}, None, tmp_path) == ["model: relationships is required", "model: source is required"]
+
+
+def test_deployment_node_with_an_unknown_icon_fails(tmp_path):
+    m = _tf()
+    m["deployment"]["nodes"][0]["service"] = "application_load_balancer"
+    facts = _facts("aws_lambda_function.fn", "aws_db_instance.db", edges=[_edge("aws_db_instance.db", "aws_lambda_function.fn")])
+    assert "n1: service 'application_load_balancer' is not a draw.io AWS icon, renders as a box" in verify(m, facts, tmp_path)
