@@ -4,7 +4,7 @@ from xml.etree import ElementTree
 
 import pytest
 
-from cartographer import c4_model, cli, files, snapshot, svg_export
+from cartographer import c4_model, c4_styles, c4_views, cli, files, gen_drawio, snapshot, svg_export, tf_layout
 from cartographer.workdir import cache_dir
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -103,8 +103,8 @@ def test_build_c4_draws_each_image_from_its_view_alone(tmp_path: Path, monkeypat
     monkeypatch.setattr(svg_export, "export_svg", lambda mxfile, sha, url: drawn.append(mxfile) or "<svg/>")
     _model(_shop())
     assert _build(tmp_path) == 0
-    assert [ElementTree.fromstring(m).find("diagram").get("id") for m in drawn] == [f"{NAME}-{s}" for s in SLUGS]
-    assert all(len(ElementTree.fromstring(m).findall("diagram")) == 1 for m in drawn)
+    assert drawn == [gen_drawio.render(tf_layout.layout(v.curated, notation=c4_styles.C4), page_id=f"{NAME}-{v.slug}",
+                                       page_name=v.title, notation=c4_styles.C4) for v in c4_views.views(_shop())]
 
 
 def test_build_c4_prints_every_written_path(tmp_path: Path, capsys, renderer) -> None:
