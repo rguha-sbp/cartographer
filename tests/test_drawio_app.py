@@ -1,4 +1,5 @@
 import hashlib
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -74,6 +75,37 @@ def test_serve_serves_files_then_stops(tmp_path: Path, pinned) -> None:
         assert urllib.request.urlopen(f"{base}/index.html").read() == b"<html>hi</html>"
     with pytest.raises(OSError):
         urllib.request.urlopen(f"{base}/index.html", timeout=2)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/WEB-INF/github_client_secret",
+        "/web-inf/github_client_secret",
+        "/%57EB-INF/web.xml",
+        "/js/../WEB-INF/web.xml",
+        "/META-INF/MANIFEST.MF",
+        "/WEB-INF/",
+        "/WEB-INF",
+    ],
+)
+def test_serve_never_serves_the_server_side_folders(tmp_path: Path, pinned, path: str) -> None:
+    pinned(
+        _war(
+            tmp_path,
+            {
+                "index.html": "a",
+                "WEB-INF/github_client_secret": "s",
+                "WEB-INF/web.xml": "w",
+                "META-INF/MANIFEST.MF": "m",
+            },
+        )
+    )
+    with drawio_app.serve() as base:
+        with pytest.raises(urllib.error.HTTPError) as err:
+            urllib.request.urlopen(f"{base}{path}")
+        assert err.value.code == 404
+        assert urllib.request.urlopen(f"{base}/index.html").read() == b"a"
 
 
 def test_drawio_at_uses_a_given_url_and_does_not_serve(monkeypatch) -> None:

@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
+from typing import BinaryIO
 
 from cartographer.workdir import cache_root
 
@@ -26,6 +27,7 @@ EMBED_QUERY = "embed=1&proto=json&spin=1&offline=1&stealth=1"
 DOWNLOAD_TIMEOUT_S = 60
 CHUNK = 1 << 20
 MARKER = ".complete"
+SERVER_ONLY = frozenset({"WEB-INF", "META-INF"})
 # Keeps the page on its own origin: no request, frame, form or worker may reach another host.
 CSP = (
     "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src 'self'; img-src 'self' data: blob:; "
@@ -85,6 +87,15 @@ def ensure() -> Path:
 
 
 class StaticHandler(SimpleHTTPRequestHandler):
+    def send_head(self) -> BinaryIO | None:
+        # The war's servlet-container folders (OAuth client secret files, server jars) are never served; matched
+        # after URL decoding and normalisation, case-blind for case-insensitive file systems.
+        top = Path(self.translate_path(self.path)).relative_to(self.directory).parts[:1]
+        if top and top[0].upper() in SERVER_ONLY:
+            self.send_error(404)
+            return None
+        return super().send_head()
+
     def end_headers(self) -> None:
         self.send_header("Content-Security-Policy", CSP)
         super().end_headers()
