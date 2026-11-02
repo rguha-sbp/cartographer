@@ -90,9 +90,10 @@ engineer's consent, Code. Ask for the system name (lowercase kebab-case, for exa
 1. Extract, only when the repo has Terraform: `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" extract INFRA_DIR --name NAME`.
 2. Get the prompt: `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" prompt --name NAME --c4` (Terraform or code to read) or
    `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" prompt --name NAME --c4 --describe` (no Terraform: interview-led). It writes the schema to the cache folder
-   and prints the C4 prompt. For the interview, get the playbook path with
-   `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" docs interview`, Read section 7 and follow it: one question per message, each naming the level, what you need
-   and why, the C4 gap checklist, and the consent question before any Code level.
+   and prints the C4 prompt. In both cases, get the playbook path with
+   `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" docs interview`, Read section 7 and follow it while you curate, not after the build: one question per message, each naming the level, what you need
+   and why, the C4 gap checklist (including which containers to open up at Component level), and the consent question before any Code level.
+   Reading the code does not replace the questions: ask whatever the repo cannot answer.
 3. Curate `model.json` in the cache folder, as the prompt says. Evidence rules apply: never invent evidence.
 4. Build: `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" build --name NAME --c4`. Fix what it reports in `model.json` and rebuild.
    The build first checks `model.json` against the schema and reports each misfit by its JSON path (for example

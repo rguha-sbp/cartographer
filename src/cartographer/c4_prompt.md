@@ -56,8 +56,13 @@ Asking the engineer
   system's purpose, the code of a part that is not in the repo), ask the engineer, one question at a time.
 - Each question names the C4 level, what is needed and why, for example:
   "For the Component diagram of the `api` container I need its main internal parts, because a C4 Component view shows what is inside one container."
+- Ask while you curate, before the first build. An `assumptions` entry is only for a question the engineer was asked
+  and could not answer.
 - Record each answer as `stated` evidence. Where the engineer does not know, choose the most likely answer and record
   it in `assumptions` as {"about": ..., "guess": ...}; assumptions are never drawn.
+- Before you add any `component`, ask which containers to open up. Offer the main application container first (the
+  one the people or other systems use), even when its code is not in the repo; then ask what is inside it and record
+  the parts as `stated`. Never open up only the containers whose code happens to be easy to read.
 
 Code level
 - Before you add any `code` element, ask whether the engineer wants Code-level diagrams; C4 treats them as optional.

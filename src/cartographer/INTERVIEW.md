@@ -92,7 +92,8 @@ never mark it on the diagram.
 - Container: every deployable unit and every data store, including the ones the code does not reveal (queues, caches,
   scheduled jobs); the technology of each; who calls whom and over which protocol.
 - Component: the internal parts of one container when the code is missing or unclear; each part's responsibility and
-  technology. Only for containers the engineer wants opened up.
+  technology. Ask which containers to open up, offering the main application container first even when its code is
+  not in the repo; never pick only the containers whose code is easy to read.
 - Deployment: the environments (production, staging); the nesting of the deployment nodes (account, region, cluster,
   host); which container runs on which node and how many instances.
 - Dynamic: the scenarios worth showing, and the order of the calls in each.
