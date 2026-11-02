@@ -42,12 +42,13 @@ def _edges(curated: Curated, known: set[str], labels: bool, notation: Notation) 
 def _build(curated: Curated, cols: int, labels: bool, notation: Notation) -> Diagram:
     ox, oy = ORIGIN
     left, right = tf_lanes.split(curated)
-    _, frames_h = Blocks(curated, cols).place_frames(0, 0)
-    frames_x = ox + (tf_lanes.width(left, frames_h) + GAP if left else 0)
-    lay = Blocks(curated, cols)
+    row_gap = notation.row_gap
+    _, frames_h = Blocks(curated, cols, row_gap).place_frames(0, 0)
+    frames_x = ox + (tf_lanes.width(left, frames_h, row_gap) + GAP if left else 0)
+    lay = Blocks(curated, cols, row_gap)
     frames_w, _ = lay.place_frames(frames_x, oy)
-    externals = [*tf_lanes.place(left, ox, oy, frames_h),
-                 *tf_lanes.place(right, frames_x + frames_w + GAP, oy, frames_h)]
+    externals = [*tf_lanes.place(left, ox, oy, frames_h, row_gap),
+                 *tf_lanes.place(right, frames_x + frames_w + GAP, oy, frames_h, row_gap)]
     leaves = sorted([*lay.out_leaves, *externals], key=lambda n: n.id)
     bottom = max([oy + frames_h, *(bounds(n)[3] for n in externals)]) + GAP
     return Diagram(Title(ox, 20, 1400, 60, curated["title"]), (*lay.out_frames, *lay.out_groups, *leaves),
