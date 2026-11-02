@@ -46,3 +46,13 @@ def test_namespaces_and_cloud_of():
 
 def test_cloud_of_type():
     assert clouds.cloud_of_type("aws_lambda_function").name == "aws" and clouds.cloud_of_type("random_id") is None
+
+
+def test_known_looks_a_name_up_without_listing_the_catalog(monkeypatch) -> None:
+    class Unlistable(dict):
+        def __iter__(self):
+            raise AssertionError("known() must not enumerate icons")
+
+    monkeypatch.setattr(icons, "_GENERIC", Unlistable({"users": "#232F3D"}))
+    monkeypatch.setattr(clouds.CLOUDS["aws"], "icons", Unlistable(clouds.CLOUDS["aws"].icons))
+    assert icons.known("generic:users") and icons.known("aws:lambda") and not icons.known("aws:nope")

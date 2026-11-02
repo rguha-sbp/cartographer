@@ -178,7 +178,7 @@ def test_tiles_json_maps_icons_to_tiles() -> None:
     assert snapshot.tile_map(xml, "a", size, 2, 2) == {"a.tile-r0c0.png": ["left"], "a.tile-r1c1.png": ["right"]}
 
 
-def test_a_1x1_snapshot_still_writes_tiles_json(tmp_path, monkeypatch, bundled_app):
+def test_a_1x1_snapshot_names_the_full_image_in_tiles_json(tmp_path, monkeypatch, bundled_app):
     d = tmp_path / "a.drawio"
     d.write_text(XML)
     out = tmp_path / "out"
@@ -190,5 +190,25 @@ def test_a_1x1_snapshot_still_writes_tiles_json(tmp_path, monkeypatch, bundled_a
     monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
     monkeypatch.setattr(snapshot, "find_chrome", lambda: "/bin/chrome")
     monkeypatch.setattr(snapshot.subprocess, "run", fake_run)
-    assert snapshot.snapshot(d, out, "http://localhost:8080", "1x1") == [out / "a.png"]
-    assert set(json.loads((out / "tiles.json").read_text())) == {"a.tile-r0c0.png"}
+    [(_, shots)] = snapshot.snapshot(d, out, "http://localhost:8080", "1x1")
+    assert shots == [out / "a.png"]
+    assert set(json.loads((out / "tiles.json").read_text())) == {"a.png"}
+
+
+def test_a_side_file_snapshot_fills_the_sheet_of_the_diagram_it_was_built_from(tmp_path, monkeypatch, bundled_app):
+    monkeypatch.setenv("CARTOGRAPHER_HOME", str(tmp_path / "home"))
+    sheet = tmp_path / "home" / "a" / "review.json"
+    sheet.parent.mkdir(parents=True)
+    sheet.write_text(json.dumps({"icons": [{"id": "n", "tiles": []}]}))
+    d = tmp_path / "a.generated.drawio"
+    d.write_text(XML)
+
+    def fake_run(cmd, **kw):
+        Path(next(a for a in cmd if a.startswith("--screenshot=")).split("=", 1)[1]).write_bytes(b"png")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(snapshot, "drawio_up", lambda url: True)
+    monkeypatch.setattr(snapshot, "find_chrome", lambda: "/bin/chrome")
+    monkeypatch.setattr(snapshot.subprocess, "run", fake_run)
+    snapshot.snapshot(d, tmp_path / "out", "http://localhost:8080", "1x1")
+    assert json.loads(sheet.read_text())["icons"][0]["tiles"] == ["a.generated.png"]

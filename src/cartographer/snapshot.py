@@ -91,7 +91,8 @@ def window_size(xml: str) -> tuple[int, int]:
 
 
 def tile_map(xml: str, stem: str, size: tuple[int, int], rows: int, cols: int) -> dict[str, list[str]]:
-    """Tile png name -> ids of the icon cells (ICON x ICON vertices) whose rectangle intersects that tile."""
+    """Tile png name -> ids of the icon cells (ICON x ICON vertices) whose rectangle intersects that tile; the one
+    full image when there is a single tile."""
     boxes = _vertex_boxes(xml)
     left = min(b[0] for b in boxes.values()) - MARGIN
     top = min(b[1] for b in boxes.values()) - MARGIN
@@ -102,7 +103,7 @@ def tile_map(xml: str, stem: str, size: tuple[int, int], rows: int, cols: int) -
                if b[0] < left + tile.x + tile.w and b[2] > left + tile.x
                and b[1] < top + tile.y + tile.h and b[3] > top + tile.y]
         if hit:
-            tiles[f"{stem}.tile-r{tile.row}c{tile.col}.png"] = sorted(hit)
+            tiles[f"{stem}.png" if rows * cols == 1 else f"{stem}.tile-r{tile.row}c{tile.col}.png"] = sorted(hit)
     return tiles
 
 
@@ -178,7 +179,7 @@ def _tile_html(png: Path, size: tuple[int, int], tile: Tile) -> str:
 def _write_tiles(tiles: dict[str, list[str]], diagram: str, out_dir: Path) -> None:
     """`tiles.json` beside the PNGs; also fills the `tiles` of each icon in the review sheet of `diagram`."""
     write_json(out_dir / "tiles.json", tiles)
-    sheet_path = cache_root() / diagram / "review.json"
+    sheet_path = cache_root() / diagram.removesuffix(".generated") / "review.json"
     if sheet_path.is_file():
         sheet = json.loads(sheet_path.read_text())
         for entry in sheet["icons"]:
@@ -192,7 +193,6 @@ def _shots(chrome: str, page: files.Page, size: tuple[int, int], out_dir: Path, 
     full = out_dir / f"{page.image.stem}.png"
     _shoot(chrome, viewer_url(drawio_url, page.mxfile), size, full)
     written = [full]
-    _write_tiles(xml, drawio.stem, size, rows, cols, out_dir)
     if rows * cols == 1:
         return written
     for tile in tile_rects(*size, rows, cols):
@@ -218,10 +218,9 @@ def snapshot(drawio: Path, out_dir: Path, drawio_url: str, tiles: str) -> list[t
     out_dir.mkdir(parents=True, exist_ok=True)
     shot = [(page, _shots(chrome, page, size, out_dir, drawio_url, rows, cols))
             for page, size in zip(pages, sizes, strict=True)]
-    if rows * cols != 1:
-        _write_tiles({tile: ids for page, size in zip(pages, sizes, strict=True)
-                      for tile, ids in tile_map(page.mxfile, page.image.stem, size, rows, cols).items()},
-                     drawio.stem, out_dir)
+    _write_tiles({tile: ids for page, size in zip(pages, sizes, strict=True)
+                  for tile, ids in tile_map(page.mxfile, page.image.stem, size, rows, cols).items()},
+                 drawio.stem, out_dir)
     return shot
 
 

@@ -1,5 +1,7 @@
 """The one place icon names are looked up. A name is qualified: "aws:lambda", "generic:users", "brand:github"."""
 
+from typing import Any
+
 from cartographer.clouds import CLOUDS
 from cartographer.clouds.base import load_json
 
@@ -12,10 +14,10 @@ def namespaces() -> tuple[str, ...]:
     return (*CLOUDS, "generic", "brand")
 
 
-def _names(namespace: str) -> list[str]:
+def _names(namespace: str) -> dict[str, Any]:
     if namespace in CLOUDS:
-        return list(CLOUDS[namespace].icons)
-    return list({"generic": _GENERIC, "brand": _BRAND}.get(namespace, ()))
+        return CLOUDS[namespace].icons
+    return {"generic": _GENERIC, "brand": _BRAND}.get(namespace, {})
 
 
 def _split(icon: str) -> tuple[str, str]:
