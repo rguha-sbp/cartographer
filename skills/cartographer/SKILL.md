@@ -23,6 +23,11 @@ review (step 6) and stop as in Stopping. For a Layer 7 diagram:
 
 Both Layer 7 flows end in the same review loop (step 6) and the same checks.
 
+On every path, ask, never guess: when the Terraform, the code or a supplied file does not settle something the
+diagram needs, ask the engineer one question at a time and do not draw it until they answer, as section 2 of the
+playbook (`"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" docs interview`) says. Reading the
+code does not replace the questions.
+
 ## 1. Name and folders
 
 Ask the user, or derive from the repo, the diagram name (lowercase kebab-case `<system>-<view>`, for example
@@ -90,9 +95,10 @@ engineer's consent, Code. Ask for the system name (lowercase kebab-case, for exa
 1. Extract, only when the repo has Terraform: `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" extract INFRA_DIR --name NAME`.
 2. Get the prompt: `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" prompt --name NAME --c4` (Terraform or code to read) or
    `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" prompt --name NAME --c4 --describe` (no Terraform: interview-led). It writes the schema to the cache folder
-   and prints the C4 prompt. For the interview, get the playbook path with
-   `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" docs interview`, Read section 7 and follow it: one question per message, each naming the level, what you need
-   and why, the C4 gap checklist, and the consent question before any Code level.
+   and prints the C4 prompt. In both cases, get the playbook path with
+   `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" docs interview`, Read section 7 and follow it while you curate, not after the build: one question per message, each naming the level, what you need
+   and why, the C4 gap checklist (including which containers to open up at Component level), and the consent question before any Code level.
+   Reading the code does not replace the questions: ask whatever the repo cannot answer.
 3. Curate `model.json` in the cache folder, as the prompt says. Evidence rules apply: never invent evidence.
 4. Build: `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" build --name NAME --c4`. Fix what it reports in `model.json` and rebuild.
    The build first checks `model.json` against the schema and reports each misfit by its JSON path (for example
@@ -126,7 +132,7 @@ C4 runs differ from the Layer 7 flow:
 4. Build (step 5, no extract and no facts), then open it in the background (`view` blocks until the editor tab is closed): `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" view docs/architecture/diagrams/<name>.drawio`.
 5. Alternate questions and redraws as the playbook says, then run the review loop (step 6). Fix [curation] findings
    from the engineer's answers or by asking them; never invent evidence.
-6. At the end, list every entry of `assumptions` in chat so the engineer can correct them. Never mark an assumption on
+6. At the end, list every entry of `assumptions` and every open question in chat so the engineer can correct them. Never mark an assumption on
    the diagram itself.
 
 ## 6. Review loop (at most 3 rounds)
