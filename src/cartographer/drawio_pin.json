@@ -1,8 +1,8 @@
 {
   "name": "draw.io web app",
-  "version": "32.5.5",
-  "url": "https://github.com/jgraph/drawio/releases/download/v32.5.5/draw.war",
-  "sha256": "cde0ebd72da197da37d100353e226d5344b08f0fcf7e1b18d1e000a77f9c5f52",
+  "version": "32.6.9",
+  "url": "https://github.com/jgraph/drawio/releases/download/v32.6.9/draw.war",
+  "sha256": "31afc82b7920c409d0591f6126ccb6c377d7800e7f11ab324f88bdf1e4249ce7",
   "licence": "Apache-2.0",
   "source": "https://github.com/jgraph/drawio"
 }
