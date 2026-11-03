@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from cartographer import c4_model, c4_styles, c4_verify, c4_views, files, gen_drawio, tf_layout, tfdiagram
-from cartographer.build import EXIT_STALE, EXIT_VERIFY, Refusal, cached_facts, publish, render_images
+from cartographer.build import EXIT_VERIFY, Refusal, cached_facts, publish, read_curation, render_images
 from cartographer.workdir import cache_dir
 
 PROMPT = Path(__file__).with_name("c4_prompt.md")
@@ -29,9 +29,7 @@ def build(args: argparse.Namespace) -> int:
     repo = args.repo.resolve()
     out = repo / args.out
     model_path = cache_dir(args.name) / "model.json"
-    if not model_path.is_file():
-        raise Refusal(EXIT_STALE, f"no C4 model at {model_path}: run the curation (cartographer prompt --c4)")
-    model = json.loads(model_path.read_text())
+    model = read_curation(model_path, f"no C4 model at {model_path}: run the curation (cartographer prompt --c4)")
     facts = json.loads(cached_facts(args.name).read_text()) if model.get("source") == "terraform" else None
 
     errors = c4_verify.verify(model, facts, repo)

@@ -1,6 +1,6 @@
 [project]
 name = "cartographer"
-version = "0.3.2"
+version = "0.4.1"
 description = "AWS or Azure Terraform, or a described solution, to verified draw.io architecture diagrams and C4 diagram sets"
 readme = "README.md"
 requires-python = ">=3.13"
