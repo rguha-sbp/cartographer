@@ -51,6 +51,20 @@ def cached_facts(name: str) -> Path:
     return facts_path
 
 
+def read_curation(path: Path, missing: str) -> dict:
+    """The JSON object a curation wrote to `path`. A missing file is a Refusal with EXIT_STALE and the message
+    `missing`; text that is not one JSON object is a Refusal with EXIT_VERIFY."""
+    if not path.is_file():
+        raise Refusal(EXIT_STALE, missing)
+    try:
+        curation = json.loads(path.read_text())
+    except ValueError as err:
+        raise Refusal(EXIT_VERIFY, f"{path}: not valid JSON: {err}") from err
+    if not isinstance(curation, dict):
+        raise Refusal(EXIT_VERIFY, f"{path}: must hold one JSON object, not a {type(curation).__name__}")
+    return curation
+
+
 @contextmanager
 def renderer(drawio_url: str | None) -> Iterator[str]:
     """The url of one draw.io, the caller's own at `drawio_url` else the bundled one; failing to start it or to
@@ -135,10 +149,9 @@ def run(args: argparse.Namespace) -> int:
     repo = args.repo.resolve()
     out = repo / args.out
     curated_path = args.curated or out / f"{args.name}.curated.json"
-    if not curated_path.is_file():
-        raise Refusal(EXIT_STALE, f"no curated file at {curated_path}: run the curation (`cartographer prompt`)")
+    curated = read_curation(curated_path, f"no curated file at {curated_path}: run the curation (`cartographer prompt`)")
     try:
-        curated = upgrade(json.loads(curated_path.read_text()))
+        curated = upgrade(curated)
     except ValueError as err:
         raise Refusal(EXIT_VERIFY, f"{curated_path}: {err}") from err
     verifier = VERIFIERS.get(curated.get("source"))

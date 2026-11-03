@@ -202,6 +202,15 @@ def test_build_c4_model_without_a_required_key_fails_verify(tmp_path: Path, caps
     assert out.startswith("C4 model: 1 problem") and f"model: missing '{key}'" in out
 
 
+@pytest.mark.parametrize("text", ["[1, 2]", '"a model"', "{not json"])
+def test_build_c4_refuses_a_model_that_is_not_a_json_object(tmp_path: Path, cache: Path, capsys, text: str) -> None:
+    (cache_dir(NAME) / "model.json").write_text(text)
+    assert _build(tmp_path) == 1
+    err = capsys.readouterr().err
+    assert err.startswith(f"{cache / 'model.json'}: ") and "Traceback" not in err
+    assert not (tmp_path / "out").exists()
+
+
 def test_build_c4_does_not_list_empty_evidence_as_stated(tmp_path: Path, capsys) -> None:
     model = _shop()
     model["elements"][3]["evidence"] = []
