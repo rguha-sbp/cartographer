@@ -1,6 +1,6 @@
 {
   "name": "cartographer",
-  "version": "0.3.2",
+  "version": "0.4.1",
   "description": "Turn AWS or Azure Terraform, or a described solution, into a verified architecture diagram or a C4 diagram set (draw.io and svg), curated in your own Claude session.",
   "author": {
     "name": "Rakesh Guha"

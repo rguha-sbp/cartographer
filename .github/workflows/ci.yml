@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -37,3 +38,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: test "${{ needs.suite.result }}" = success
+
+  # A release tag names the version the plugin and the package declare, so `claude plugin update` sees the release.
+  tag-version:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: test "$GITHUB_REF_NAME" = "v$(jq -r .version .claude-plugin/plugin.json)"
