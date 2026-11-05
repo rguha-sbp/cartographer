@@ -32,8 +32,8 @@ Fields for a described diagram
   and data private (on Azure too). The tier is never marked on the diagram. A subnet group's `evidence` is a
   `stated` item when the engineer named the tier.
 - Shared network: when another account owns the VPC (AWS VPC sharing), its `network` group still sits in the account of
-  the services that run in it. Set `owner` to the owning account (for example "Networking account"); the frame title
-  shows it. Never draw an account frame for the owner or name it in another group label.
+  the services that run in it. Set `owner` to the owning account (for example "Networking account") only with a `stated`
+  or `file` item in the group's `evidence`; the frame title shows it. Never draw an account frame for the owner or name it in another group label.
 - CIDR: set `cidrs` on the `network` group only when the engineer stated the address range, with a `stated` or `file`
   item in the group's `evidence`. Never guess or invent an address range; leave `cidrs` out instead.
 - Workloads: role groups (`kind` null, for example "Storefront" or "Orders") are the application or service

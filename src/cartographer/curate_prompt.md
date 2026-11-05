@@ -80,9 +80,10 @@ Step 3: produce the curated JSON
 - Shared networks: a `networks` fact with `remote` true is a VPC this stack does not create. Often another account
   owns it and shares it (AWS VPC sharing), but it can also be a VPC of the same account that another stack creates.
   The stack's resources in its subnets still belong to the stack's account. Put its `network` group inside the
-  stack's account frame, never in an account frame of its own. Set `owner` on it only when the
-  Terraform or code names another account as its owner (for example "Networking account"), and cite a line that names it as a code citation in
-  the group's `evidence` (its `contains` holds the name, for example `tfe_outputs.networking`); the frame title shows it. Never name the owning account in any other group label.
+  stack's account frame, never in an account frame of its own. Cite the remote fact in
+  the group's `evidence`. Set `owner` only when the name of the block the fact's address reads from names another
+  account (for example "Networking account" for `data.tfe_outputs.networking...`); the frame title shows it. Never
+  name the owning account in any other group label.
 - Azure placement: a Function or Web App with VNet integration (`virtual_network_subnet_id`) stays outside the subnets
   and draws an outbound arrow to the integration subnet. A private endpoint sits in its subnet with an arrow to the
   service it exposes, and that service stays in the region outside the subnets. PaaS services without a subnet fact

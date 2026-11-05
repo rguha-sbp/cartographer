@@ -218,10 +218,12 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - IAM-only vs code-only mismatches for code-cited edges
 - Shared networks (`tf_network_check`): a network group is shared when its placed nodes all run only in `remote`
   networks (their placement facts). With no placed node, a `remote` network fact in its evidence makes it shared. The
-  tool keeps `owner` only on a shared network whose evidence holds a code citation that checks out and whose
-  `contains` text names the owner as whole words, less the word account. It drops an `owner` that looks like a
-  secret. A `remote` network can also be a VPC of the same account that another stack creates, so a cited name is
-  the only proof of another owner. The tool reads the evidence for `remote` facts before the cidrs check prunes it.
+  tool keeps `owner` only on a network group whose evidence cites a `remote` network fact whose source names the
+  owner. The source is the block the fact's address reads from (`networking` in `data.tfe_outputs.networking...`). The
+  name must match as whole words, less the words account and subscription. A `remote` network can also be a VPC of
+  the same account that another stack creates, so that name is the only proof of another owner. The tool drops an
+  `owner` that looks like a secret. A network group's `cidrs` need its network fact; a code citation does not back
+  them. In described mode, `owner` needs `stated` or code evidence, as `cidrs` do.
   The report warns when a shared network sits in an account frame that holds none of the stack's other nodes while
   another account frame of its cloud does. The tool moves nothing: the diagram cannot tell the owner's frame from a
   second account of the stack. The warning does not stop `build`; review rule 17 gets the frame fixed.

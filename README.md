@@ -181,7 +181,7 @@ side:
 - A network frame for a VPC that another account shares in names that account in the title, for example
   `shared-vpc (in Networking account)`. The frame stays in your workload account, because the services in it belong to
   that account. Verify warns when a shared VPC sits in an account frame of its own, and keeps the owner only on a VPC
-  the Terraform does not create, and only when a cited code line names the owner.
+  the Terraform does not create, and only when the Terraform source the VPC is read from names the owner.
 - Subnet frames group the services of one tier: public, private or isolated. The tool does not draw Availability
   Zones.
 - Workload frames hold the services of one application, so that separate workloads look separate. A workload frame is inside a subnet frame, or directly under the account for regional services such as S3 or Azure Storage.

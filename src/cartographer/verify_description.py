@@ -41,6 +41,16 @@ def _supported(evidence: list[dict], repo_root: Path) -> tuple[list[dict], list[
     return good, why or ([] if good else ["no evidence"])
 
 
+def _check_owners(curated: dict, notes: list[str], repo_root: Path) -> None:
+    """A network names the account that owns it only with `stated` or code evidence, as its cidrs need."""
+    for g in curated["groups"]:
+        if g.get("owner"):
+            good, why = _supported(g.get("evidence", []), repo_root)
+            if not good:
+                notes.append(f"group {g['id']}: owner dropped, {'; '.join(why)}")
+                del g["owner"]
+
+
 def _node_problem(node: dict, seen: set[str]) -> str | None:
     if contains_secret(node):
         return SECRET_REASON
@@ -99,6 +109,7 @@ def verify(curated: dict, repo_root: Path) -> tuple[dict, str]:
     fix_groups(out, notes)
     warnings += cloud_warnings(out)
     check_claims(out, notes, lambda group, evidence: _supported(evidence, repo_root))
+    _check_owners(out, notes, repo_root)
     out["assumptions"], bad_assumptions = check_assumptions(curated, ends, kept_edges)
     isolated = [f"{i}: no edge connects it" for i in isolated_ids(out)]
     total = sum(map(len, dropped.values())) + len(bad_assumptions)

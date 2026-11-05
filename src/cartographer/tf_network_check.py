@@ -16,7 +16,7 @@ def _problem(group: dict, ev: dict, facts_by_id: dict, repo_root: Path) -> str |
     if "stated" in ev:
         return "stated evidence is for described diagrams"
     if "file" in ev:
-        return code_hit(repo_root, ev)
+        return "a network's cidrs come from its network fact" if group["kind"] == "network" else code_hit(repo_root, ev)
     fact = facts_by_id.get(ev["fact"])
     if fact is None:
         return f"unknown fact {ev['fact']}"
@@ -30,15 +30,14 @@ def _problem(group: dict, ev: dict, facts_by_id: dict, repo_root: Path) -> str |
 
 
 def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, notes: list[str]) -> None:
-    """Keep cidrs and subnet tiers only when a fact or a code citation backs them, then keep each node inside a
-    subnet group only when it has a placement fact of that tier. Last, check the shared networks."""
+    """Keep cidrs only when their network fact backs them and subnet tiers only when a fact or a code citation backs
+    them, then keep each node inside a subnet group only when it has a placement fact of that tier. Last, check the
+    shared networks."""
 
     def supported(group: dict, evidence: list[dict]) -> tuple[list[dict], list[str]]:
         problems = [(ev, _problem(group, ev, facts_by_id, repo_root)) for ev in evidence]
         return [ev for ev, p in problems if p is None], [p for _, p in problems if p]
 
-    remote = {n["id"] for n in facts.get("networks", []) if n["remote"]}
-    cites_remote = {g["id"] for g in out["groups"] if any(ev.get("fact") in remote for ev in g.get("evidence", []))}
     check_claims(out, notes, supported)
     placed = {(p["resource"], p["tier"]) for p in facts.get("placements", [])}
     groups = {g["id"]: g for g in out["groups"]}
@@ -47,15 +46,19 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
         if subnet and not any((address, subnet["tier"]) in placed for address in n["tf"]):
             notes.append(f"{n['id']}: no {subnet['tier']} placement fact, moved out of subnet group {subnet['id']}")
             n["group"] = outside_network(groups, subnet)
-    shared = _shared_networks(out, facts, groups, remote, cites_remote)
-    _check_owners(groups, shared, repo_root, notes)
-    _check_homes(out, groups, shared, notes)
+    remote = {n["id"]: n for n in facts.get("networks", []) if n["remote"]}
+    _check_owners(groups, remote, notes)
+    _check_homes(out, groups, _shared_networks(out, facts, groups, remote), notes)
 
 
-def _shared_networks(out: dict, facts: dict, groups: dict[str, dict], remote: set[str],
-                     cites_remote: set[str]) -> set[str]:
+def _cited_remote(group: dict, remote: dict[str, dict]) -> list[dict]:
+    """The remote network facts a group's evidence cites."""
+    return [remote[ev["fact"]] for ev in group.get("evidence", []) if ev.get("fact") in remote]
+
+
+def _shared_networks(out: dict, facts: dict, groups: dict[str, dict], remote: dict[str, dict]) -> set[str]:
     """Ids of the network groups this stack runs in but does not create (the `remote` network facts): their placed
-    nodes all run in remote networks, or with no placed node, their curated evidence cited a remote network fact."""
+    nodes all run in remote networks, or with no placed node, their evidence cites a remote network fact."""
     networks_of: dict[str, set[str]] = defaultdict(set)
     for p in facts.get("placements", []):
         networks_of[p["resource"]].add(p["network"])
@@ -63,32 +66,32 @@ def _shared_networks(out: dict, facts: dict, groups: dict[str, dict], remote: se
     for n in out["nodes"]:
         if network := enclosing(groups, n["group"], "network"):
             runs_in_remote[network["id"]] |= {fact in remote for address in n["tf"] for fact in networks_of[address]}
-    return {gid for gid, found in runs_in_remote.items() if found == {True} or not found and gid in cites_remote}
+    return {gid for gid, found in runs_in_remote.items() if found == {True} or not found and _cited_remote(groups[gid], remote)}
 
 
-def _names(owner: str, ev: dict) -> bool:
-    """True when the cited text names the owner, less the word account, as whole words: `Networking account` matches
-    `tfe_outputs.networking` and `networking_vpc_id`, but `Network account` does not. Underscores, dashes and spaces
-    between the owner's words all match."""
-    words = re.findall(r"[a-z0-9]+", re.sub(r"(?i)\baccount\b", "", owner).lower())
+def _source_name(address: str) -> str:
+    """The name of the block a remote network comes from: `networking` in
+    `data.tfe_outputs.networking.nonsensitive_values.shared_vpc_id`."""
+    parts = address.split(".")
+    return parts[2] if parts[0] == "data" and len(parts) > 2 else parts[min(1, len(parts) - 1)]
+
+
+def _names(owner: str, source: str) -> bool:
+    """True when a remote network's source name names the owner, less the words account and subscription, as whole
+    words: `Networking account` matches `networking` and `shared_networking`, but `Network account` does not."""
+    words = re.findall(r"[a-z0-9]+", re.sub(r"(?i)\b(account|subscription)\b", "", owner).lower())
     pattern = r"(?<![a-z0-9])" + r"[_\s-]*".join(words) + r"(?![a-z0-9])"
-    return bool(words) and re.search(pattern, ev["contains"].lower()) is not None
+    return bool(words) and re.search(pattern, source.lower()) is not None
 
 
-def _check_owners(groups: dict[str, dict], shared: set[str], repo_root: Path, notes: list[str]) -> None:
-    """Only a shared network names the account that owns it, and a code citation in its evidence names it too."""
+def _check_owners(groups: dict[str, dict], remote: dict[str, dict], notes: list[str]) -> None:
+    """A network names the account that owns it only when its evidence cites a remote network fact whose source
+    (the data block it is read from) names that account."""
     for g in groups.values():
-        if not (owner := g.get("owner")):
-            continue
-        if g["id"] not in shared:
-            reason = "its nodes do not run in a shared network"
-        elif not any("file" in ev and _names(owner, ev) and code_hit(repo_root, ev) is None
-                     for ev in g.get("evidence", [])):
-            reason = "no code citation names the owning account"
-        else:
-            continue
-        notes.append(f"group {g['id']}: owner dropped, {reason}")
-        del g["owner"]
+        owner = g.get("owner")
+        if owner and not any(_names(owner, _source_name(f["address"])) for f in _cited_remote(g, remote)):
+            notes.append(f"group {g['id']}: owner dropped, it cites no remote network fact whose source names it")
+            del g["owner"]
 
 
 def _check_homes(out: dict, groups: dict[str, dict], shared: set[str], notes: list[str]) -> None:
@@ -107,7 +110,7 @@ def _check_homes(out: dict, groups: dict[str, dict], shared: set[str], notes: li
         account = enclosing(groups, gid, "account")
         if account is None or account["id"] in homes:
             continue
-        others = sorted(a for a in homes if groups[a].get("cloud") == groups[gid].get("cloud"))
+        others = sorted(a for a in homes if groups[a].get("cloud") == account.get("cloud"))
         if others:
             notes.append(f"group {gid}: shared network sits in account {account['id']}, which holds none of the "
                          f"stack's other nodes; draw it in the stack's account ({', '.join(others)}) with `owner` set")
