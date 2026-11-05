@@ -1,6 +1,5 @@
 """What the Terraform and the description verification share: structure checks, code citations and the report."""
 
-import re
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -130,20 +129,17 @@ def fix_clouds(curated: dict, notes: list[str]) -> None:
 
 
 def fix_network_groups(curated: dict, notes: list[str]) -> None:
-    """Drop `tier`, `cidrs` and `owner` from groups they do not belong to, and an `owner` that looks like a secret; a
-    subnet group needs a tier and a network parent."""
+    """Drop `tier` and `cidrs` from groups they do not belong to and `shared_from`, which only verify sets, from every
+    group; a subnet group needs a tier and a network parent."""
     groups = {g["id"]: g for g in curated["groups"]}
     for g in curated["groups"]:
         if g["kind"] != "subnet" and "tier" in g:
             notes.append(f"group {g['id']}: tier on a group that is not a subnet, dropped")
             del g["tier"]
-        for claim in ("cidrs", "owner"):
-            if g["kind"] != "network" and claim in g:
-                notes.append(f"group {g['id']}: {claim} on a group that is not a network, dropped")
-                del g[claim]
-        if contains_secret(g.get("owner")):
-            notes.append(f"group {g['id']}: owner {SECRET_REASON}, dropped")
-            del g["owner"]
+        if g["kind"] != "network" and "cidrs" in g:
+            notes.append(f"group {g['id']}: cidrs on a group that is not a network, dropped")
+            del g["cidrs"]
+        g.pop("shared_from", None)
         if g["kind"] == "subnet" and "tier" not in g:
             notes.append(f"group {g['id']}: subnet without a tier, now a plain group")
             _demote(g)
@@ -153,14 +149,6 @@ def fix_network_groups(curated: dict, notes: list[str]) -> None:
 
 
 Supported = Callable[[dict, list[dict]], tuple[list[dict], list[str]]]
-
-
-def names(name: str, text: str) -> bool:
-    """True when `text` names `name`, less the words account and subscription, as whole words: `Networking account`
-    matches `networking` and `shared_networking`, but `Network account` does not."""
-    words = re.findall(r"[a-z0-9]+", re.sub(r"(?i)\b(account|subscription)\b", "", name).lower())
-    pattern = r"(?<![a-z0-9])" + r"[_\s-]*".join(words) + r"(?![a-z0-9])"
-    return bool(words) and re.search(pattern, text.lower()) is not None
 
 
 def check_claims(curated: dict, notes: list[str], supported: Supported) -> None:
@@ -184,10 +172,9 @@ def check_claims(curated: dict, notes: list[str], supported: Supported) -> None:
 
 
 def group_claims(diagram: dict) -> set[tuple]:
-    """Network claims the diagram makes: network cidrs and owners, subnet tiers and parents, nodes inside a subnet."""
+    """Network claims the diagram makes: network cidrs, subnet tiers and parents, nodes inside a subnet."""
     groups = {g["id"]: g for g in diagram["groups"]}
     claims = {("cidrs", g["id"], tuple(g["cidrs"])) for g in diagram["groups"] if g.get("cidrs")}
-    claims |= {("owner", g["id"], g["owner"]) for g in diagram["groups"] if g.get("owner")}
     claims |= {("subnet", g["id"], g.get("tier"), g["parent"]) for g in diagram["groups"] if g["kind"] == "subnet"}
     claims |= {("inside", n["id"], n["group"]) for n in diagram["nodes"] if enclosing(groups, n["group"], "subnet")}
     return claims

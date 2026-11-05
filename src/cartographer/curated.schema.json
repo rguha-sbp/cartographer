@@ -225,16 +225,15 @@
           "label": {
             "type": "string"
           },
-          "owner": {
-            "description": "Network frame only: the account that owns a shared network this stack runs in but does not create, for example Networking account. The frame title names it; the frame stays in the stack's account.",
-            "maxLength": 40,
-            "type": "string"
-          },
           "parent": {
             "type": [
               "string",
               "null"
             ]
+          },
+          "shared_from": {
+            "description": "Set by verify on a network frame that another stack creates: the stack it is read from. The frame title shows it; a curated value is dropped.",
+            "type": "string"
           },
           "tier": {
             "description": "Subnet frame only: the tier of the subnets it stands for.",

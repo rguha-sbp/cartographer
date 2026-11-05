@@ -177,8 +177,9 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   prompt, schema and facts, so build refuses it as stale and it needs a new curation.
 - `kind` in groups: `cloud | region | account | network | subnet | null`. Frame kinds carry `cloud`. A null kind is a plain
   dashed role group. There is one top-level `cloud` frame per cloud present, side by side. The tool never draws resource groups.
-- `owner` in groups: network frames only. It names the account that owns a shared VPC, and the frame title shows it as
-  `<label> (in <owner>)`. The frame itself stays in the stack's account.
+- `shared_from` in groups: set by verify, never by the curator. On a network frame that another stack creates, it
+  names that stack, and the frame title shows it as `<label> (shared from <stack>)`. The frame stays in the stack's
+  account.
 - `column` in groups: integer 0 to 3, required. It places the role groups that are directly in the account from left to right.
   The tool ignores it for frames and for groups nested in another group, which follow their parent.
 - Node `icon`: a qualified name. Set it only when no resource of the node resolves to one (a non-cloud provider) or for a
@@ -216,19 +217,15 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - dropped edges with reason
   - `unshown` facts of kind iam/trigger/route between two shown nodes that no curated edge covers (recall hints)
   - IAM-only vs code-only mismatches for code-cited edges
-- Shared networks (`tf_network_check`): this check runs first, on the evidence as curated, because the cidrs check
-  prunes evidence. A network group is shared when its placed nodes all run only in `remote` networks (their
-  placement facts). With no placed node, a `remote` network fact in its evidence makes it shared. The tool keeps
-  `owner` only on a shared network whose evidence cites a `remote` network fact whose source names the owner. The
-  source is the data block the fact's address reads from (`networking` in `data.tfe_outputs.networking...`). The name
-  must match as whole words, less the words account and subscription. The tool drops an `owner` that looks like a
-  secret. A network group's `cidrs` need its network fact; a code citation does not back them. In described mode,
-  `owner` needs a `stated` or code evidence item that names it.
-  - Known limit: Terraform does not say which account owns a remote VPC. The source name is the best proof it has; a
-    networking stack in the same account would pass too. The prompt tells the curator to set `owner` only when the
-    source names another account.
-  - The report warns when a shared network sits in an account frame whose label names the network's source, the
-    owner's account. The tool moves nothing, and the warning does not stop `build`; review rule 17 gets it fixed.
+- Shared networks (`tf_network_check`): verify sets `shared_from` on a network group that another stack creates. The
+  networks its nodes are placed in (placement facts), or with no placed node the network facts its evidence cites,
+  must all be read from other stacks' outputs (`data.tfe_outputs.<stack>` or `data.terraform_remote_state.<stack>`).
+  `shared_from` is that stack name. A VPC this stack creates or looks up with a data source gets none. Terraform does
+  not say which account owns a shared VPC, so the title names the stack, not an account. Verify drops any curated
+  `shared_from` first, in both modes. This check runs before the cidrs check, which prunes evidence.
+  - The report warns when a shared network sits in an account frame whose label is the stack's name (less the words
+    account and subscription), for example "Networking account" around a VPC from `data.tfe_outputs.networking`. The
+    tool moves nothing, and the warning does not stop `build`; review rule 17 gets it fixed.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.
 
 ## tf_layout.py (stage 4)

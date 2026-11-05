@@ -15,7 +15,6 @@ from cartographer.verify_shared import (
     edge_name,
     fix_groups,
     isolated_ids,
-    names,
     render_report,
     shape_warnings,
 )
@@ -40,16 +39,6 @@ def _supported(evidence: list[dict], repo_root: Path) -> tuple[list[dict], list[
         else:
             why.append(problem)
     return good, why or ([] if good else ["no evidence"])
-
-
-def _check_owners(curated: dict, notes: list[str], repo_root: Path) -> None:
-    """A network names the account that owns it only when a `stated` or code evidence item that checks out names it."""
-    for g in curated["groups"]:
-        if owner := g.get("owner"):
-            good, _ = _supported(g.get("evidence", []), repo_root)
-            if not any(names(owner, ev.get("stated") or ev["contains"]) for ev in good):
-                notes.append(f"group {g['id']}: owner dropped, no evidence names it")
-                del g["owner"]
 
 
 def _node_problem(node: dict, seen: set[str]) -> str | None:
@@ -110,7 +99,6 @@ def verify(curated: dict, repo_root: Path) -> tuple[dict, str]:
     fix_groups(out, notes)
     warnings += cloud_warnings(out)
     check_claims(out, notes, lambda group, evidence: _supported(evidence, repo_root))
-    _check_owners(out, notes, repo_root)
     out["assumptions"], bad_assumptions = check_assumptions(curated, ends, kept_edges)
     isolated = [f"{i}: no edge connects it" for i in isolated_ids(out)]
     total = sum(map(len, dropped.values())) + len(bad_assumptions)

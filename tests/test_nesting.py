@@ -70,7 +70,7 @@ def test_schema_has_subnet_kind_tier_cidrs_and_evidence() -> None:
     assert "subnet" in props["kind"]["enum"]
     assert props["tier"]["enum"] == ["public", "private", "isolated"]
     assert props["cidrs"]["items"]["pattern"].startswith("^")
-    assert props["owner"]["type"] == "string"
+    assert props["shared_from"]["type"] == "string"
     assert props["evidence"]["items"] == {"$ref": "#/$defs/evidence"}
     assert group["additionalProperties"] is False
     assert group["required"] == ["id", "label", "kind", "parent", "column"]
@@ -103,15 +103,15 @@ def test_vpc_label_carries_its_cidrs() -> None:
     assert _rendered(_shop())[0].count("shop-vpc (10.0.0.0/16)") == 1
 
 
-def test_a_shared_vpc_label_names_the_account_that_owns_it() -> None:
+def test_a_shared_vpc_label_names_the_stack_it_comes_from() -> None:
     curated = _shop()
     del curated["groups"][3]["cidrs"]
-    curated["groups"][3]["owner"] = "Networking account"
+    curated["groups"][3]["shared_from"] = "networking"
     values = {c.get("id"): c.get("value") for c in ET.fromstring(_rendered(curated)[0]).iter("mxCell")}
-    assert values["vpc"] == "shop-vpc (in Networking account)"
+    assert values["vpc"] == "shop-vpc (shared from networking)"
     curated["groups"][3]["cidrs"] = ["10.0.0.0/16"]
     values = {c.get("id"): c.get("value") for c in ET.fromstring(_rendered(curated)[0]).iter("mxCell")}
-    assert values["vpc"] == "shop-vpc (10.0.0.0/16, in Networking account)"
+    assert values["vpc"] == "shop-vpc (10.0.0.0/16, shared from networking)"
 
 
 def test_a_vpc_without_cidrs_keeps_its_plain_label() -> None:
