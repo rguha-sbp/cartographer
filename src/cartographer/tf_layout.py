@@ -1,5 +1,8 @@
 """Stage 4: lay a verified curated.json out as a left-to-right column grid and return an absolute-coordinate Diagram.
 
+A diagram with a hub node puts the hub's block in the middle column and lets placement spread the other blocks around
+it (`tf_hub`).
+
 Blocks are laid out with 2, 3 and 4 node columns; the result whose bounding box is closest to A4 landscape wins.
 Placement (tf_place) orders the items for few straight-line crossings. Straight lines only approximate the routed
 ones, so that grid width is placed once per length weight in SPREADS and the placement whose routed result shows the
@@ -22,6 +25,7 @@ from cartographer.tf_blocks import GAP, Blocks
 from cartographer.tf_check import defects, measure
 from cartographer.tf_externals import adopt
 from cartographer.tf_geom import leaves, polyline
+from cartographer.tf_hub import centre
 from cartographer.tf_labels import caption_rect
 from cartographer.tf_place import place
 from cartographer.tf_space import Widening, fit
@@ -56,8 +60,9 @@ def _build(curated: Curated, cols: int, labels: bool, notation: Notation) -> Dia
                    _edges(curated, {n.id for n in leaves}, labels, notation), notation.legend(curated, bottom))
 
 
-def _arrange(curated: Curated, cols: int, labels: bool, notation: Notation, px_per_crossing: float) -> Diagram:
-    placed = place(curated, lambda c: _build(c, cols, labels, notation), px_per_crossing)
+def _arrange(curated: Curated, free: frozenset[str], cols: int, labels: bool, notation: Notation,
+             px_per_crossing: float) -> Diagram:
+    placed = place(curated, lambda c: _build(c, cols, labels, notation), px_per_crossing, free)
     return _build(placed, cols, labels, notation)
 
 
@@ -89,11 +94,11 @@ def layout_report(curated: Curated, *, edge_labels: bool = True,
                   notation: Notation = LAYER7) -> tuple[Diagram, list[Widening]]:
     """The arrangement with the block grid width whose extent is closest to A4 landscape (ties go to fewer columns),
     routed, with the gaps that had to be widened for its lines."""
-    curated = adopt(curated)
+    curated, free = centre(adopt(curated))
     first, *rest = SPREADS
-    by_cols = {cols: _arrange(curated, cols, edge_labels, notation, first) for cols in GRID_CHOICES}
+    by_cols = {cols: _arrange(curated, free, cols, edge_labels, notation, first) for cols in GRID_CHOICES}
     cols = min(GRID_CHOICES, key=lambda c: _off_a4(by_cols[c]))
-    candidates = [by_cols[cols], *(_arrange(curated, cols, edge_labels, notation, px) for px in rest)]
+    candidates = [by_cols[cols], *(_arrange(curated, free, cols, edge_labels, notation, px) for px in rest)]
     diagram, widened = min(map(fit, candidates), key=_defects)
     return clear_legend(diagram), widened
 

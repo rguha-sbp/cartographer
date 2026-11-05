@@ -4,7 +4,7 @@ The objective of a placement is the number of proper crossings between the strai
 edges plus their total length, weighed at a given number of pixels per crossing. Barycentric sweeps (`tf_order`) give
 a start; a greedy local search then tries every swap of two nodes in one block, two blocks in one column slot and two
 externals in one lane, every move of an external to the other lane, and every slot for a block whose column is open
-(`column` None, see `tf_externals`), keeping each change that lowers the objective, until a whole sweep finds
+(`column` None, see `tf_externals`) or that the caller frees (the blocks around a hub, see `tf_hub`), keeping each change that lowers the objective, until a whole sweep finds
 none. Every candidate is a full placement by the caller's `build`, so the objective sees the real grid.
 """
 
@@ -125,17 +125,19 @@ def _moves(curated: Curated, open_ids: set[str]) -> Iterator[Move]:
         yield from _swaps(curated, key)
 
 
-def _opened(curated: Curated) -> tuple[Curated, set[str]]:
-    """Blocks with an open column start in the last column; the search then picks their slot."""
+def _opened(curated: Curated, free: set[str]) -> tuple[Curated, set[str]]:
+    """Blocks with an open column start in the last column; the search then picks their slot, and that of the `free`
+    blocks, which start in their own column."""
     open_ids = {g["id"] for g in curated["groups"] if g["kind"] not in FRAMES and g.get("column", 0) is None}
     last = max((g["column"] for g in curated["groups"] if g["id"] not in open_ids), default=0)
     groups = [{**g, "column": last} if g["id"] in open_ids else g for g in curated["groups"]]
-    return {**curated, "groups": groups}, open_ids
+    return {**curated, "groups": groups}, open_ids | free
 
 
-def place(curated: Curated, build: Build, px_per_crossing: float) -> Curated:
-    """The curated data reordered (and open columns filled in) for the lowest `objective`."""
-    current, open_ids = _opened(curated)
+def place(curated: Curated, build: Build, px_per_crossing: float, free: frozenset[str] = frozenset()) -> Curated:
+    """The curated data reordered (and open columns filled in, and `free` blocks moved between columns) for the lowest
+    `objective`."""
+    current, open_ids = _opened(curated, set(free))
     best = objective(build(current), px_per_crossing)
     candidate = current
     for _ in range(PASSES):

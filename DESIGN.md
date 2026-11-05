@@ -218,13 +218,14 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
 
 ## tf_layout.py (stage 4)
 
-This stage is pure Python, with no external process. It has five modules:
+This stage is pure Python, with no external process. It has six modules:
 
 - `tf_layout.py` (orchestration, edges, legend)
 - `tf_blocks.py` (frames and block grids)
 - `tf_lanes.py` (externals)
 - `tf_order.py` (barycentric ordering)
 - `tf_place.py` (crossing-aware placement)
+- `tf_hub.py` (hub-centred columns)
 
 Every number is a module constant
 (icon pitch 150x150, group padding 30 sides and 50 top, frame padding 20 sides and 40 top, gap 40).
@@ -238,6 +239,11 @@ So routes between distant blocks run through the gaps and not round the whole dr
 - Innermost frame: its direct child blocks go into columns by `column`, stacked in list order, with the tops aligned. Each
   column is as wide as its widest block. Outer frames wrap the single child with frame padding. If there are no frames, the
   column grid sits at the top level. Nodes placed directly in a frame form an extra grid row under the columns.
+- Hub (`tf_hub.py`): a hub is a node with at least `HUB_LEAD` (2) times the edges of any other node or external. When a
+  diagram has a hub, the hub's top block goes in the centre column (1), and the curated `column` of the other top
+  blocks in its frame does not apply. Those blocks start west (0) and east (2), in turn, by their edges to the hub.
+  Placement then moves each of them to any column and slot, so a block can also sit north or south of the hub in
+  the centre column. Thus the hub's lines leave in every direction. A diagram without a hub keeps the curated columns.
 - A4 proportions: `GRID_COLS` is chosen from {2, 3, 4}. The tool lays out all three. The one whose bounding box (frames,
   lanes and legend, not the title) has a width/height ratio closest to sqrt(2) (compared on a log scale) wins. Ties go
   to the smaller value.
@@ -250,7 +256,7 @@ So routes between distant blocks run through the gaps and not round the whole dr
   - every swap of two blocks in one column slot
   - every swap of two externals in one lane
   - every move of an external to the other lane
-  - every slot (column and position) for a block whose `column` is open
+  - every slot (column and position) for a block whose `column` is open, or that sits around a hub
 
   The search keeps each change that lowers the objective, until a sweep finds none (at most 30 sweeps). Every candidate is a
   full placement, so the objective sees the real grid. Each cloud's managed-services block (`tf_externals`) has an open column, so it
