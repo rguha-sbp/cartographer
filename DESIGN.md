@@ -177,6 +177,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   prompt, schema and facts, so build refuses it as stale and it needs a new curation.
 - `kind` in groups: `cloud | region | account | network | subnet | null`. Frame kinds carry `cloud`. A null kind is a plain
   dashed role group. There is one top-level `cloud` frame per cloud present, side by side. The tool never draws resource groups.
+- `owner` in groups: network frames only. It names the account that owns a shared VPC, and the frame title shows it as
+  `<label> (in <owner>)`. The frame itself stays in the stack's account.
 - `column` in groups: integer 0 to 3, required. It places the role groups that are directly in the account from left to right.
   The tool ignores it for frames and for groups nested in another group, which follow their parent.
 - Node `icon`: a qualified name. Set it only when no resource of the node resolves to one (a non-cloud provider) or for a
@@ -214,6 +216,10 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - dropped edges with reason
   - `unshown` facts of kind iam/trigger/route between two shown nodes that no curated edge covers (recall hints)
   - IAM-only vs code-only mismatches for code-cited edges
+- Shared networks (`tf_network_check`): a network group is shared when every node in it runs only in `remote` networks
+  (its placement facts). The tool drops `owner` from a network group that is not shared. A shared network in an account
+  frame that holds none of the stack's other nodes moves to the account frame of its cloud that holds the most of them. The tool
+  then removes the frames that move left empty. With a single account frame it changes nothing.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.
 
 ## tf_layout.py (stage 4)

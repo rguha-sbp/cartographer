@@ -225,6 +225,11 @@
           "label": {
             "type": "string"
           },
+          "owner": {
+            "description": "Network frame only: the account that owns a shared network this stack runs in but does not create, for example Networking account. The frame title names it; the frame stays in the stack's account.",
+            "maxLength": 40,
+            "type": "string"
+          },
           "parent": {
             "type": [
               "string",

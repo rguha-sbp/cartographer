@@ -102,12 +102,12 @@ def check_assumptions(curated: dict, node_ids: set[str], edges: list[dict]) -> t
     return kept, dropped
 
 
-def enclosing_subnet(groups: dict[str, dict], gid: str | None) -> dict | None:
-    """The subnet group `gid` is, or sits inside."""
+def enclosing(groups: dict[str, dict], gid: str | None, kind: str) -> dict | None:
+    """The group of `kind` that `gid` is, or sits inside."""
     seen: set[str] = set()
     while gid in groups and gid not in seen:
         seen.add(gid)
-        if groups[gid]["kind"] == "subnet":
+        if groups[gid]["kind"] == kind:
             return groups[gid]
         gid = groups[gid]["parent"]
     return None
@@ -141,9 +141,10 @@ def fix_network_groups(curated: dict, notes: list[str]) -> None:
         if g["kind"] != "subnet" and "tier" in g:
             notes.append(f"group {g['id']}: tier on a group that is not a subnet, dropped")
             del g["tier"]
-        if g["kind"] != "network" and "cidrs" in g:
-            notes.append(f"group {g['id']}: cidrs on a group that is not a network, dropped")
-            del g["cidrs"]
+        for claim in ("cidrs", "owner"):
+            if g["kind"] != "network" and claim in g:
+                notes.append(f"group {g['id']}: {claim} on a group that is not a network, dropped")
+                del g[claim]
         if g["kind"] == "subnet" and "tier" not in g:
             notes.append(f"group {g['id']}: subnet without a tier, now a plain group")
             _demote(g)
@@ -176,11 +177,14 @@ def check_claims(curated: dict, notes: list[str], supported: Supported) -> None:
 
 
 def group_claims(diagram: dict) -> set[tuple]:
-    """Network claims the diagram makes: network cidrs, subnet tiers and parents, nodes inside a subnet."""
+    """Network claims the diagram makes: network cidrs, owners and parents, subnet tiers and parents, nodes inside a
+    subnet."""
     groups = {g["id"]: g for g in diagram["groups"]}
     claims = {("cidrs", g["id"], tuple(g["cidrs"])) for g in diagram["groups"] if g.get("cidrs")}
+    claims |= {("owner", g["id"], g["owner"]) for g in diagram["groups"] if g.get("owner")}
+    claims |= {("network", g["id"], g["parent"]) for g in diagram["groups"] if g["kind"] == "network"}
     claims |= {("subnet", g["id"], g.get("tier"), g["parent"]) for g in diagram["groups"] if g["kind"] == "subnet"}
-    claims |= {("inside", n["id"], n["group"]) for n in diagram["nodes"] if enclosing_subnet(groups, n["group"])}
+    claims |= {("inside", n["id"], n["group"]) for n in diagram["nodes"] if enclosing(groups, n["group"], "subnet")}
     return claims
 
 

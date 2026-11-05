@@ -77,6 +77,11 @@ Step 3: produce the curated JSON
   and a node stays in it only when a placement fact of that tier exists for one of its `tf` addresses. Give a `network`
   group `cidrs` only copied from a `networks` fact (the same list), and cite that fact in the group's `evidence`; with no
   cidrs in the fact, leave `cidrs` out. A network group that comes from a remote fact is named after it, without cidrs.
+- Shared networks: a `networks` fact with `remote` true is a VPC another account owns and shares (AWS VPC sharing).
+  The stack's resources in its subnets still belong to the stack's account. Put its `network` group inside the
+  stack's account frame, never in an account frame of its own. Set `owner` on it to the account that owns it when the
+  Terraform or code names that account (for example "Networking account"); the frame title shows it. Never name the
+  owning account in any other group label.
 - Azure placement: a Function or Web App with VNet integration (`virtual_network_subnet_id`) stays outside the subnets
   and draws an outbound arrow to the integration subnet. A private endpoint sits in its subnet with an arrow to the
   service it exposes, and that service stays in the region outside the subnets. PaaS services without a subnet fact

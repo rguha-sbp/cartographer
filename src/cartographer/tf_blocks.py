@@ -47,8 +47,9 @@ def box_size(n: dict[str, Any]) -> Size:
 
 
 def group_label(g: dict[str, Any]) -> str:
-    """A group's title: a VPC also names its address ranges."""
-    return f"{g['label']} ({', '.join(g['cidrs'])})" if g.get("cidrs") else g["label"]
+    """A group's title: a VPC also names its address ranges and, when it is shared, the account that owns it."""
+    notes = [*g.get("cidrs", []), *([f"in {g['owner']}"] if g.get("owner") else [])]
+    return f"{g['label']} ({', '.join(notes)})" if notes else g["label"]
 
 
 def _label(n: dict[str, Any]) -> str:

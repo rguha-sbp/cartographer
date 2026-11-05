@@ -178,6 +178,10 @@ side:
 
 - A network frame shows its address ranges in the title, for example `shop-vpc (10.0.0.0/16)`. It does this only when
   the Terraform or you gave the ranges. The tool never guesses a CIDR.
+- A network frame for a VPC that another account shares in names that account in the title, for example
+  `shared-vpc (in Networking account)`. The frame stays in your workload account, because the services in it belong to
+  that account. Verify moves a shared VPC out of an account frame of its own and drops `owner` from a VPC the
+  Terraform creates.
 - Subnet frames group the services of one tier: public, private or isolated. The tool does not draw Availability
   Zones.
 - Workload frames hold the services of one application, so that separate workloads look separate. A workload frame is inside a subnet frame, or directly under the account for regional services such as S3 or Azure Storage.

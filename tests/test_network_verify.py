@@ -145,6 +145,86 @@ def test_edges_cannot_cite_network_facts() -> None:
     assert "is not an edge fact" in report
 
 
+SHARED_FN = "module.worker.aws_lambda_function.fn"
+NOWHERE = "aws_instance.lost"
+
+
+def _shared_vpc(*account_groups: dict, vpc_parent: str = "netacct", **vpc: object) -> dict:
+    """The worker Lambda in the shared VPC, whose frame sits in `vpc_parent`, and a node outside any network in `acct`."""
+    return _curated(
+        groups=[
+            _group("acct", "account", None),
+            *account_groups,
+            _group("apps", None, "acct"),
+            _group("shared", "network", vpc_parent, evidence=[{"fact": REMOTE["id"]}], **vpc),
+            _group("priv", "subnet", "shared", tier="private", evidence=[{"fact": PLACED[SHARED_FN]}]),
+            _group("work", None, "priv"),
+        ],
+        nodes=[_node("fn", SHARED_FN, "work"), _node("vm", NOWHERE, "apps")],
+    )
+
+
+NETWORKING = _group("netacct", "account", None, label="Networking account")
+
+
+def test_a_shared_vpc_in_an_account_frame_of_its_own_moves_into_the_stacks_account() -> None:
+    curated = _shared_vpc(NETWORKING)
+    verified, report = _verify(curated)
+    assert _group_of(verified, "shared")["parent"] == "acct"
+    assert "netacct" not in {g["id"] for g in verified["groups"]}
+    assert "group shared: shared network sat in account netacct" in report
+    assert "group netacct: empty after the move, removed" in report
+    assert tf_verify.needs_attention(curated, verified)
+
+
+def test_frames_left_empty_by_the_move_go_too() -> None:
+    region = _group("netregion", "region", None)
+    curated = _shared_vpc(region, {**NETWORKING, "parent": "netregion"})
+    verified, report = _verify(curated)
+    assert {g["id"] for g in verified["groups"]} == {"acct", "apps", "shared", "priv", "work"}
+    assert "group netregion: empty after the move, removed" in report
+
+
+def test_a_shared_vpc_never_moves_into_an_account_of_another_cloud() -> None:
+    curated = _shared_vpc(NETWORKING)
+    curated["groups"][0]["cloud"] = "azure"
+    verified, _ = _verify(curated)
+    assert _group_of(verified, "shared")["parent"] == "netacct"
+
+
+def test_a_shared_vpc_already_in_the_stacks_account_stays() -> None:
+    curated = _shared_vpc(vpc_parent="acct", owner="Networking account")
+    verified, report = _verify(curated)
+    assert verified["groups"] == curated["groups"]
+    assert "Warnings (0)" in report
+
+
+def test_a_single_account_frame_is_left_alone() -> None:
+    curated = _shared_vpc(vpc_parent="acct")
+    curated["nodes"] = curated["nodes"][:1]
+    curated["groups"] = [g for g in curated["groups"] if g["id"] != "apps"]
+    verified, _ = _verify(curated)
+    assert verified["groups"] == curated["groups"]
+
+
+def test_owner_on_a_vpc_the_stack_creates_is_dropped() -> None:
+    curated = _curated()
+    curated["groups"][1]["owner"] = "Networking account"
+    verified, report = _verify(curated)
+    assert "owner" not in _group_of(verified, "vpc")
+    assert "group vpc: owner dropped, its nodes do not run in a shared network" in report
+    assert tf_verify.needs_attention(curated, verified)
+
+
+def test_owner_on_a_group_that_is_not_a_network_is_dropped() -> None:
+    curated = _curated()
+    curated["groups"][2]["owner"] = "Networking account"
+    verified, report = _verify(curated)
+    assert "owner" not in _group_of(verified, "pub")
+    assert "group pub: owner on a group that is not a network, dropped" in report
+
+
+
 def _described(**over: object) -> dict:
     curated = {
         "format": 2,
@@ -253,3 +333,10 @@ def test_an_external_icon_of_another_cloud_than_its_frame_is_a_warning() -> None
     diagram = {"groups": [frame], "nodes": [],
                "externals": [{"id": "x", "group": "f", "icon": "aws:lambda"}, {"id": "y", "group": None, "icon": "aws:lambda"}]}
     assert cloud_warnings(diagram) == ["x: icon aws:lambda belongs to aws, its frame to azure"]
+
+
+def test_described_owner_on_a_network_passes() -> None:
+    curated = _described()
+    curated["groups"][1]["owner"] = "Networking account"
+    verified, _ = verify_description.verify(curated, Path("."))
+    assert verified["groups"] == curated["groups"]
