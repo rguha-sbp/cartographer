@@ -19,20 +19,14 @@ Curated = dict[str, Any]
 Size = tuple[int, int]
 
 
-def live_groups(curated: Curated) -> set[str]:
-    """Ids of the groups that hold a node, directly or in a group below them."""
+def empty_blocks(curated: Curated) -> list[str]:
+    """Ids of blocks (groups that are not frames) with no nodes of their own and no non-empty child block."""
     parent = {g["id"]: g["parent"] for g in curated["groups"]}
     live: set[str] = set()
     for gid in {n["group"] for n in curated["nodes"]}:
         while gid in parent and gid not in live:
             live.add(gid)
             gid = parent[gid]
-    return live
-
-
-def empty_blocks(curated: Curated) -> list[str]:
-    """Ids of blocks (groups that are not frames) with no nodes of their own and no non-empty child block."""
-    live = live_groups(curated)
     return [g["id"] for g in curated["groups"] if g["kind"] not in FRAMES and g["id"] not in live]
 
 

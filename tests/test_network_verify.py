@@ -168,44 +168,35 @@ def _shared_vpc(*account_groups: dict, vpc_parent: str = "netacct", **vpc: objec
 NETWORKING = _group("netacct", "account", None, label="Networking account")
 
 
-def test_a_shared_vpc_in_an_account_frame_of_its_own_moves_into_the_stacks_account() -> None:
+def test_a_shared_vpc_in_an_account_frame_of_its_own_is_a_warning() -> None:
     curated = _shared_vpc(NETWORKING)
     verified, report = _verify(curated)
-    assert _group_of(verified, "shared")["parent"] == "acct"
-    assert "netacct" not in {g["id"] for g in verified["groups"]}
-    assert "group shared: shared network sat in account netacct" in report
-    assert "group netacct: no node left after the move, removed" in report
-    assert group_claims(curated) <= group_claims(verified)  # a move is drawn, it does not stop the build
+    assert verified["groups"] == curated["groups"]
+    assert "group shared: shared network sits in account netacct, which holds none of the stack's other nodes" in report
+    assert "draw it in the stack's account (acct) with `owner` set" in report
+    assert group_claims(curated) <= group_claims(verified)  # a warning, it does not stop the build
 
 
-def test_frames_left_empty_by_the_move_go_too() -> None:
-    region = _group("netregion", "region", None)
-    curated = _shared_vpc(region, {**NETWORKING, "parent": "netregion"})
-    verified, report = _verify(curated)
-    assert {g["id"] for g in verified["groups"]} == {"acct", "apps", "shared", "priv", "work"}
-    assert "group netregion: no node left after the move, removed" in report
-
-
-def test_the_owner_account_frame_goes_with_the_empty_role_groups_in_it() -> None:
-    curated = _shared_vpc(NETWORKING, _group("netrole", None, "netacct"), vpc_parent="netrole")
-    verified, _ = _verify(curated)
-    assert _group_of(verified, "shared")["parent"] == "acct"
-    assert {g["id"] for g in verified["groups"]} == {"acct", "apps", "shared", "priv", "work"}
-
-
-def test_with_several_accounts_of_the_stack_the_shared_vpc_stays_with_a_warning() -> None:
+def test_the_warning_names_every_account_of_the_stack() -> None:
     curated = _shared_vpc(NETWORKING, _group("acct2", "account", None), _group("more", None, "acct2"))
     curated["nodes"].append(_node("misc", "aws_instance.misc", "more"))
     verified, report = _verify(curated)
-    assert _group_of(verified, "shared")["parent"] == "netacct"
-    assert "no single account of its cloud does, left in place" in report
+    assert verified["groups"] == curated["groups"]
+    assert "draw it in the stack's account (acct, acct2)" in report
 
 
-def test_a_parent_loop_among_the_left_frames_ends() -> None:
-    curated = _shared_vpc({**NETWORKING, "parent": "loop"}, _group("loop", "region", "netacct"))
-    verified, _ = _verify(curated)
-    assert _group_of(verified, "shared")["parent"] == "acct"
-    assert not {"netacct", "loop"} & {g["id"] for g in verified["groups"]}
+def test_no_warning_when_no_other_account_frame_holds_a_node() -> None:
+    curated = _shared_vpc(NETWORKING)
+    curated["nodes"] = curated["nodes"][:1]
+    _, report = _verify(curated)
+    assert "shared network sits in account" not in report
+
+
+def test_no_warning_when_the_other_account_is_of_another_cloud() -> None:
+    curated = _shared_vpc(NETWORKING)
+    curated["groups"][0]["cloud"] = "azure"
+    _, report = _verify(curated)
+    assert "shared network sits in account" not in report
 
 
 def test_a_node_without_placement_in_the_shared_vpc_keeps_it_shared() -> None:
@@ -244,11 +235,19 @@ def test_an_owner_that_looks_like_a_secret_is_dropped() -> None:
     assert "group shared: owner looks like a secret, dropped" in report
 
 
-def test_a_shared_vpc_never_moves_into_an_account_of_another_cloud() -> None:
-    curated = _shared_vpc(NETWORKING)
-    curated["groups"][0]["cloud"] = "azure"
+def test_a_shared_vpc_with_cidrs_is_still_known_by_its_remote_fact() -> None:
+    curated = _shared_vpc(vpc_parent="acct", owner="Networking account", cidrs=["10.9.0.0/16"])
+    curated["nodes"] = [_node("sg", "module.worker.aws_security_group.sg", "shared"), curated["nodes"][1]]
     verified, _ = _verify(curated)
-    assert _group_of(verified, "shared")["parent"] == "netacct"
+    assert _group_of(verified, "shared")["owner"] == "Networking account"
+
+
+@pytest.mark.parametrize(("owner", "kept"), [
+    ("Networking account", True), ("networking", True), ("Network account", False), ("Net", False)])
+def test_the_owner_must_be_named_as_whole_words(owner: str, kept: bool) -> None:
+    curated = _shared_vpc(vpc_parent="acct", owner=owner)
+    verified, _ = _verify(curated)
+    assert ("owner" in _group_of(verified, "shared")) is kept
 
 
 def test_a_shared_vpc_already_in_the_stacks_account_stays() -> None:

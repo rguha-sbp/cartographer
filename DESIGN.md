@@ -219,11 +219,12 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
 - Shared networks (`tf_network_check`): a network group is shared when its placed nodes all run only in `remote`
   networks (their placement facts). With no placed node, a `remote` network fact in its evidence makes it shared. The
   tool keeps `owner` only on a shared network whose evidence holds a code citation that checks out and whose
-  `contains` text names the owner (the owner's letters and digits, less the word account). It drops an `owner` that
-  looks like a secret. A shared network in an account frame that holds none of the stack's other nodes moves to the
-  one account frame of its cloud that holds them. With none or several such frames, it stays and the report warns.
-  The tool removes the frames the move leaves without a node, with the groups inside them. The move is drawn: it is a
-  warning, and `build` goes on.
+  `contains` text names the owner as whole words, less the word account. It drops an `owner` that looks like a
+  secret. A `remote` network can also be a VPC of the same account that another stack creates, so a cited name is
+  the only proof of another owner. The tool reads the evidence for `remote` facts before the cidrs check prunes it.
+  The report warns when a shared network sits in an account frame that holds none of the stack's other nodes while
+  another account frame of its cloud does. The tool moves nothing: the diagram cannot tell the owner's frame from a
+  second account of the stack. The warning does not stop `build`; review rule 17 gets the frame fixed.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.
 
 ## tf_layout.py (stage 4)
