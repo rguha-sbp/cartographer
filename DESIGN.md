@@ -225,13 +225,15 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   runs after nodes without a matching placement leave their subnet.
   - A network fact read from another stack's outputs (`data.tfe_outputs.<name>` or
     `data.terraform_remote_state.<name>`) carries the stack: the first literal of `config.workspaces.name`,
-    `config.key` less its `terraform.tfstate` file or `.tfstate` suffix (also `.terraform.tfstate`), and `workspace`, else `<name>`. Modules that
-    read the same output share one network fact, and the first reader's stack names it.
+    `config.key` less a trailing `.tfstate`, `terraform.tfstate`, `.terraform.tfstate` or `-terraform.tfstate`, and
+    the `workspace` of `tfe_outputs`, else `<name>`. The `workspace` of `terraform_remote_state` is an environment, so
+    it names no stack. Modules that read the same output of the same stack share one network fact; one data source
+    name read against two stacks gives two.
   - A remote subnet output places a resource in a remote VPC whose name prefixes the output name: one of its own stack
-    first, else any other (a subnet lookup has no stack, so the longest name decides), so a stack name that differs between two readers of one workspace loses no placement.
+    first, else any other (a subnet lookup has no stack, so the longest name decides).
   - The report warns when a shared network sits in an account frame whose label has the same words as the stack's
     name, less the words account, subscription and terraform, environment words (prod, dev, test and the like) and
-    account numbers, each word less a trailing `ing` or `s`. For example "Networking account" or "Network account"
+    account numbers, each word less a trailing `ing` or `s`, in any order. For example "Networking account" or "Network account"
     around a VPC from `data.tfe_outputs.networking`, workspace `networking-prod` or state key
     `prod/networking/terraform.tfstate`; "Prod account" around a VPC from `prod-networking` is no warning. The tool
     moves nothing, and the warning does not stop `build`; review rule 17 gets it fixed.

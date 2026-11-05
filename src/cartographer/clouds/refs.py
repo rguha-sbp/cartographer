@@ -27,6 +27,12 @@ class Ref:
     def remote(self) -> bool:
         return self.name is not None
 
+    @property
+    def key(self) -> str:
+        """The key of the network this reference is or reads: modules that read one output of one stack share it, and
+        the same data source name read against two workspaces gives two."""
+        return f"{self.address}@{self.stack}" if self.stack else self.address
+
 
 def token(heads: str, data: str) -> re.Pattern[str]:
     """A reference to a local resource whose type matches `heads`, a data source matching `data`, or a remote output."""
@@ -64,15 +70,15 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
 
 def stack(inst: Inst, kind: str, name: str) -> str:
     """The workspace or state the remote state data source `kind`.`name` reads when its body names it literally
-    (`config.workspaces.name`, then `config.key` less its `terraform.tfstate` file or `.tfstate` suffix, then
-    `workspace`), else `name`."""
+    (`config.workspaces.name`, then `config.key` less its `terraform.tfstate` file or `.tfstate` suffix, then the
+    `workspace` of `tfe_outputs`; that of `terraform_remote_state` is an environment, not a stack), else `name`."""
     block = inst.mod.data.get((kind, name))
     body = block.body if block else {}
     config = body.get("config") if isinstance(body.get("config"), dict) else {}
     workspaces = config.get("workspaces") if isinstance(config.get("workspaces"), dict) else {}
-    for named in (workspaces.get("name"), config.get("key"), body.get("workspace")):
+    for named in (workspaces.get("name"), config.get("key"), body.get("workspace") if kind == "tfe_outputs" else None):
         if isinstance(named, str) and LITERAL.fullmatch(named):
-            return re.sub(r"[/.]?(terraform)?\.tfstate$", "", named.strip('"')) or name
+            return re.sub(r"([/._-]?terraform)?\.tfstate$", "", named.strip('"')) or name
     return name
 
 
@@ -83,14 +89,13 @@ def network_fact(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
 
 
 def add_remote(networks: dict[str, dict], ref: Ref, res: Res, suffixes: str = "ids?") -> None:
-    """Record the network a remote reference reads, once per address: every module that reads the output shares it,
-    and the first reader's stack names it."""
-    if ref.address not in networks:
-        networks[ref.address] = network_fact(derive(ref.name or "", suffixes), [], ref, res)
+    """Record the network a remote reference reads, once per `Ref.key`."""
+    if ref.key not in networks:
+        networks[ref.key] = network_fact(derive(ref.name or "", suffixes), [], ref, res)
 
 
 def place_remote(networks: dict[str, dict], ref: Ref, suffixes: str = "ids?") -> tuple[str, str, str] | None:
-    """(network address, tier, what decided the tier) for a subnet another stack or a lookup gives, None when either
+    """(network key, tier, what decided the tier) for a subnet another stack or a lookup gives, None when either
     is unknown. The network is a remote one whose name prefixes the output name (`shared-vpc` for
     `shared_vpc_private_subnet_ids`): one of the reference's own stack before any other, then the longest name. A
     lookup has no stack, so the longest name alone decides."""

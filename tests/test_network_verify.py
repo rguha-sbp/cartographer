@@ -248,6 +248,14 @@ def test_a_vpc_whose_evidence_cites_a_local_network_is_not_shared() -> None:
     assert "shared_from" not in _group_of(verified, "shared")
 
 
+def test_a_cited_local_network_keeps_a_vpc_local_after_its_unsupported_cidrs_drop() -> None:
+    curated = _shared_vpc(vpc_parent="acct", cidrs=["192.0.2.0/24"])
+    _group_of(curated, "shared")["evidence"] = [{"fact": VPC["id"]}]
+    verified, report = _verify(curated)
+    assert "cidrs" not in _group_of(verified, "shared") and "cidrs dropped" in report
+    assert "shared_from" not in _group_of(verified, "shared")
+
+
 def test_a_vpc_looked_up_by_a_data_source_is_not_shared() -> None:
     lookup = {**REMOTE, "id": "n99", "address": "data.aws_vpc.shared", "stack": None}
     placements = [{**p, "network": "n99"} if p["resource"] == SHARED_FN else p for p in FACTS["placements"]]
@@ -401,6 +409,7 @@ def test_described_mode_drops_a_curated_shared_from() -> None:
     ("Production", "networking-prod", False),
     ("Networking account", "prod/networking", True),
     ("Prod account", "prod-networking", False),
+    ("Shared networking account", "networking-shared", True),
 ])
 def test_an_account_label_is_named_after_a_stack_with_the_same_words_less_environments(label: str, stack: str, named: bool) -> None:
     assert named_after(label, stack) is named

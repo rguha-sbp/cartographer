@@ -81,7 +81,7 @@ class Network:
         for r in self.ex.res:
             body = r.block.body
             if r.type == "azurerm_subnet":
-                owner = next((x.address for x in self.refs(r.inst, body.get("virtual_network_name")) if x.address in self.nets), None)
+                owner = next((x.key for x in self.refs(r.inst, body.get("virtual_network_name")) if x.key in self.nets), None)
                 self.subnets[r.address] = Subnet(r.address, owner, body, r)
             elif r.type == "azurerm_virtual_network":
                 for i, block in enumerate(blocks(body.get("subnet"))):
@@ -213,4 +213,4 @@ def network_facts(ex: Extractor) -> dict:
     net.collect_networks()
     net.collect_subnets()
     net.collect_evidence()
-    return {"networks": [v for _, v in sorted(net.nets.items())], "placements": net.placements(), "unplaced": net.ambiguous}
+    return {"networks": dict(sorted(net.nets.items())), "placements": net.placements(), "unplaced": net.ambiguous}

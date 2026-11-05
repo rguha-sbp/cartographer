@@ -38,6 +38,7 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
         return [ev for ev, p in problems if p is None], [p for _, p in problems if p]
 
     groups = {g["id"]: g for g in out["groups"]}
+    cited = {g["id"]: {ev.get("fact") for ev in g.get("evidence", [])} for g in out["groups"]}  # before claims drop any
     check_claims(out, notes, supported)
     placed = {(p["resource"], p["tier"]) for p in facts.get("placements", [])}
     for n in out["nodes"]:
@@ -45,14 +46,14 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
         if subnet and not any((address, subnet["tier"]) in placed for address in n["tf"]):
             notes.append(f"{n['id']}: no {subnet['tier']} placement fact, moved out of subnet group {subnet['id']}")
             n["group"] = outside_network(groups, subnet)
-    _mark_shared(out, facts, groups, notes)
+    _mark_shared(out, facts, groups, cited, notes)
 
 
 ENVIRONMENTS = {"prod", "production", "prd", "dev", "development", "develop", "test", "tst", "acc", "acceptance", "stag",
                 "stage", "qa", "uat", "sandbox", "nonprod"}  # stems, as `_stems` leaves them
 
 
-def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], notes: list[str]) -> None:
+def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], cited: dict[str, set], notes: list[str]) -> None:
     """Set `shared_from` on each network group that another stack creates: it holds a placed node, and the networks its
     nodes are placed in and the network facts its evidence cites all come from other stacks' outputs. Evidence alone
     never makes a group shared, but a cited local network keeps it local. Warn when such a group sits in an account
@@ -69,7 +70,7 @@ def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], notes: list[st
         if g["kind"] != "network":
             continue
         stacks = {networks[net].get("stack") for net in placed[g["id"]]}
-        cites_local = any(networks[ev["fact"]].get("stack") is None for ev in g.get("evidence", []) if ev.get("fact") in networks)
+        cites_local = any(networks[fact].get("stack") is None for fact in cited[g["id"]] if fact in networks)
         if not stacks or None in stacks or cites_local:
             continue
         g["shared_from"] = ", ".join(sorted(stacks))
@@ -87,7 +88,7 @@ def named_after(label: str, stack: str) -> bool:
     word with a trailing `ing` or `s` dropped: `networking`, `networking-prod` and `prod/networking` name
     `Networking account`, `Network account` and `Networking (123456789012)`; none names `Shop network account`,
     `Prod account` or `Net`."""
-    return _stems(label) == _stems(stack) != []
+    return sorted(_stems(label)) == sorted(_stems(stack)) != []
 
 
 def _stems(name: str) -> list[str]:

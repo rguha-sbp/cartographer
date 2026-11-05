@@ -65,7 +65,7 @@ class Network:
         if subnet.type != "aws_subnet":
             return None
         tier, how = _local_tier(subnet)
-        vpc = next((r.address for r in sources(subnet.inst, subnet.block.body.get("vpc_id"), TOKEN) if r.address in self.vpcs), None)
+        vpc = next((r.key for r in sources(subnet.inst, subnet.block.body.get("vpc_id"), TOKEN) if r.key in self.vpcs), None)
         return (vpc, tier, f"{ref.address} {how}") if vpc else None
 
     def placements(self) -> list[dict]:
@@ -84,4 +84,4 @@ class Network:
 def network_facts(ex: Extractor) -> dict:
     net = Network(ex)
     net.collect_vpcs()
-    return {"networks": [v for _, v in sorted(net.vpcs.items())], "placements": net.placements()}
+    return {"networks": dict(sorted(net.vpcs.items())), "placements": net.placements()}

@@ -87,9 +87,10 @@ class Cloud(ABC):
         self.deployed_types = deployed_types  # compute, store and queue types a C4 Deployment view places or omits
 
     def network_facts(self, ex: Extractor) -> dict:
-        """{"networks": [...], "placements": [...]} without ids; a placement names its network by address.
+        """{"networks": {key: fact}, "placements": [...]} without ids; a placement names its network by key: the address,
+        or for a remote network `Ref.key`, so one output read from two stacks gives two networks.
         An optional "unplaced" maps a resource address to the reason it could not be placed; the resource is then marked."""
-        return {"networks": [], "placements": []}
+        return {"networks": {}, "placements": []}
 
     def permission_edges(self, ex: Extractor) -> None:
         """Add permission edges through `ex.add` and `ex.services`."""

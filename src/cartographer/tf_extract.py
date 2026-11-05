@@ -214,9 +214,9 @@ class Extractor:
                 if not (res := self.resolution[address]).marked:
                     self.resolution[address] = replace(res, marked=True, reason=reason)
             ids = {}
-            for n in found["networks"]:
-                ids[n["address"]] = f"n{len(networks) + 1}"
-                networks.append({"id": ids[n["address"]], "cloud": cloud.name, **n})
+            for key, n in found["networks"].items():  # key: what placements name the network by
+                ids[key] = f"n{len(networks) + 1}"
+                networks.append({"id": ids[key], "cloud": cloud.name, **n})
             for p in found["placements"]:
                 placements.append({"id": f"p{len(placements) + 1}", "cloud": cloud.name, **p, "network": ids[p["network"]]})
         return {"networks": networks, "placements": placements}
