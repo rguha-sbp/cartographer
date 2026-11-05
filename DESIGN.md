@@ -96,7 +96,7 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
      "multi": false, "file": "infra/orders_api.tf", "line": 12}
   ],
   "networks": [{"id": "n1", "cloud": "aws", "name": "main", "cidrs": ["10.0.0.0/16"], "remote": false,
-                "address": "aws_vpc.main"}],
+                "stack": null, "address": "aws_vpc.main"}],
   "placements": [{"id": "p1", "resource": "aws_lambda_function.orders_api", "network": "n1", "tier": "private",
                   "cloud": "aws"}],
   "edges": [
@@ -218,14 +218,16 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - `unshown` facts of kind iam/trigger/route between two shown nodes that no curated edge covers (recall hints)
   - IAM-only vs code-only mismatches for code-cited edges
 - Shared networks (`tf_network_check`): verify sets `shared_from` on a network group that another stack creates. The
-  group must hold a placed node, and the networks its nodes are placed in (placement facts) must all be read from other
-  stacks' outputs (`data.tfe_outputs.<stack>` or `data.terraform_remote_state.<stack>`). Curated evidence alone is not
-  proof.
-  `shared_from` is that stack name. A VPC this stack creates or looks up with a data source gets none. Terraform does
+  group must hold a placed node. The networks its nodes are placed in (placement facts) and the network facts its
+  evidence cites must all carry a `stack`: the network fact sets it when it is read from another stack's outputs
+  (`data.tfe_outputs.<stack>` or `data.terraform_remote_state.<stack>`). Curated evidence alone is not proof, but a
+  cited local network keeps the group local. A remote subnet output places a resource only in a remote VPC of the
+  same stack. `shared_from` is that stack name. A VPC this stack creates or looks up with a data source gets none. Terraform does
   not say which account owns a shared VPC, so the title names the stack, not an account. Verify drops any curated
   `shared_from` first, in both modes. This check runs after nodes without a matching placement leave their subnet.
   - The report warns when a shared network sits in an account frame whose label is the stack's name (less the words
-    account and subscription and account numbers, each word allowed to stem the other), for example "Networking account" around a VPC from `data.tfe_outputs.networking`. The
+    account and subscription and account numbers, each word less a trailing `ing` or `s`), for example "Networking
+    account" or "Network account" around a VPC from `data.tfe_outputs.networking`. The
     tool moves nothing, and the warning does not stop `build`; review rule 17 gets it fixed.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.
 

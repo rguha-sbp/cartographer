@@ -50,28 +50,30 @@ class Network:
     def collect_vpcs(self) -> None:
         for r in self.ex.res:
             if r.type == "aws_vpc":
-                self.vpcs[r.address] = self._vpc(r.address, r.address.rsplit(".", 1)[1], self.cidrs(r), False, r)
+                self.vpcs[r.address] = self._vpc(r.address, r.address.rsplit(".", 1)[1], self.cidrs(r), Ref(r.address), r)
         for r in self.ex.res:
             for value in find(r.block.body, VPC_KEY):
                 for ref in sources(r.inst, value, TOKEN):
                     if ref.remote and ref.address not in self.vpcs:
-                        self.vpcs[ref.address] = self._vpc(ref.address, derive(ref.name or ""), [], True, r)
+                        self.vpcs[ref.address] = self._vpc(ref.address, derive(ref.name or ""), [], ref, r)
 
     @staticmethod
-    def _vpc(address: str, name: str, cidrs: list[str], remote: bool, res: Res) -> dict:
-        return {"address": address, "name": name, "cidrs": cidrs, "remote": remote,
+    def _vpc(address: str, name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
+        return {"address": address, "name": name, "cidrs": cidrs, "remote": ref.remote, "stack": ref.stack,
                 "file": res.block.file, "line": res.block.line}
 
-    def remote_vpc(self, name: str) -> str | None:
-        """Address of the remote VPC whose name prefixes an output name (`shared_vpc_private_subnet_ids`)."""
-        hyphenated = derive(name)
-        named = [(len(v["name"]), a) for a, v in self.vpcs.items() if v["remote"] and hyphenated.startswith(v["name"] + "-")]
+    def remote_vpc(self, ref: Ref) -> str | None:
+        """Address of the remote VPC of the same stack whose name prefixes an output name
+        (`shared_vpc_private_subnet_ids`)."""
+        hyphenated = derive(ref.name or "")
+        named = [(len(v["name"]), a) for a, v in self.vpcs.items()
+                 if v["remote"] and v["stack"] == ref.stack and hyphenated.startswith(v["name"] + "-")]
         return max(named)[1] if named else None
 
     def place(self, ref: Ref) -> tuple[str, str, str] | None:
         """(vpc address, tier, what decided the tier) for a subnet reference, None when either is unknown."""
         if ref.remote:
-            tier, vpc = tier_in(ref.name or ""), self.remote_vpc(ref.name or "")
+            tier, vpc = tier_in(ref.name or ""), self.remote_vpc(ref)
             return (vpc, tier, ref.name or "") if vpc and tier else None
         subnet = self.by_address[ref.address]
         if subnet.type != "aws_subnet":

@@ -48,20 +48,11 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
     _mark_shared(out, facts, groups, notes)
 
 
-STACK_OUTPUT = re.compile(r"data\.(?:tfe_outputs|terraform_remote_state)\.(\w+)\.")
-
-
-def _stack(network: dict) -> str | None:
-    """The stack a network fact is read from (`networking` for `data.tfe_outputs.networking...`); None for a network
-    this stack creates or looks up itself."""
-    m = STACK_OUTPUT.match(network["address"]) if network["remote"] else None
-    return m[1] if m else None
-
-
 def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], notes: list[str]) -> None:
     """Set `shared_from` on each network group that another stack creates: it holds a placed node, and the networks its
-    nodes are placed in all come from other stacks' outputs. Warn when such a group sits in an account frame named
-    after that stack: the stack's nodes run in the stack's account."""
+    nodes are placed in and the network facts its evidence cites all come from other stacks' outputs. Evidence alone
+    never makes a group shared, but a cited local network keeps it local. Warn when such a group sits in an account
+    frame named after that stack: the stack's nodes run in the stack's account."""
     networks = {n["id"]: n for n in facts.get("networks", [])}
     networks_of: dict[str, set[str]] = defaultdict(set)
     for p in facts.get("placements", []):
@@ -73,27 +64,24 @@ def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], notes: list[st
     for g in groups.values():
         if g["kind"] != "network":
             continue
-        stacks = {_stack(networks[net]) for net in placed[g["id"]]}
-        if not stacks or None in stacks:
+        cited = {ev["fact"] for ev in g.get("evidence", []) if ev.get("fact") in networks}
+        stacks = {networks[net]["stack"] for net in placed[g["id"]] | cited}
+        if not placed[g["id"]] or None in stacks:
             continue
         g["shared_from"] = ", ".join(sorted(stacks))
         account = enclosing(groups, g["id"], "account")
         if account and any(_named_after(account["label"], s) for s in stacks):
             notes.append(f"group {g['id']}: shared network sits in account {account['id']} ({account['label']}), "
-                         f"named after the stack it comes from; draw it in the account of the stack's nodes")
+                         f"named after the stack it comes from; if the stack's nodes run in another account, draw it there")
 
 
 def _named_after(label: str, stack: str) -> bool:
-    """Whether an account label is the stack name, less `account`, `subscription` and account numbers, with each word
-    allowed to stem the other: `networking` names `Networking account`, `Network account` and `Networking
-    (123456789012)`, not `Shop network account`."""
-    label_words, stack_words = _words(label), _words(stack)
-
-    def stems(ws: list[str], others: list[str]) -> bool:
-        return all(any(w.startswith(o) or o.startswith(w) for o in others) for w in ws)
-
-    return bool(label_words) and stems(label_words, stack_words) and stems(stack_words, label_words)
+    """Whether an account label is the stack name, less `account`, `subscription` and account numbers, word by word
+    with a trailing `ing` or `s` dropped: `networking` names `Networking account`, `Network account` and `Networking
+    (123456789012)`, not `Shop network account` or `Net`."""
+    return _stems(label) == _stems(stack) != []
 
 
-def _words(name: str) -> list[str]:
-    return [w for w in re.findall(r"[a-z0-9]+", name.lower()) if w not in ("account", "subscription") and not w.isdigit()]
+def _stems(name: str) -> list[str]:
+    words = re.findall(r"[a-z0-9]+", name.lower())
+    return [re.sub(r"(ing|s)$", "", w) for w in words if w not in ("account", "subscription") and not w.isdigit()]

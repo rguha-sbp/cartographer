@@ -14,10 +14,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Ref:
-    """A local resource (`name` None) or a reference to another stack (`name` is its output or data source name)."""
+    """A local resource (`name` None) or a reference to another stack (`name` is its output or data source name).
+    `stack` names the stack whose outputs it reads (`networking` for `data.tfe_outputs.networking...`); a data source
+    lookup has none."""
 
     address: str
     name: str | None = None
+    stack: str | None = None
 
     @property
     def remote(self) -> bool:
@@ -27,7 +30,7 @@ class Ref:
 def token(heads: str, data: str) -> re.Pattern[str]:
     """A reference to a local resource whose type matches `heads`, a data source matching `data`, or a remote output."""
     return re.compile(
-        r"(?<![\w.\-])(?:(?P<remote>data\.(?:tfe_outputs|terraform_remote_state)\.\w+"
+        r"(?<![\w.\-])(?:(?P<remote>data\.(?:tfe_outputs|terraform_remote_state)\.(?P<stack>\w+)"
         rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.(?:{data})\.(?P<ds>\w+))"
         rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?:\[[^\]]*\])?(?:\.(?P<third>[\w-]+))?)"
     )
@@ -43,7 +46,7 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
         seen.add(key)
         head, second, third = m["head"], m["second"], m["third"]
         if m["remote"]:
-            out[Ref(m["remote"], m["out"] or m["ds"])] = None
+            out[Ref(m["remote"], m["out"] or m["ds"], m["stack"])] = None
         elif head == "var" and inst.parent is not None:
             for args in inst.args:
                 if second in args:

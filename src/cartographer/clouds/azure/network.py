@@ -68,19 +68,19 @@ class Network:
         return list(dict.fromkeys(found)) if all(isinstance(v, str) and CIDR.fullmatch(v) for v in found) else []  # type: ignore[arg-type]
 
     @staticmethod
-    def _net(address: str, name: str, cidrs: list[str], remote: bool, res: Res) -> dict:
-        return {"address": address, "name": name, "cidrs": cidrs, "remote": remote,
+    def _net(address: str, name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
+        return {"address": address, "name": name, "cidrs": cidrs, "remote": ref.remote, "stack": ref.stack,
                 "file": res.block.file, "line": res.block.line}
 
     def collect_networks(self) -> None:
         for r in self.ex.res:
             if r.type == "azurerm_virtual_network":
-                self.nets[r.address] = self._net(r.address, r.address.rsplit(".", 1)[1], self.cidrs(r), False, r)
+                self.nets[r.address] = self._net(r.address, r.address.rsplit(".", 1)[1], self.cidrs(r), Ref(r.address), r)
         for r in self.ex.res:
             for value in find(r.block.body, NETWORK_KEY):
                 for ref in self.refs(r.inst, value):
                     if ref.remote and ref.address not in self.nets:
-                        self.nets[ref.address] = self._net(ref.address, derive(ref.name or "", NAME_SUFFIXES), [], True, r)
+                        self.nets[ref.address] = self._net(ref.address, derive(ref.name or "", NAME_SUFFIXES), [], ref, r)
 
     def collect_subnets(self) -> None:
         for r in self.ex.res:
@@ -196,15 +196,17 @@ class Network:
         named = tier_in(" ".join(unq(x) for x in (s.body.get("name", ""), *tagged)))
         return (named, f"{s.address} name") if named else ("private", f"{s.address} default")
 
-    def remote_network(self, name: str) -> str | None:
-        """Address of the remote network whose name prefixes an output name (`shared_vnet_private_subnet_id`)."""
-        hyphenated = derive(name, NAME_SUFFIXES)
-        named = [(len(n["name"]), a) for a, n in self.nets.items() if n["remote"] and hyphenated.startswith(n["name"] + "-")]
+    def remote_network(self, ref: Ref) -> str | None:
+        """Address of the remote network of the same stack whose name prefixes an output name
+        (`shared_vnet_private_subnet_id`)."""
+        hyphenated = derive(ref.name or "", NAME_SUFFIXES)
+        named = [(len(n["name"]), a) for a, n in self.nets.items()
+                 if n["remote"] and n["stack"] == ref.stack and hyphenated.startswith(n["name"] + "-")]
         return max(named)[1] if named else None
 
     def place_remote(self, ref: Ref) -> tuple[str, str, str] | None:
         """(network address, tier, what decided the tier) for a subnet of another stack, None when either is unknown."""
-        tier, net = tier_in(ref.name or ""), self.remote_network(ref.name or "")
+        tier, net = tier_in(ref.name or ""), self.remote_network(ref)
         return (net, tier, ref.name or "") if net and tier else None
 
     def placements(self) -> list[dict]:

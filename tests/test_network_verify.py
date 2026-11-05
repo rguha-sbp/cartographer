@@ -200,7 +200,7 @@ def test_the_warning_holds_when_every_node_runs_in_the_shared_vpc() -> None:
     assert f"group shared: {WARNING} netacct" in report
 
 
-@pytest.mark.parametrize("label", ["Shop data account", "Shop network account", "Production"])
+@pytest.mark.parametrize("label", ["Shop data account", "Shop network account", "Production", "Net", "N"])
 def test_an_account_frame_not_named_after_the_stack_is_no_warning(label: str) -> None:
     curated = _shared_vpc(_group("acct2", "account", None, label=label), vpc_parent="acct2")
     _, report = _verify(curated)
@@ -240,8 +240,15 @@ def test_a_vpc_the_stack_creates_is_not_shared_even_citing_a_remote_fact() -> No
     assert "shared_from" not in _group_of(verified, "vpc")
 
 
+def test_a_vpc_whose_evidence_cites_a_local_network_is_not_shared() -> None:
+    curated = _shared_vpc(vpc_parent="acct", cidrs=VPC["cidrs"])
+    _group_of(curated, "shared")["evidence"] = [{"fact": VPC["id"]}]
+    verified, _ = _verify(curated)
+    assert "shared_from" not in _group_of(verified, "shared")
+
+
 def test_a_vpc_looked_up_by_a_data_source_is_not_shared() -> None:
-    lookup = {**REMOTE, "id": "n99", "address": "data.aws_vpc.shared"}
+    lookup = {**REMOTE, "id": "n99", "address": "data.aws_vpc.shared", "stack": None}
     placements = [{**p, "network": "n99"} if p["resource"] == SHARED_FN else p for p in FACTS["placements"]]
     facts = {**FACTS, "networks": [*FACTS["networks"], lookup], "placements": placements}
     verified, _ = _verify(_shared_vpc(vpc_parent="acct"), facts)

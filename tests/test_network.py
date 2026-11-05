@@ -35,7 +35,9 @@ def test_remote_vpc_found_through_module_variable() -> None:
     assert len(remote) == 1
     assert remote[0]["address"] == "data.tfe_outputs.networking.nonsensitive_values.shared_vpc_id"
     assert remote[0]["name"] == "shared-vpc"
+    assert remote[0]["stack"] == "networking"
     assert remote[0]["cidrs"] == []
+    assert _vpcs()["aws_vpc.main"]["stack"] is None
 
 
 def test_local_subnet_tiers() -> None:
@@ -86,3 +88,15 @@ def test_networks_replace_vpcs() -> None:
     assert "vpcs" not in facts and facts["networks"][0]["cloud"] == "aws"
     assert [n["id"] for n in facts["networks"]] == [f"n{i}" for i in range(1, len(facts["networks"]) + 1)]
     assert all(p["cloud"] == "aws" for p in facts["placements"])
+
+
+def test_a_remote_subnet_belongs_to_a_vpc_of_its_own_stack(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
+        'resource "aws_lambda_function" "a" {\n'
+        '  vpc_config { subnet_ids = data.tfe_outputs.platform.values.shared_vpc_private_subnet_ids }\n}\n'
+        'resource "aws_lambda_function" "b" {\n'
+        '  vpc_config { subnet_ids = data.tfe_outputs.networking.values.shared_vpc_private_subnet_ids }\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    placed = {p["resource"] for p in facts["placements"]}
+    assert placed == {"aws_lambda_function.b"}
