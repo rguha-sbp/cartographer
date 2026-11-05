@@ -65,7 +65,7 @@ def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], notes: list[st
         if g["kind"] != "network":
             continue
         cited = {ev["fact"] for ev in g.get("evidence", []) if ev.get("fact") in networks}
-        stacks = {networks[net]["stack"] for net in placed[g["id"]] | cited}
+        stacks = {networks[net].get("stack") for net in placed[g["id"]] | cited}
         if not placed[g["id"]] or None in stacks:
             continue
         g["shared_from"] = ", ".join(sorted(stacks))
@@ -84,4 +84,5 @@ def _named_after(label: str, stack: str) -> bool:
 
 def _stems(name: str) -> list[str]:
     words = re.findall(r"[a-z0-9]+", name.lower())
-    return [re.sub(r"(ing|s)$", "", w) for w in words if w not in ("account", "subscription") and not w.isdigit()]
+    stems = [re.sub(r"(ing|s)$", "", w) for w in words if not w.isdigit()]
+    return [w for w in stems if w not in ("account", "subscription")]

@@ -100,3 +100,27 @@ def test_a_remote_subnet_belongs_to_a_vpc_of_its_own_stack(tmp_path: Path) -> No
     facts = tf_extract.extract(Path("."), tmp_path)
     placed = {p["resource"] for p in facts["placements"]}
     assert placed == {"aws_lambda_function.b"}
+
+
+def test_a_remote_subnet_falls_back_to_a_looked_up_vpc(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.shared_vpc.id }\n'
+        'resource "aws_lambda_function" "a" {\n'
+        '  vpc_config { subnet_ids = data.tfe_outputs.networking.values.shared_vpc_private_subnet_ids }\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    ids = {n["address"]: n["id"] for n in facts["networks"]}
+    placed = [(p["resource"], p["network"]) for p in facts["placements"]]
+    assert placed == [("aws_lambda_function.a", ids["data.aws_vpc.shared_vpc"])]
+
+
+def test_the_stack_is_the_workspace_a_remote_state_names_literally(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'data "tfe_outputs" "this" {\n  workspace = "networking-prod"\n}\n'
+        'data "tfe_outputs" "other" {\n  workspace = var.workspace\n}\n'
+        'data "terraform_remote_state" "net" {\n  backend = "remote"\n  config = { workspaces = { name = "hub" } }\n}\n'
+        'resource "aws_security_group" "a" { vpc_id = data.tfe_outputs.this.values.a_vpc_id }\n'
+        'resource "aws_security_group" "b" { vpc_id = data.tfe_outputs.other.values.b_vpc_id }\n'
+        'resource "aws_security_group" "c" { vpc_id = data.terraform_remote_state.net.outputs.c_vpc_id }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    stacks = sorted((n["name"], n["stack"]) for n in facts["networks"])
+    assert stacks == [("a-vpc", "networking-prod"), ("b-vpc", "other"), ("c-vpc", "hub")]

@@ -139,7 +139,9 @@ def fix_network_groups(curated: dict, notes: list[str]) -> None:
         if g["kind"] != "network" and "cidrs" in g:
             notes.append(f"group {g['id']}: cidrs on a group that is not a network, dropped")
             del g["cidrs"]
-        g.pop("shared_from", None)
+        if "shared_from" in g:
+            notes.append(f"group {g['id']}: shared_from is set by verify, not the curator, dropped")
+            del g["shared_from"]
         if g["kind"] == "subnet" and "tier" not in g:
             notes.append(f"group {g['id']}: subnet without a tier, now a plain group")
             _demote(g)

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 TIERS = ("isolated", "private", "public")
 CIDR = re.compile(r"\d{1,3}(\.\d{1,3}){3}/\d{1,2}")
+LITERAL = re.compile(r'"[\w.\-]+"')  # a quoted HCL string without interpolation
 
 if TYPE_CHECKING:
     from cartographer.tf_modules import Inst
@@ -15,8 +16,8 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class Ref:
     """A local resource (`name` None) or a reference to another stack (`name` is its output or data source name).
-    `stack` names the stack whose outputs it reads (`networking` for `data.tfe_outputs.networking...`); a data source
-    lookup has none."""
+    `stack` names the stack whose outputs it reads: the workspace its remote state data source names literally, else
+    that data source's name (`networking` for `data.tfe_outputs.networking...`); a data source lookup has none."""
 
     address: str
     name: str | None = None
@@ -30,7 +31,7 @@ class Ref:
 def token(heads: str, data: str) -> re.Pattern[str]:
     """A reference to a local resource whose type matches `heads`, a data source matching `data`, or a remote output."""
     return re.compile(
-        r"(?<![\w.\-])(?:(?P<remote>data\.(?:tfe_outputs|terraform_remote_state)\.(?P<stack>\w+)"
+        r"(?<![\w.\-])(?:(?P<remote>data\.(?P<kind>tfe_outputs|terraform_remote_state)\.(?P<state>\w+)"
         rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.(?:{data})\.(?P<ds>\w+))"
         rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?:\[[^\]]*\])?(?:\.(?P<third>[\w-]+))?)"
     )
@@ -46,7 +47,7 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
         seen.add(key)
         head, second, third = m["head"], m["second"], m["third"]
         if m["remote"]:
-            out[Ref(m["remote"], m["out"] or m["ds"], m["stack"])] = None
+            out[Ref(m["remote"], m["out"] or m["ds"], stack(inst, m["kind"], m["state"]) if m["kind"] else None)] = None
         elif head == "var" and inst.parent is not None:
             for args in inst.args:
                 if second in args:
@@ -59,6 +60,29 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
         elif (head, second) in inst.mod.resources:
             out[Ref(f"{inst.prefix}{head}.{second}")] = None
     return out
+
+
+def stack(inst: Inst, kind: str, name: str) -> str:
+    """The workspace the remote state data source `kind`.`name` reads when its body names it literally
+    (`workspace = "networking-prod"`, or `config = { workspaces = { name = ... } }`), else `name`."""
+    block = inst.mod.data.get((kind, name))
+    body = block.body if block else {}
+    if kind == "tfe_outputs":
+        named = body.get("workspace")
+    else:
+        config = body.get("config")
+        workspaces = config.get("workspaces") if isinstance(config, dict) else None
+        named = workspaces.get("name") if isinstance(workspaces, dict) else None
+    return named.strip('"') if isinstance(named, str) and LITERAL.fullmatch(named) else name
+
+
+def remote_owner(networks: dict[str, dict], ref: Ref, hyphenated: str) -> str | None:
+    """Address of the remote network whose name prefixes `hyphenated`, the output name `ref` reads
+    (`shared-vpc-private-subnet-ids`), the longest name first. A network of another stack never matches; a lookup
+    (stack None) matches a subnet of any stack, after a network of its own stack."""
+    named = [(n["stack"] == ref.stack, len(n["name"]), a) for a, n in networks.items()
+             if n["remote"] and n["stack"] in (ref.stack, None) and hyphenated.startswith(n["name"] + "-")]
+    return max(named)[2] if named else None
 
 
 def blocks(value: Any) -> list[dict]:

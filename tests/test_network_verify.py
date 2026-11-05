@@ -186,7 +186,7 @@ def test_a_shared_vpc_in_the_account_frame_named_after_its_stack_is_a_warning() 
     assert group_claims(curated) <= group_claims(verified)  # a warning, it does not stop the build
 
 
-@pytest.mark.parametrize("label", ["Network account", "Networking (123456789012)", "networking"])
+@pytest.mark.parametrize("label", ["Network account", "Networking (123456789012)", "networking", "Networking accounts"])
 def test_an_account_frame_with_a_variant_of_the_stack_name_is_a_warning(label: str) -> None:
     curated = _shared_vpc(_group("netacct", "account", None, label=label))
     _, report = _verify(curated)
@@ -258,9 +258,10 @@ def test_a_vpc_looked_up_by_a_data_source_is_not_shared() -> None:
 def test_a_curated_shared_from_is_replaced_by_the_tools() -> None:
     curated = _shared_vpc(vpc_parent="acct", shared_from="Security account")
     _group_of(curated, "apps")["shared_from"] = "anything"
-    verified, _ = _verify(curated)
+    verified, report = _verify(curated)
     assert _group_of(verified, "shared")["shared_from"] == "networking"
     assert "shared_from" not in _group_of(verified, "apps")
+    assert "group apps: shared_from is set by verify, not the curator, dropped" in report
 
 
 def test_a_shared_vpc_keeps_its_title_note_when_its_cidrs_drop() -> None:
