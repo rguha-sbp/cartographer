@@ -145,6 +145,9 @@ def fix_network_groups(curated: dict, notes: list[str]) -> None:
             if g["kind"] != "network" and claim in g:
                 notes.append(f"group {g['id']}: {claim} on a group that is not a network, dropped")
                 del g[claim]
+        if contains_secret(g.get("owner")):
+            notes.append(f"group {g['id']}: owner {SECRET_REASON}, dropped")
+            del g["owner"]
         if g["kind"] == "subnet" and "tier" not in g:
             notes.append(f"group {g['id']}: subnet without a tier, now a plain group")
             _demote(g)
@@ -177,12 +180,13 @@ def check_claims(curated: dict, notes: list[str], supported: Supported) -> None:
 
 
 def group_claims(diagram: dict) -> set[tuple]:
-    """Network claims the diagram makes: network cidrs, owners and parents, subnet tiers and parents, nodes inside a
+    """Network claims the diagram makes: network cidrs, owners and accounts, subnet tiers and parents, nodes inside a
     subnet."""
     groups = {g["id"]: g for g in diagram["groups"]}
     claims = {("cidrs", g["id"], tuple(g["cidrs"])) for g in diagram["groups"] if g.get("cidrs")}
     claims |= {("owner", g["id"], g["owner"]) for g in diagram["groups"] if g.get("owner")}
-    claims |= {("network", g["id"], g["parent"]) for g in diagram["groups"] if g["kind"] == "network"}
+    claims |= {("account", g["id"], (enclosing(groups, g["id"], "account") or {}).get("id"))
+               for g in diagram["groups"] if g["kind"] == "network"}
     claims |= {("subnet", g["id"], g.get("tier"), g["parent"]) for g in diagram["groups"] if g["kind"] == "subnet"}
     claims |= {("inside", n["id"], n["group"]) for n in diagram["nodes"] if enclosing(groups, n["group"], "subnet")}
     return claims

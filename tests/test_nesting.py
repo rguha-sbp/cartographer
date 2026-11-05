@@ -103,7 +103,6 @@ def test_vpc_label_carries_its_cidrs() -> None:
     assert _rendered(_shop())[0].count("shop-vpc (10.0.0.0/16)") == 1
 
 
-
 def test_a_shared_vpc_label_names_the_account_that_owns_it() -> None:
     curated = _shop()
     del curated["groups"][3]["cidrs"]

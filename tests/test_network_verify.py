@@ -147,6 +147,7 @@ def test_edges_cannot_cite_network_facts() -> None:
 
 SHARED_FN = "module.worker.aws_lambda_function.fn"
 NOWHERE = "aws_instance.lost"
+NAMES_OWNER = {"file": "infra/main.tf", "line": 83, "contains": "tfe_outputs.networking"}
 
 
 def _shared_vpc(*account_groups: dict, vpc_parent: str = "netacct", **vpc: object) -> dict:
@@ -156,7 +157,7 @@ def _shared_vpc(*account_groups: dict, vpc_parent: str = "netacct", **vpc: objec
             _group("acct", "account", None),
             *account_groups,
             _group("apps", None, "acct"),
-            _group("shared", "network", vpc_parent, evidence=[{"fact": REMOTE["id"]}], **vpc),
+            _group("shared", "network", vpc_parent, evidence=[{"fact": REMOTE["id"]}, NAMES_OWNER], **vpc),
             _group("priv", "subnet", "shared", tier="private", evidence=[{"fact": PLACED[SHARED_FN]}]),
             _group("work", None, "priv"),
         ],
@@ -173,7 +174,7 @@ def test_a_shared_vpc_in_an_account_frame_of_its_own_moves_into_the_stacks_accou
     assert _group_of(verified, "shared")["parent"] == "acct"
     assert "netacct" not in {g["id"] for g in verified["groups"]}
     assert "group shared: shared network sat in account netacct" in report
-    assert "group netacct: empty after the move, removed" in report
+    assert "group netacct: no node left after the move, removed" in report
     assert tf_verify.needs_attention(curated, verified)
 
 
@@ -182,7 +183,50 @@ def test_frames_left_empty_by_the_move_go_too() -> None:
     curated = _shared_vpc(region, {**NETWORKING, "parent": "netregion"})
     verified, report = _verify(curated)
     assert {g["id"] for g in verified["groups"]} == {"acct", "apps", "shared", "priv", "work"}
-    assert "group netregion: empty after the move, removed" in report
+    assert "group netregion: no node left after the move, removed" in report
+
+
+def test_the_owner_account_frame_goes_with_the_empty_role_groups_in_it() -> None:
+    curated = _shared_vpc(NETWORKING, _group("netrole", None, "netacct"), vpc_parent="netrole")
+    verified, _ = _verify(curated)
+    assert _group_of(verified, "shared")["parent"] == "acct"
+    assert {g["id"] for g in verified["groups"]} == {"acct", "apps", "shared", "priv", "work"}
+
+
+def test_the_move_stays_in_the_region_of_the_shared_vpc() -> None:
+    curated = _shared_vpc(
+        _group("eu", "region", None, label="eu-west-1"),
+        _group("us", "region", None, label="us-east-1"),
+        _group("acct2", "account", "us"),
+        _group("usapps", None, "acct2"),
+        {**NETWORKING, "parent": "eu"},
+    )
+    curated["groups"][0]["parent"] = "eu"
+    curated["nodes"] += [_node("misc", "aws_instance.misc", "usapps"), _node("orders", "aws_instance.orders", "usapps")]
+    verified, _ = _verify(curated)
+    assert _group_of(verified, "shared")["parent"] == "acct"
+
+
+def test_a_node_without_placement_in_the_shared_vpc_keeps_it_shared() -> None:
+    curated = _shared_vpc(vpc_parent="acct", owner="Networking account")
+    curated["nodes"].append(_node("sg", "module.worker.aws_security_group.sg", "shared"))
+    verified, _ = _verify(curated)
+    assert _group_of(verified, "shared")["owner"] == "Networking account"
+
+
+def test_owner_needs_a_code_citation() -> None:
+    curated = _shared_vpc(vpc_parent="acct", owner="Networking account")
+    _group_of(curated, "shared")["evidence"] = [{"fact": REMOTE["id"]}]
+    verified, report = _verify(curated)
+    assert "owner" not in _group_of(verified, "shared")
+    assert "group shared: owner dropped, no code citation names the owning account" in report
+
+
+def test_an_owner_that_looks_like_a_secret_is_dropped() -> None:
+    curated = _shared_vpc(vpc_parent="acct", owner="password = hunter2hunter2")
+    verified, report = _verify(curated)
+    assert "owner" not in _group_of(verified, "shared")
+    assert "group shared: owner looks like a secret, dropped" in report
 
 
 def test_a_shared_vpc_never_moves_into_an_account_of_another_cloud() -> None:
@@ -222,7 +266,6 @@ def test_owner_on_a_group_that_is_not_a_network_is_dropped() -> None:
     verified, report = _verify(curated)
     assert "owner" not in _group_of(verified, "pub")
     assert "group pub: owner on a group that is not a network, dropped" in report
-
 
 
 def _described(**over: object) -> dict:

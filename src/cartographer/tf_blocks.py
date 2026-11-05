@@ -19,14 +19,20 @@ Curated = dict[str, Any]
 Size = tuple[int, int]
 
 
-def empty_blocks(curated: Curated) -> list[str]:
-    """Ids of blocks (groups that are not frames) with no nodes of their own and no non-empty child block."""
+def live_groups(curated: Curated) -> set[str]:
+    """Ids of the groups that hold a node, directly or in a group below them."""
     parent = {g["id"]: g["parent"] for g in curated["groups"]}
     live: set[str] = set()
     for gid in {n["group"] for n in curated["nodes"]}:
         while gid in parent and gid not in live:
             live.add(gid)
             gid = parent[gid]
+    return live
+
+
+def empty_blocks(curated: Curated) -> list[str]:
+    """Ids of blocks (groups that are not frames) with no nodes of their own and no non-empty child block."""
+    live = live_groups(curated)
     return [g["id"] for g in curated["groups"] if g["kind"] not in FRAMES and g["id"] not in live]
 
 
@@ -48,7 +54,9 @@ def box_size(n: dict[str, Any]) -> Size:
 
 def group_label(g: dict[str, Any]) -> str:
     """A group's title: a VPC also names its address ranges and, when it is shared, the account that owns it."""
-    notes = [*g.get("cidrs", []), *([f"in {g['owner']}"] if g.get("owner") else [])]
+    notes = list(g.get("cidrs", []))
+    if g.get("owner"):
+        notes.append(f"in {g['owner']}")
     return f"{g['label']} ({', '.join(notes)})" if notes else g["label"]
 
 
