@@ -223,12 +223,13 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   (`data.tfe_outputs.<name>` or `data.terraform_remote_state.<name>`). The stack is the workspace that data source
   names literally (`workspace`, or `config.workspaces.name`), else `<name>`. Curated evidence alone is not proof, but
   a cited local network keeps the group local. A remote subnet output places a resource in a remote VPC of the same
-  stack first, else in a VPC a data source looks up, never in a VPC of another stack. `shared_from` is that stack name. A VPC this stack creates or looks up with a data source gets none. Terraform does
+  stack first. A data source lookup on either side matches any stack; a VPC of another stack never matches. `shared_from` is that stack name. A VPC this stack creates or looks up with a data source gets none. Terraform does
   not say which account owns a shared VPC, so the title names the stack, not an account. Verify drops any curated
   `shared_from` first, in both modes, with a note. This check runs after nodes without a matching placement leave their subnet.
-  - The report warns when a shared network sits in an account frame whose label is the stack's name (less the words
+  - The report warns when a shared network sits in an account frame whose label starts with the stack's name, or the
+    stack's name with the label (less the words
     account and subscription, their plurals and account numbers, each word less a trailing `ing` or `s`), for example "Networking
-    account" or "Network account" around a VPC from `data.tfe_outputs.networking`. The
+    account" or "Network account" around a VPC from `data.tfe_outputs.networking` or from workspace `networking-prod`. The
     tool moves nothing, and the warning does not stop `build`; review rule 17 gets it fixed.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.
 

@@ -5,6 +5,7 @@ import pytest
 
 from cartographer import tf_extract, tf_verify, verify_description
 from cartographer.curated_format import FRAME_KINDS
+from cartographer.tf_network_check import named_after
 from cartographer.verify_shared import cloud_warnings, group_claims
 
 REPO = Path(__file__).parent / "fixtures" / "network"
@@ -391,3 +392,13 @@ def test_described_mode_drops_a_curated_shared_from() -> None:
     curated["groups"][1]["shared_from"] = "networking"
     verified, _ = verify_description.verify(curated, Path("."))
     assert "shared_from" not in _group_of(verified, "vpc")
+
+
+@pytest.mark.parametrize(("label", "stack", "named"), [
+    ("Networking account", "networking-prod", True),
+    ("Networking prod account", "networking", True),
+    ("Shop network account", "networking-prod", False),
+    ("Production", "networking-prod", False),
+])
+def test_an_account_label_is_named_after_a_stack_that_starts_with_the_same_words(label: str, stack: str, named: bool) -> None:
+    assert named_after(label, stack) is named

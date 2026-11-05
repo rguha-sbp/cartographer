@@ -124,3 +124,27 @@ def test_the_stack_is_the_workspace_a_remote_state_names_literally(tmp_path: Pat
     facts = tf_extract.extract(Path("."), tmp_path)
     stacks = sorted((n["name"], n["stack"]) for n in facts["networks"])
     assert stacks == [("a-vpc", "networking-prod"), ("b-vpc", "other"), ("c-vpc", "hub")]
+
+
+def test_a_subnet_lookup_falls_back_to_a_vpc_of_another_stack(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
+        'resource "aws_lambda_function" "a" {\n'
+        '  vpc_config { subnet_ids = data.aws_subnets.shared_vpc_private.ids }\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [(p["resource"], p["tier"]) for p in facts["placements"]] == [("aws_lambda_function.a", "private")]
+
+
+def test_each_module_reads_the_workspace_its_own_data_source_names(tmp_path: Path) -> None:
+    for name in ("a", "b"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "main.tf").write_text(
+            f'data "tfe_outputs" "net" {{\n  workspace = "net-{name}"\n}}\n'
+            'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.net.values.shared_vpc_id }\n'
+            'resource "aws_lambda_function" "fn" {\n'
+            '  vpc_config { subnet_ids = data.tfe_outputs.net.values.shared_vpc_private_subnet_ids }\n}\n')
+    (tmp_path / "main.tf").write_text('module "a" { source = "./a" }\nmodule "b" { source = "./b" }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    stack = {n["id"]: n["stack"] for n in facts["networks"]}
+    assert {(p["resource"], stack[p["network"]]) for p in facts["placements"]} == {
+        ("module.a.aws_lambda_function.fn", "net-a"), ("module.b.aws_lambda_function.fn", "net-b")}

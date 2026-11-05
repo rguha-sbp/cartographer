@@ -47,7 +47,7 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
         seen.add(key)
         head, second, third = m["head"], m["second"], m["third"]
         if m["remote"]:
-            out[Ref(m["remote"], m["out"] or m["ds"], stack(inst, m["kind"], m["state"]) if m["kind"] else None)] = None
+            out[Ref(f"{inst.prefix}{m['remote']}", m["out"] or m["ds"], stack(inst, m["kind"], m["state"]) if m["kind"] else None)] = None
         elif head == "var" and inst.parent is not None:
             for args in inst.args:
                 if second in args:
@@ -78,10 +78,11 @@ def stack(inst: Inst, kind: str, name: str) -> str:
 
 def remote_owner(networks: dict[str, dict], ref: Ref, hyphenated: str) -> str | None:
     """Address of the remote network whose name prefixes `hyphenated`, the output name `ref` reads
-    (`shared-vpc-private-subnet-ids`), the longest name first. A network of another stack never matches; a lookup
-    (stack None) matches a subnet of any stack, after a network of its own stack."""
+    (`shared-vpc-private-subnet-ids`), the longest name first. Stacks must not conflict: a network of the same stack
+    comes first, and a lookup (stack None) on either side matches any stack."""
     named = [(n["stack"] == ref.stack, len(n["name"]), a) for a, n in networks.items()
-             if n["remote"] and n["stack"] in (ref.stack, None) and hyphenated.startswith(n["name"] + "-")]
+             if n["remote"] and (n["stack"] == ref.stack or None in (n["stack"], ref.stack))
+             and hyphenated.startswith(n["name"] + "-")]
     return max(named)[2] if named else None
 
 

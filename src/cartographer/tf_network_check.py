@@ -70,16 +70,19 @@ def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], notes: list[st
             continue
         g["shared_from"] = ", ".join(sorted(stacks))
         account = enclosing(groups, g["id"], "account")
-        if account and any(_named_after(account["label"], s) for s in stacks):
+        if account and any(named_after(account["label"], s) for s in stacks):
             notes.append(f"group {g['id']}: shared network sits in account {account['id']} ({account['label']}), "
                          f"named after the stack it comes from; if the stack's nodes run in another account, draw it there")
 
 
-def _named_after(label: str, stack: str) -> bool:
-    """Whether an account label is the stack name, less `account`, `subscription` and account numbers, word by word
-    with a trailing `ing` or `s` dropped: `networking` names `Networking account`, `Network account` and `Networking
-    (123456789012)`, not `Shop network account` or `Net`."""
-    return _stems(label) == _stems(stack) != []
+def named_after(label: str, stack: str) -> bool:
+    """Whether an account label and the stack name start with the same words, less `account`, `subscription` and
+    account numbers, each word with a trailing `ing` or `s` dropped: `networking` names `Networking account`, `Network
+    account` and `Networking (123456789012)`, `networking-prod` names `Networking account`, and neither names
+    `Shop network account` or `Net`."""
+    words, stack_words = _stems(label), _stems(stack)
+    shorter = min(len(words), len(stack_words))
+    return shorter > 0 and words[:shorter] == stack_words[:shorter]
 
 
 def _stems(name: str) -> list[str]:
