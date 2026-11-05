@@ -47,7 +47,7 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
         seen.add(key)
         head, second, third = m["head"], m["second"], m["third"]
         if m["remote"]:
-            out[Ref(f"{inst.prefix}{m['remote']}", m["out"] or m["ds"], stack(inst, m["kind"], m["state"]) if m["kind"] else None)] = None
+            out[Ref(m["remote"], m["out"] or m["ds"], stack(inst, m["kind"], m["state"]) if m["kind"] else None)] = None
         elif head == "var" and inst.parent is not None:
             for args in inst.args:
                 if second in args:
@@ -64,14 +64,15 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
 
 def stack(inst: Inst, kind: str, name: str) -> str:
     """The workspace or state the remote state data source `kind`.`name` reads when its body names it literally
-    (`config.workspaces.name`, then `config.key` less `.tfstate`, then `workspace`), else `name`."""
+    (`config.workspaces.name`, then `config.key` less its `terraform.tfstate` file or `.tfstate` suffix, then
+    `workspace`), else `name`."""
     block = inst.mod.data.get((kind, name))
     body = block.body if block else {}
     config = body.get("config") if isinstance(body.get("config"), dict) else {}
     workspaces = config.get("workspaces") if isinstance(config.get("workspaces"), dict) else {}
     for named in (workspaces.get("name"), config.get("key"), body.get("workspace")):
         if isinstance(named, str) and LITERAL.fullmatch(named):
-            return named.strip('"').removesuffix(".tfstate")
+            return re.sub(r"/?(terraform)?\.tfstate$", "", named.strip('"')) or name
     return name
 
 
@@ -82,11 +83,10 @@ def network_fact(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
 
 
 def add_remote(networks: dict[str, dict], ref: Ref, res: Res, suffixes: str = "ids?") -> None:
-    """Record the network a remote reference reads, once per stack and name: modules that read the same output of one
-    stack share its network."""
-    name = derive(ref.name or "", suffixes)
-    if not any(n["remote"] and (n["stack"], n["name"]) == (ref.stack, name) for n in networks.values()):
-        networks[ref.address] = network_fact(name, [], ref, res)
+    """Record the network a remote reference reads, once per address: every module that reads the output shares it,
+    and the first reader's stack names it."""
+    if ref.address not in networks:
+        networks[ref.address] = network_fact(derive(ref.name or "", suffixes), [], ref, res)
 
 
 def place_remote(networks: dict[str, dict], ref: Ref, suffixes: str = "ids?") -> tuple[str, str, str] | None:

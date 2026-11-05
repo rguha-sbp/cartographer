@@ -225,8 +225,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   runs after nodes without a matching placement leave their subnet.
   - A network fact read from another stack's outputs (`data.tfe_outputs.<name>` or
     `data.terraform_remote_state.<name>`) carries the stack: the first literal of `config.workspaces.name`,
-    `config.key` less `.tfstate` and `workspace`, else `<name>`. Remote addresses carry the module prefix, and modules
-    that read the same output of one stack share one network fact.
+    `config.key` less its `terraform.tfstate` file or `.tfstate` suffix, and `workspace`, else `<name>`. Modules that
+    read the same output share one network fact, and the first reader's stack names it.
   - A remote subnet output places a resource in a remote VPC whose name prefixes the output name: one of its own stack
     first, else any other, so a stack name that differs between two readers of one workspace loses no placement.
   - The report warns when a shared network sits in an account frame whose label starts with the stack's name, or the
