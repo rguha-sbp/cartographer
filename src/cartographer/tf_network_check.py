@@ -64,9 +64,9 @@ def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], notes: list[st
     for g in groups.values():
         if g["kind"] != "network":
             continue
-        cited = {ev["fact"] for ev in g.get("evidence", []) if ev.get("fact") in networks}
-        stacks = {networks[net].get("stack") for net in placed[g["id"]] | cited}
-        if not placed[g["id"]] or None in stacks:
+        stacks = {networks[net].get("stack") for net in placed[g["id"]]}
+        cites_local = any(networks[ev["fact"]].get("stack") is None for ev in g.get("evidence", []) if ev.get("fact") in networks)
+        if not stacks or None in stacks or cites_local:
             continue
         g["shared_from"] = ", ".join(sorted(stacks))
         account = enclosing(groups, g["id"], "account")

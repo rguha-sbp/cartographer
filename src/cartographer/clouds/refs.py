@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING, Any
 
 TIERS = ("isolated", "private", "public")
 CIDR = re.compile(r"\d{1,3}(\.\d{1,3}){3}/\d{1,2}")
-LITERAL = re.compile(r'"[\w.\-]+"')  # a quoted HCL string without interpolation
+LITERAL = re.compile(r'"[\w./\-]+"')  # a quoted HCL string without interpolation
 
 if TYPE_CHECKING:
-    from cartographer.tf_modules import Inst
+    from cartographer.tf_modules import Inst, Res
 
 
 @dataclass(frozen=True)
@@ -63,27 +63,40 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
 
 
 def stack(inst: Inst, kind: str, name: str) -> str:
-    """The workspace the remote state data source `kind`.`name` reads when its body names it literally
-    (`workspace = "networking-prod"`, or `config = { workspaces = { name = ... } }`), else `name`."""
+    """The workspace or state the remote state data source `kind`.`name` reads when its body names it literally
+    (`config.workspaces.name`, then `config.key` less `.tfstate`, then `workspace`), else `name`."""
     block = inst.mod.data.get((kind, name))
     body = block.body if block else {}
-    if kind == "tfe_outputs":
-        named = body.get("workspace")
-    else:
-        config = body.get("config")
-        workspaces = config.get("workspaces") if isinstance(config, dict) else None
-        named = workspaces.get("name") if isinstance(workspaces, dict) else None
-    return named.strip('"') if isinstance(named, str) and LITERAL.fullmatch(named) else name
+    config = body.get("config") if isinstance(body.get("config"), dict) else {}
+    workspaces = config.get("workspaces") if isinstance(config.get("workspaces"), dict) else {}
+    for named in (workspaces.get("name"), config.get("key"), body.get("workspace")):
+        if isinstance(named, str) and LITERAL.fullmatch(named):
+            return named.strip('"').removesuffix(".tfstate")
+    return name
 
 
-def remote_owner(networks: dict[str, dict], ref: Ref, hyphenated: str) -> str | None:
-    """Address of the remote network whose name prefixes `hyphenated`, the output name `ref` reads
-    (`shared-vpc-private-subnet-ids`), the longest name first. Stacks must not conflict: a network of the same stack
-    comes first, and a lookup (stack None) on either side matches any stack."""
+def network_fact(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
+    """A network fact for the network `ref` is or reads, cited at `res`."""
+    return {"address": ref.address, "name": name, "cidrs": cidrs, "remote": ref.remote, "stack": ref.stack,
+            "file": res.block.file, "line": res.block.line}
+
+
+def add_remote(networks: dict[str, dict], ref: Ref, res: Res, suffixes: str = "ids?") -> None:
+    """Record the network a remote reference reads, once per stack and name: modules that read the same output of one
+    stack share its network."""
+    name = derive(ref.name or "", suffixes)
+    if not any(n["remote"] and (n["stack"], n["name"]) == (ref.stack, name) for n in networks.values()):
+        networks[ref.address] = network_fact(name, [], ref, res)
+
+
+def place_remote(networks: dict[str, dict], ref: Ref, suffixes: str = "ids?") -> tuple[str, str, str] | None:
+    """(network address, tier, what decided the tier) for a subnet another stack or a lookup gives, None when either
+    is unknown. The network is a remote one whose name prefixes the output name (`shared-vpc` for
+    `shared_vpc_private_subnet_ids`): one of the reference's own stack before any other, then the longest name."""
+    name, tier = derive(ref.name or "", suffixes), tier_in(ref.name or "")
     named = [(n["stack"] == ref.stack, len(n["name"]), a) for a, n in networks.items()
-             if n["remote"] and (n["stack"] == ref.stack or None in (n["stack"], ref.stack))
-             and hyphenated.startswith(n["name"] + "-")]
-    return max(named)[2] if named else None
+             if n["remote"] and name.startswith(n["name"] + "-")]
+    return (max(named)[2], tier, ref.name or "") if named and tier else None
 
 
 def blocks(value: Any) -> list[dict]:

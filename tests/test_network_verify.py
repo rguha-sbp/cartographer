@@ -402,3 +402,12 @@ def test_described_mode_drops_a_curated_shared_from() -> None:
 ])
 def test_an_account_label_is_named_after_a_stack_that_starts_with_the_same_words(label: str, stack: str, named: bool) -> None:
     assert named_after(label, stack) is named
+
+
+def test_a_cited_remote_network_of_another_stack_does_not_join_the_title() -> None:
+    other = {**REMOTE, "id": "n98", "address": "data.tfe_outputs.platform.values.edge_vpc_id", "stack": "platform"}
+    facts = {**FACTS, "networks": [*FACTS["networks"], other]}
+    curated = _shared_vpc(vpc_parent="acct")
+    _group_of(curated, "shared")["evidence"].append({"fact": "n98"})
+    verified, _ = _verify(curated, facts)
+    assert _group_of(verified, "shared")["shared_from"] == "networking"

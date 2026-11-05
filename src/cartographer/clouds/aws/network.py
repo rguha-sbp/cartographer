@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from cartographer.clouds.refs import CIDR, Ref, derive, remote_owner, sources, tier_in, token
+from cartographer.clouds.refs import CIDR, Ref, add_remote, network_fact, place_remote, sources, tier_in, token
 from cartographer.tf_policies import unq
 from cartographer.tf_values import find
 
@@ -50,23 +50,17 @@ class Network:
     def collect_vpcs(self) -> None:
         for r in self.ex.res:
             if r.type == "aws_vpc":
-                self.vpcs[r.address] = self._vpc(r.address.rsplit(".", 1)[1], self.cidrs(r), Ref(r.address), r)
+                self.vpcs[r.address] = network_fact(r.address.rsplit(".", 1)[1], self.cidrs(r), Ref(r.address), r)
         for r in self.ex.res:
             for value in find(r.block.body, VPC_KEY):
                 for ref in sources(r.inst, value, TOKEN):
-                    if ref.remote and ref.address not in self.vpcs:
-                        self.vpcs[ref.address] = self._vpc(derive(ref.name or ""), [], ref, r)
-
-    @staticmethod
-    def _vpc(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
-        return {"address": ref.address, "name": name, "cidrs": cidrs, "remote": ref.remote, "stack": ref.stack,
-                "file": res.block.file, "line": res.block.line}
+                    if ref.remote:
+                        add_remote(self.vpcs, ref, r)
 
     def place(self, ref: Ref) -> tuple[str, str, str] | None:
         """(vpc address, tier, what decided the tier) for a subnet reference, None when either is unknown."""
         if ref.remote:
-            tier, vpc = tier_in(ref.name or ""), remote_owner(self.vpcs, ref, derive(ref.name or ""))
-            return (vpc, tier, ref.name or "") if vpc and tier else None
+            return place_remote(self.vpcs, ref)
         subnet = self.by_address[ref.address]
         if subnet.type != "aws_subnet":
             return None

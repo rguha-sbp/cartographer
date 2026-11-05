@@ -218,14 +218,17 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - `unshown` facts of kind iam/trigger/route between two shown nodes that no curated edge covers (recall hints)
   - IAM-only vs code-only mismatches for code-cited edges
 - Shared networks (`tf_network_check`): verify sets `shared_from` on a network group that another stack creates. The
-  group must hold a placed node. The networks its nodes are placed in (placement facts) and the network facts its
-  evidence cites must all carry a `stack`: the network fact sets it when it is read from another stack's outputs
-  (`data.tfe_outputs.<name>` or `data.terraform_remote_state.<name>`). The stack is the workspace that data source
-  names literally (`workspace`, or `config.workspaces.name`), else `<name>`. Curated evidence alone is not proof, but
-  a cited local network keeps the group local. A remote subnet output places a resource in a remote VPC of the same
-  stack first. A data source lookup on either side matches any stack; a VPC of another stack never matches. `shared_from` is that stack name. A VPC this stack creates or looks up with a data source gets none. Terraform does
-  not say which account owns a shared VPC, so the title names the stack, not an account. Verify drops any curated
-  `shared_from` first, in both modes, with a note. This check runs after nodes without a matching placement leave their subnet.
+  group must hold a placed node, and the networks its nodes are placed in (placement facts) must all carry a `stack`.
+  `shared_from` joins those stacks. Curated evidence adds no stack, but a cited network without one (a local VPC or a
+  data source lookup) keeps the group unshared. Terraform does not say which account owns a shared VPC, so the title
+  names the stack, not an account. Verify drops any curated `shared_from` first, in both modes, with a note. This check
+  runs after nodes without a matching placement leave their subnet.
+  - A network fact read from another stack's outputs (`data.tfe_outputs.<name>` or
+    `data.terraform_remote_state.<name>`) carries the stack: the first literal of `config.workspaces.name`,
+    `config.key` less `.tfstate` and `workspace`, else `<name>`. Remote addresses carry the module prefix, and modules
+    that read the same output of one stack share one network fact.
+  - A remote subnet output places a resource in a remote VPC whose name prefixes the output name: one of its own stack
+    first, else any other, so a stack name that differs between two readers of one workspace loses no placement.
   - The report warns when a shared network sits in an account frame whose label starts with the stack's name, or the
     stack's name with the label (less the words
     account and subscription, their plurals and account numbers, each word less a trailing `ing` or `s`), for example "Networking

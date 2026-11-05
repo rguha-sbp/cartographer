@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from cartographer.clouds.refs import CIDR, Ref, blocks, derive, remote_owner, sources, tier_in, token
+from cartographer.clouds.refs import CIDR, Ref, add_remote, blocks, network_fact, place_remote, sources, tier_in, token
 from cartographer.tf_policies import unq
 from cartographer.tf_values import find, text
 
@@ -67,20 +67,15 @@ class Network:
         found = [self.ex.value(vnet.inst, v) for v in (raw if isinstance(raw, list) else [raw])]
         return list(dict.fromkeys(found)) if all(isinstance(v, str) and CIDR.fullmatch(v) for v in found) else []  # type: ignore[arg-type]
 
-    @staticmethod
-    def _net(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
-        return {"address": ref.address, "name": name, "cidrs": cidrs, "remote": ref.remote, "stack": ref.stack,
-                "file": res.block.file, "line": res.block.line}
-
     def collect_networks(self) -> None:
         for r in self.ex.res:
             if r.type == "azurerm_virtual_network":
-                self.nets[r.address] = self._net(r.address.rsplit(".", 1)[1], self.cidrs(r), Ref(r.address), r)
+                self.nets[r.address] = network_fact(r.address.rsplit(".", 1)[1], self.cidrs(r), Ref(r.address), r)
         for r in self.ex.res:
             for value in find(r.block.body, NETWORK_KEY):
                 for ref in self.refs(r.inst, value):
-                    if ref.remote and ref.address not in self.nets:
-                        self.nets[ref.address] = self._net(derive(ref.name or "", NAME_SUFFIXES), [], ref, r)
+                    if ref.remote:
+                        add_remote(self.nets, ref, r, NAME_SUFFIXES)
 
     def collect_subnets(self) -> None:
         for r in self.ex.res:
@@ -196,11 +191,6 @@ class Network:
         named = tier_in(" ".join(unq(x) for x in (s.body.get("name", ""), *tagged)))
         return (named, f"{s.address} name") if named else ("private", f"{s.address} default")
 
-    def place_remote(self, ref: Ref) -> tuple[str, str, str] | None:
-        """(network address, tier, what decided the tier) for a subnet of another stack, None when either is unknown."""
-        tier, net = tier_in(ref.name or ""), remote_owner(self.nets, ref, derive(ref.name or "", NAME_SUFFIXES))
-        return (net, tier, ref.name or "") if net and tier else None
-
     def placements(self) -> list[dict]:
         found: dict[tuple[str, str, str], tuple[str, Res]] = {}
         for r in self.ex.res:
@@ -212,7 +202,7 @@ class Network:
                     found.setdefault((r.address, s.network, tier), (via, r))
             for value in find(r.block.body, SUBNET_KEY):
                 for ref in self.refs(r.inst, value):
-                    if ref.remote and (placed := self.place_remote(ref)):
+                    if ref.remote and (placed := place_remote(self.nets, ref, NAME_SUFFIXES)):
                         found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
         return [{"resource": address, "network": net, "tier": tier, "via": via, "file": r.block.file, "line": r.block.line}
                 for (address, net, tier), (via, r) in sorted(found.items())]
