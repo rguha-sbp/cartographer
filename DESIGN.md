@@ -225,15 +225,16 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   runs after nodes without a matching placement leave their subnet.
   - A network fact read from another stack's outputs (`data.tfe_outputs.<name>` or
     `data.terraform_remote_state.<name>`) carries the stack: the first literal of `config.workspaces.name`,
-    `config.key` less its `terraform.tfstate` file or `.tfstate` suffix, and `workspace`, else `<name>`. Modules that
+    `config.key` less its `terraform.tfstate` file or `.tfstate` suffix (also `.terraform.tfstate`), and `workspace`, else `<name>`. Modules that
     read the same output share one network fact, and the first reader's stack names it.
   - A remote subnet output places a resource in a remote VPC whose name prefixes the output name: one of its own stack
-    first, else any other, so a stack name that differs between two readers of one workspace loses no placement.
-  - The report warns when a shared network sits in an account frame whose label starts with the stack's name, or the
-    stack's name with the label (less the words
-    account and subscription, their plurals and account numbers, each word less a trailing `ing` or `s`), for example "Networking
-    account" or "Network account" around a VPC from `data.tfe_outputs.networking` or from workspace `networking-prod`. The
-    tool moves nothing, and the warning does not stop `build`; review rule 17 gets it fixed.
+    first, else any other (a subnet lookup has no stack, so the longest name decides), so a stack name that differs between two readers of one workspace loses no placement.
+  - The report warns when a shared network sits in an account frame whose label has the same words as the stack's
+    name, less the words account, subscription and terraform, environment words (prod, dev, test and the like) and
+    account numbers, each word less a trailing `ing` or `s`. For example "Networking account" or "Network account"
+    around a VPC from `data.tfe_outputs.networking`, workspace `networking-prod` or state key
+    `prod/networking/terraform.tfstate`; "Prod account" around a VPC from `prod-networking` is no warning. The tool
+    moves nothing, and the warning does not stop `build`; review rule 17 gets it fixed.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.
 
 ## tf_layout.py (stage 4)

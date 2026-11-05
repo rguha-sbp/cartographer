@@ -399,8 +399,10 @@ def test_described_mode_drops_a_curated_shared_from() -> None:
     ("Networking prod account", "networking", True),
     ("Shop network account", "networking-prod", False),
     ("Production", "networking-prod", False),
+    ("Networking account", "prod/networking", True),
+    ("Prod account", "prod-networking", False),
 ])
-def test_an_account_label_is_named_after_a_stack_that_starts_with_the_same_words(label: str, stack: str, named: bool) -> None:
+def test_an_account_label_is_named_after_a_stack_with_the_same_words_less_environments(label: str, stack: str, named: bool) -> None:
     assert named_after(label, stack) is named
 
 

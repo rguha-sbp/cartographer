@@ -48,6 +48,10 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
     _mark_shared(out, facts, groups, notes)
 
 
+ENVIRONMENTS = {"prod", "production", "prd", "dev", "development", "develop", "test", "tst", "acc", "acceptance", "stag",
+                "stage", "qa", "uat", "sandbox", "nonprod"}  # stems, as `_stems` leaves them
+
+
 def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], notes: list[str]) -> None:
     """Set `shared_from` on each network group that another stack creates: it holds a placed node, and the networks its
     nodes are placed in and the network facts its evidence cites all come from other stacks' outputs. Evidence alone
@@ -75,17 +79,17 @@ def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], notes: list[st
                          f"named after the stack it comes from; if the stack's nodes run in another account, draw it there")
 
 
+IGNORED = {"account", "subscription", "terraform", *ENVIRONMENTS}
+
+
 def named_after(label: str, stack: str) -> bool:
-    """Whether an account label and the stack name start with the same words, less `account`, `subscription` and
-    account numbers, each word with a trailing `ing` or `s` dropped: `networking` names `Networking account`, `Network
-    account` and `Networking (123456789012)`, `networking-prod` names `Networking account`, and neither names
-    `Shop network account` or `Net`."""
-    words, stack_words = _stems(label), _stems(stack)
-    shorter = min(len(words), len(stack_words))
-    return shorter > 0 and words[:shorter] == stack_words[:shorter]
+    """Whether an account label and the stack name have the same words, less IGNORED words and account numbers, each
+    word with a trailing `ing` or `s` dropped: `networking`, `networking-prod` and `prod/networking` name
+    `Networking account`, `Network account` and `Networking (123456789012)`; none names `Shop network account`,
+    `Prod account` or `Net`."""
+    return _stems(label) == _stems(stack) != []
 
 
 def _stems(name: str) -> list[str]:
-    words = re.findall(r"[a-z0-9]+", name.lower())
-    stems = [re.sub(r"(ing|s)$", "", w) for w in words if not w.isdigit()]
-    return [w for w in stems if w not in ("account", "subscription")]
+    stems = [re.sub(r"(ing|s)$", "", w) for w in re.findall(r"[a-z0-9]+", name.lower()) if not w.isdigit()]
+    return [w for w in stems if w not in IGNORED]

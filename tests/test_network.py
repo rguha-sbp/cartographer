@@ -140,13 +140,15 @@ def test_the_stack_is_the_workspace_a_remote_state_names_literally(tmp_path: Pat
         'data "tfe_outputs" "other" {\n  workspace = var.workspace\n}\n'
         'data "terraform_remote_state" "net" {\n  backend = "remote"\n  config = { workspaces = { name = "hub" } }\n}\n'
         'data "terraform_remote_state" "s3" {\n  backend = "s3"\n  config = { key = "core/terraform.tfstate" }\n}\n'
+        'data "terraform_remote_state" "az" {\n  backend = "azurerm"\n  config = { key = "edge.terraform.tfstate" }\n}\n'
         'resource "aws_security_group" "a" { vpc_id = data.tfe_outputs.this.values.a_vpc_id }\n'
         'resource "aws_security_group" "b" { vpc_id = data.tfe_outputs.other.values.b_vpc_id }\n'
         'resource "aws_security_group" "c" { vpc_id = data.terraform_remote_state.net.outputs.c_vpc_id }\n'
-        'resource "aws_security_group" "d" { vpc_id = data.terraform_remote_state.s3.outputs.d_vpc_id }\n')
+        'resource "aws_security_group" "d" { vpc_id = data.terraform_remote_state.s3.outputs.d_vpc_id }\n'
+        'resource "aws_security_group" "e" { vpc_id = data.terraform_remote_state.az.outputs.e_vpc_id }\n')
     facts = tf_extract.extract(Path("."), tmp_path)
     stacks = sorted((n["name"], n["stack"]) for n in facts["networks"])
-    assert stacks == [("a-vpc", "networking-prod"), ("b-vpc", "other"), ("c-vpc", "hub"), ("d-vpc", "core")]
+    assert stacks == [("a-vpc", "networking-prod"), ("b-vpc", "other"), ("c-vpc", "hub"), ("d-vpc", "core"), ("e-vpc", "edge")]
 
 
 def test_a_subnet_lookup_falls_back_to_a_vpc_of_another_stack(tmp_path: Path) -> None:
@@ -168,3 +170,13 @@ def test_a_subnet_in_one_module_belongs_to_a_remote_vpc_another_module_reads(tmp
     facts = tf_extract.extract(Path("."), tmp_path)
     assert [n["address"] for n in facts["networks"]] == ["data.tfe_outputs.networking.values.shared_vpc_id"]
     assert [p["resource"] for p in facts["placements"]] == ["module.b.aws_lambda_function.fn"]
+
+
+def test_a_subnet_lookup_goes_to_the_remote_vpc_with_the_longest_name(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_security_group" "a" { vpc_id = data.aws_vpc.shared.id }\n'
+        'resource "aws_security_group" "b" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
+        'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = data.aws_subnets.shared_vpc_private.ids }\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    stack = {n["id"]: n["stack"] for n in facts["networks"]}
+    assert [stack[p["network"]] for p in facts["placements"]] == ["networking"]

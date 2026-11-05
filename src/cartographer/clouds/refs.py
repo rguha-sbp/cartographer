@@ -72,7 +72,7 @@ def stack(inst: Inst, kind: str, name: str) -> str:
     workspaces = config.get("workspaces") if isinstance(config.get("workspaces"), dict) else {}
     for named in (workspaces.get("name"), config.get("key"), body.get("workspace")):
         if isinstance(named, str) and LITERAL.fullmatch(named):
-            return re.sub(r"/?(terraform)?\.tfstate$", "", named.strip('"')) or name
+            return re.sub(r"[/.]?(terraform)?\.tfstate$", "", named.strip('"')) or name
     return name
 
 
@@ -92,9 +92,10 @@ def add_remote(networks: dict[str, dict], ref: Ref, res: Res, suffixes: str = "i
 def place_remote(networks: dict[str, dict], ref: Ref, suffixes: str = "ids?") -> tuple[str, str, str] | None:
     """(network address, tier, what decided the tier) for a subnet another stack or a lookup gives, None when either
     is unknown. The network is a remote one whose name prefixes the output name (`shared-vpc` for
-    `shared_vpc_private_subnet_ids`): one of the reference's own stack before any other, then the longest name."""
+    `shared_vpc_private_subnet_ids`): one of the reference's own stack before any other, then the longest name. A
+    lookup has no stack, so the longest name alone decides."""
     name, tier = derive(ref.name or "", suffixes), tier_in(ref.name or "")
-    named = [(n["stack"] == ref.stack, len(n["name"]), a) for a, n in networks.items()
+    named = [(ref.stack is not None and n["stack"] == ref.stack, len(n["name"]), a) for a, n in networks.items()
              if n["remote"] and name.startswith(n["name"] + "-")]
     return (max(named)[2], tier, ref.name or "") if named and tier else None
 
