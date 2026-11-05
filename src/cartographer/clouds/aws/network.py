@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from cartographer.clouds.refs import CIDR, Ref, derive, sources, tier_in, token
+from cartographer.clouds.refs import CIDR, Ref, add_remote, network_fact, place_remote, sources, tier_in, token
 from cartographer.tf_policies import unq
 from cartographer.tf_values import find
 
@@ -50,34 +50,22 @@ class Network:
     def collect_vpcs(self) -> None:
         for r in self.ex.res:
             if r.type == "aws_vpc":
-                self.vpcs[r.address] = self._vpc(r.address, r.address.rsplit(".", 1)[1], self.cidrs(r), False, r)
+                self.vpcs[r.address] = network_fact(r.address.rsplit(".", 1)[1], self.cidrs(r), Ref(r.address), r)
         for r in self.ex.res:
             for value in find(r.block.body, VPC_KEY):
                 for ref in sources(r.inst, value, TOKEN):
-                    if ref.remote and ref.address not in self.vpcs:
-                        self.vpcs[ref.address] = self._vpc(ref.address, derive(ref.name or ""), [], True, r)
-
-    @staticmethod
-    def _vpc(address: str, name: str, cidrs: list[str], remote: bool, res: Res) -> dict:
-        return {"address": address, "name": name, "cidrs": cidrs, "remote": remote,
-                "file": res.block.file, "line": res.block.line}
-
-    def remote_vpc(self, name: str) -> str | None:
-        """Address of the remote VPC whose name prefixes an output name (`shared_vpc_private_subnet_ids`)."""
-        hyphenated = derive(name)
-        named = [(len(v["name"]), a) for a, v in self.vpcs.items() if v["remote"] and hyphenated.startswith(v["name"] + "-")]
-        return max(named)[1] if named else None
+                    if ref.remote:
+                        add_remote(self.vpcs, ref, r)
 
     def place(self, ref: Ref) -> tuple[str, str, str] | None:
         """(vpc address, tier, what decided the tier) for a subnet reference, None when either is unknown."""
         if ref.remote:
-            tier, vpc = tier_in(ref.name or ""), self.remote_vpc(ref.name or "")
-            return (vpc, tier, ref.name or "") if vpc and tier else None
+            return place_remote(self.vpcs, ref)
         subnet = self.by_address[ref.address]
         if subnet.type != "aws_subnet":
             return None
         tier, how = _local_tier(subnet)
-        vpc = next((r.address for r in sources(subnet.inst, subnet.block.body.get("vpc_id"), TOKEN) if r.address in self.vpcs), None)
+        vpc = next((r.key for r in sources(subnet.inst, subnet.block.body.get("vpc_id"), TOKEN) if r.key in self.vpcs), None)
         return (vpc, tier, f"{ref.address} {how}") if vpc else None
 
     def placements(self) -> list[dict]:
@@ -96,4 +84,4 @@ class Network:
 def network_facts(ex: Extractor) -> dict:
     net = Network(ex)
     net.collect_vpcs()
-    return {"networks": [v for _, v in sorted(net.vpcs.items())], "placements": net.placements()}
+    return {"networks": dict(sorted(net.vpcs.items())), "placements": net.placements()}

@@ -231,6 +231,10 @@
               "null"
             ]
           },
+          "shared_from": {
+            "description": "Set by verify on a network frame that another stack creates: the stack it is read from. The frame title shows it; a curated value is dropped.",
+            "type": "string"
+          },
           "tier": {
             "description": "Subnet frame only: the tier of the subnets it stands for.",
             "enum": [

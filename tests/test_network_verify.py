@@ -5,7 +5,8 @@ import pytest
 
 from cartographer import tf_extract, tf_verify, verify_description
 from cartographer.curated_format import FRAME_KINDS
-from cartographer.verify_shared import cloud_warnings
+from cartographer.tf_network_check import named_after
+from cartographer.verify_shared import cloud_warnings, group_claims
 
 REPO = Path(__file__).parent / "fixtures" / "network"
 FACTS = tf_extract.extract(Path("infra"), REPO)
@@ -42,8 +43,8 @@ def _curated(**over: object) -> dict:
     return {**curated, **over}
 
 
-def _verify(curated: dict) -> tuple[dict, str]:
-    return tf_verify.verify(FACTS, curated, REPO)
+def _verify(curated: dict, facts: dict = FACTS) -> tuple[dict, str]:
+    return tf_verify.verify(facts, curated, REPO)
 
 
 def _group_of(verified: dict, gid: str) -> dict:
@@ -143,6 +144,145 @@ def test_edges_cannot_cite_network_facts() -> None:
     verified, report = _verify(curated)
     assert verified["edges"] == []
     assert "is not an edge fact" in report
+
+
+SHARED_FN = "module.worker.aws_lambda_function.fn"
+NOWHERE = "aws_instance.lost"
+
+
+def _shared_vpc(*account_groups: dict, vpc_parent: str = "netacct", **vpc: object) -> dict:
+    """The worker Lambda in the shared VPC, whose frame sits in `vpc_parent`, and a node outside any network in `acct`."""
+    return _curated(
+        groups=[
+            _group("acct", "account", None),
+            *account_groups,
+            _group("apps", None, "acct"),
+            _group("shared", "network", vpc_parent, evidence=[{"fact": REMOTE["id"]}], **vpc),
+            _group("priv", "subnet", "shared", tier="private", evidence=[{"fact": PLACED[SHARED_FN]}]),
+            _group("work", None, "priv"),
+        ],
+        nodes=[_node("fn", SHARED_FN, "work"), _node("vm", NOWHERE, "apps")],
+    )
+
+
+NETWORKING = _group("netacct", "account", None, label="Networking account")
+
+
+WARNING = "shared network sits in account"
+
+
+def test_a_shared_vpc_names_the_stack_it_comes_from() -> None:
+    curated = _shared_vpc(vpc_parent="acct")
+    verified, report = _verify(curated)
+    assert _group_of(verified, "shared")["shared_from"] == "networking"
+    assert WARNING not in report
+    assert group_claims(curated) == group_claims(verified)  # the title note is the tool's, not a curated claim
+
+
+def test_a_shared_vpc_in_the_account_frame_named_after_its_stack_is_a_warning() -> None:
+    curated = _shared_vpc(NETWORKING)
+    verified, report = _verify(curated)
+    assert _group_of(verified, "shared")["parent"] == "netacct"
+    assert "group shared: shared network sits in account netacct (Networking account), named after the stack" in report
+    assert group_claims(curated) <= group_claims(verified)  # a warning, it does not stop the build
+
+
+@pytest.mark.parametrize("label", ["Network account", "Networking (123456789012)", "networking", "Networking accounts"])
+def test_an_account_frame_with_a_variant_of_the_stack_name_is_a_warning(label: str) -> None:
+    curated = _shared_vpc(_group("netacct", "account", None, label=label))
+    _, report = _verify(curated)
+    assert f"group shared: {WARNING} netacct" in report
+
+
+def test_the_warning_holds_when_every_node_runs_in_the_shared_vpc() -> None:
+    curated = _shared_vpc(NETWORKING)
+    curated["nodes"] = curated["nodes"][:1]
+    _, report = _verify(curated)
+    assert f"group shared: {WARNING} netacct" in report
+
+
+@pytest.mark.parametrize("label", ["Shop data account", "Shop network account", "Production", "Net", "N"])
+def test_an_account_frame_not_named_after_the_stack_is_no_warning(label: str) -> None:
+    curated = _shared_vpc(_group("acct2", "account", None, label=label), vpc_parent="acct2")
+    _, report = _verify(curated)
+    assert WARNING not in report
+
+
+def test_placements_make_a_vpc_shared_without_evidence() -> None:
+    curated = _shared_vpc(NETWORKING)
+    _group_of(curated, "shared")["evidence"] = []
+    verified, report = _verify(curated)
+    assert _group_of(verified, "shared")["shared_from"] == "networking"
+    assert f"group shared: {WARNING} netacct" in report
+
+
+def test_a_cited_remote_fact_alone_does_not_make_it_shared() -> None:
+    curated = _shared_vpc(vpc_parent="acct")
+    curated["nodes"] = [_node("sg", "module.worker.aws_security_group.sg", "shared"), curated["nodes"][1]]
+    verified, _ = _verify(curated)
+    assert "shared_from" not in _group_of(verified, "shared")
+
+
+def test_a_node_moved_out_of_its_subnet_does_not_make_the_network_shared() -> None:
+    stray = {"id": "p99", "resource": NOWHERE, "network": REMOTE["id"], "tier": "public", "via": "x",
+             "file": "infra/main.tf", "line": 1}
+    curated = _shared_vpc(vpc_parent="acct")
+    curated["nodes"] = [_node("vm", NOWHERE, "work")]
+    verified, report = _verify(curated, {**FACTS, "placements": [*FACTS["placements"], stray]})
+    assert "vm: no private placement fact, moved out of subnet group priv" in report
+    assert "shared_from" not in _group_of(verified, "shared")
+
+
+def test_a_vpc_the_stack_creates_is_not_shared_even_citing_a_remote_fact() -> None:
+    curated = _curated()
+    curated["groups"][1]["evidence"].append({"fact": REMOTE["id"]})
+    curated["nodes"] = [_node("sg", "module.worker.aws_security_group.sg", "vpc")]
+    verified, _ = _verify(curated)
+    assert "shared_from" not in _group_of(verified, "vpc")
+
+
+def test_a_vpc_whose_evidence_cites_a_local_network_is_not_shared() -> None:
+    curated = _shared_vpc(vpc_parent="acct", cidrs=VPC["cidrs"])
+    _group_of(curated, "shared")["evidence"] = [{"fact": VPC["id"]}]
+    verified, _ = _verify(curated)
+    assert "shared_from" not in _group_of(verified, "shared")
+
+
+def test_a_cited_local_network_keeps_a_vpc_local_after_its_unsupported_cidrs_drop() -> None:
+    curated = _shared_vpc(vpc_parent="acct", cidrs=["192.0.2.0/24"])
+    _group_of(curated, "shared")["evidence"] = [{"fact": VPC["id"]}]
+    verified, report = _verify(curated)
+    assert "cidrs" not in _group_of(verified, "shared") and "cidrs dropped" in report
+    assert "shared_from" not in _group_of(verified, "shared")
+
+
+def test_a_vpc_looked_up_by_a_data_source_is_not_shared() -> None:
+    lookup = {**REMOTE, "id": "n99", "address": "data.aws_vpc.shared", "stack": None}
+    placements = [{**p, "network": "n99"} if p["resource"] == SHARED_FN else p for p in FACTS["placements"]]
+    facts = {**FACTS, "networks": [*FACTS["networks"], lookup], "placements": placements}
+    verified, _ = _verify(_shared_vpc(vpc_parent="acct"), facts)
+    assert "shared_from" not in _group_of(verified, "shared")
+
+
+def test_a_curated_shared_from_is_replaced_by_the_tools() -> None:
+    curated = _shared_vpc(vpc_parent="acct", shared_from="Security account")
+    _group_of(curated, "apps")["shared_from"] = "anything"
+    verified, report = _verify(curated)
+    assert _group_of(verified, "shared")["shared_from"] == "networking"
+    assert "shared_from" not in _group_of(verified, "apps")
+    assert "group apps: shared_from is set by verify, not the curator, dropped" in report
+
+
+def test_a_shared_vpc_keeps_its_title_note_when_its_cidrs_drop() -> None:
+    verified, _ = _verify(_shared_vpc(vpc_parent="acct", cidrs=["10.9.0.0/16"]))
+    assert "cidrs" not in _group_of(verified, "shared")
+    assert _group_of(verified, "shared")["shared_from"] == "networking"
+
+
+def test_a_vpc_the_stack_creates_gets_no_title_note() -> None:
+    verified, report = _verify(_curated())
+    assert "shared_from" not in _group_of(verified, "vpc")
+    assert "Warnings (0)" in report
 
 
 def _described(**over: object) -> dict:
@@ -253,3 +393,32 @@ def test_an_external_icon_of_another_cloud_than_its_frame_is_a_warning() -> None
     diagram = {"groups": [frame], "nodes": [],
                "externals": [{"id": "x", "group": "f", "icon": "aws:lambda"}, {"id": "y", "group": None, "icon": "aws:lambda"}]}
     assert cloud_warnings(diagram) == ["x: icon aws:lambda belongs to aws, its frame to azure"]
+
+
+def test_described_mode_drops_a_curated_shared_from() -> None:
+    curated = _described()
+    curated["groups"][1]["shared_from"] = "networking"
+    verified, _ = verify_description.verify(curated, Path("."))
+    assert "shared_from" not in _group_of(verified, "vpc")
+
+
+@pytest.mark.parametrize(("label", "stack", "named"), [
+    ("Networking account", "networking-prod", True),
+    ("Networking prod account", "networking", True),
+    ("Shop network account", "networking-prod", False),
+    ("Production", "networking-prod", False),
+    ("Networking account", "prod/networking", True),
+    ("Prod account", "prod-networking", False),
+    ("Shared networking account", "networking-shared", True),
+])
+def test_an_account_label_is_named_after_a_stack_with_the_same_words_less_environments(label: str, stack: str, named: bool) -> None:
+    assert named_after(label, stack) is named
+
+
+def test_a_cited_remote_network_of_another_stack_does_not_join_the_title() -> None:
+    other = {**REMOTE, "id": "n98", "address": "data.tfe_outputs.platform.values.edge_vpc_id", "stack": "platform"}
+    facts = {**FACTS, "networks": [*FACTS["networks"], other]}
+    curated = _shared_vpc(vpc_parent="acct")
+    _group_of(curated, "shared")["evidence"].append({"fact": "n98"})
+    verified, _ = _verify(curated, facts)
+    assert _group_of(verified, "shared")["shared_from"] == "networking"

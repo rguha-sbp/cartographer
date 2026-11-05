@@ -46,6 +46,7 @@ The numbers of the Layer 7 rules did not change when the list was split, so a fi
 12. [curation] Workloads are visually separate: each application or service boundary has its own frame, and unrelated services do not share one. Fix: split or merge role groups.
 13. [curation] No frame holds a single node only because nesting allows it. Fix: drop the frame and put the node in its parent.
 14. [curation] No Availability Zone is drawn on L7: one icon per service, never one per AZ or subnet.
+17. [curation] A VPC that another stack or account shares sits in the stack's account frame, and only its title names where it comes from, for example `shared-vpc (shared from networking)`. No account frame stands for the owner, and no subnet or workload label names it. Fix: move the `network` group into the stack's account and cite its remote `networks` fact.
 
 ## C4: every view
 
