@@ -186,6 +186,13 @@ def test_a_shared_vpc_in_the_account_frame_named_after_its_stack_is_a_warning() 
     assert group_claims(curated) <= group_claims(verified)  # a warning, it does not stop the build
 
 
+@pytest.mark.parametrize("label", ["Network account", "Networking (123456789012)", "networking"])
+def test_an_account_frame_with_a_variant_of_the_stack_name_is_a_warning(label: str) -> None:
+    curated = _shared_vpc(_group("netacct", "account", None, label=label))
+    _, report = _verify(curated)
+    assert f"group shared: {WARNING} netacct" in report
+
+
 def test_the_warning_holds_when_every_node_runs_in_the_shared_vpc() -> None:
     curated = _shared_vpc(NETWORKING)
     curated["nodes"] = curated["nodes"][:1]
@@ -208,11 +215,21 @@ def test_placements_make_a_vpc_shared_without_evidence() -> None:
     assert f"group shared: {WARNING} netacct" in report
 
 
-def test_with_no_placed_node_the_cited_remote_fact_makes_it_shared() -> None:
+def test_a_cited_remote_fact_alone_does_not_make_it_shared() -> None:
     curated = _shared_vpc(vpc_parent="acct")
     curated["nodes"] = [_node("sg", "module.worker.aws_security_group.sg", "shared"), curated["nodes"][1]]
     verified, _ = _verify(curated)
-    assert _group_of(verified, "shared")["shared_from"] == "networking"
+    assert "shared_from" not in _group_of(verified, "shared")
+
+
+def test_a_node_moved_out_of_its_subnet_does_not_make_the_network_shared() -> None:
+    stray = {"id": "p99", "resource": NOWHERE, "network": REMOTE["id"], "tier": "public", "via": "x",
+             "file": "infra/main.tf", "line": 1}
+    curated = _shared_vpc(vpc_parent="acct")
+    curated["nodes"] = [_node("vm", NOWHERE, "work")]
+    verified, report = _verify(curated, {**FACTS, "placements": [*FACTS["placements"], stray]})
+    assert "vm: no private placement fact, moved out of subnet group priv" in report
+    assert "shared_from" not in _group_of(verified, "shared")
 
 
 def test_a_vpc_the_stack_creates_is_not_shared_even_citing_a_remote_fact() -> None:
@@ -225,11 +242,9 @@ def test_a_vpc_the_stack_creates_is_not_shared_even_citing_a_remote_fact() -> No
 
 def test_a_vpc_looked_up_by_a_data_source_is_not_shared() -> None:
     lookup = {**REMOTE, "id": "n99", "address": "data.aws_vpc.shared"}
-    curated = _shared_vpc(vpc_parent="acct")
-    curated["nodes"] = [_node("sg", "module.worker.aws_security_group.sg", "shared"), curated["nodes"][1]]
-    _group_of(curated, "shared")["evidence"] = [{"fact": "n99"}]
-    facts = {**FACTS, "networks": [*FACTS["networks"], lookup]}
-    verified, _ = _verify(curated, facts)
+    placements = [{**p, "network": "n99"} if p["resource"] == SHARED_FN else p for p in FACTS["placements"]]
+    facts = {**FACTS, "networks": [*FACTS["networks"], lookup], "placements": placements}
+    verified, _ = _verify(_shared_vpc(vpc_parent="acct"), facts)
     assert "shared_from" not in _group_of(verified, "shared")
 
 
@@ -242,9 +257,7 @@ def test_a_curated_shared_from_is_replaced_by_the_tools() -> None:
 
 
 def test_a_shared_vpc_keeps_its_title_note_when_its_cidrs_drop() -> None:
-    curated = _shared_vpc(vpc_parent="acct", cidrs=["10.9.0.0/16"])
-    curated["nodes"] = [_node("sg", "module.worker.aws_security_group.sg", "shared"), curated["nodes"][1]]
-    verified, _ = _verify(curated)
+    verified, _ = _verify(_shared_vpc(vpc_parent="acct", cidrs=["10.9.0.0/16"]))
     assert "cidrs" not in _group_of(verified, "shared")
     assert _group_of(verified, "shared")["shared_from"] == "networking"
 
