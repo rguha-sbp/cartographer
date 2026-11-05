@@ -1,6 +1,6 @@
 """What the Terraform and the description verification share: structure checks, code citations and the report."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from cartographer import icons
@@ -63,15 +63,18 @@ def declared_icon(item: dict) -> None:
         item.update(decided_by="curator", marked=True)
 
 
-def frame_cloud(groups: dict[str, dict], gid: str | None) -> str | None:
-    """The cloud of the nearest enclosing frame."""
+def ancestors(groups: dict[str, dict], gid: str | None) -> Iterator[dict]:
+    """Group `gid` and the groups it sits inside, innermost first; the walk stops at an unknown id or a parent loop."""
     seen: set[str] = set()
     while gid in groups and gid not in seen:
         seen.add(gid)
-        if groups[gid]["kind"] in FRAME_KINDS:
-            return groups[gid].get("cloud")
+        yield groups[gid]
         gid = groups[gid]["parent"]
-    return None
+
+
+def frame_cloud(groups: dict[str, dict], gid: str | None) -> str | None:
+    """The cloud of the nearest enclosing frame."""
+    return next((g.get("cloud") for g in ancestors(groups, gid) if g["kind"] in FRAME_KINDS), None)
 
 
 def cloud_warnings(diagram: dict) -> list[str]:
@@ -104,21 +107,12 @@ def check_assumptions(curated: dict, node_ids: set[str], edges: list[dict]) -> t
 
 def enclosing(groups: dict[str, dict], gid: str | None, kind: str) -> dict | None:
     """The group of `kind` that `gid` is, or sits inside."""
-    seen: set[str] = set()
-    while gid in groups and gid not in seen:
-        seen.add(gid)
-        if groups[gid]["kind"] == kind:
-            return groups[gid]
-        gid = groups[gid]["parent"]
-    return None
+    return next((g for g in ancestors(groups, gid) if g["kind"] == kind), None)
 
 
 def outside_network(groups: dict[str, dict], subnet: dict) -> str | None:
     """The nearest ancestor of a subnet group that is not a network or subnet frame."""
-    gid = subnet["parent"]
-    while gid in groups and groups[gid]["kind"] in NETWORK_KINDS:
-        gid = groups[gid]["parent"]
-    return gid if gid in groups else None
+    return next((g["id"] for g in ancestors(groups, subnet["parent"]) if g["kind"] not in NETWORK_KINDS), None)
 
 
 def _demote(group: dict) -> None:
@@ -135,7 +129,8 @@ def fix_clouds(curated: dict, notes: list[str]) -> None:
 
 
 def fix_network_groups(curated: dict, notes: list[str]) -> None:
-    """Drop `tier` and `cidrs` from groups they do not belong to; a subnet group needs a tier and a network parent."""
+    """Drop `tier`, `cidrs` and `owner` from groups they do not belong to, and an `owner` that looks like a secret; a
+    subnet group needs a tier and a network parent."""
     groups = {g["id"]: g for g in curated["groups"]}
     for g in curated["groups"]:
         if g["kind"] != "subnet" and "tier" in g:
@@ -180,13 +175,10 @@ def check_claims(curated: dict, notes: list[str], supported: Supported) -> None:
 
 
 def group_claims(diagram: dict) -> set[tuple]:
-    """Network claims the diagram makes: network cidrs, owners and accounts, subnet tiers and parents, nodes inside a
-    subnet."""
+    """Network claims the diagram makes: network cidrs and owners, subnet tiers and parents, nodes inside a subnet."""
     groups = {g["id"]: g for g in diagram["groups"]}
     claims = {("cidrs", g["id"], tuple(g["cidrs"])) for g in diagram["groups"] if g.get("cidrs")}
     claims |= {("owner", g["id"], g["owner"]) for g in diagram["groups"] if g.get("owner")}
-    claims |= {("account", g["id"], (enclosing(groups, g["id"], "account") or {}).get("id"))
-               for g in diagram["groups"] if g["kind"] == "network"}
     claims |= {("subnet", g["id"], g.get("tier"), g["parent"]) for g in diagram["groups"] if g["kind"] == "subnet"}
     claims |= {("inside", n["id"], n["group"]) for n in diagram["nodes"] if enclosing(groups, n["group"], "subnet")}
     return claims

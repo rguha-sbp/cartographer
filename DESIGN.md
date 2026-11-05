@@ -217,12 +217,13 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - `unshown` facts of kind iam/trigger/route between two shown nodes that no curated edge covers (recall hints)
   - IAM-only vs code-only mismatches for code-cited edges
 - Shared networks (`tf_network_check`): a network group is shared when its placed nodes all run only in `remote`
-  networks (their placement facts). The tool keeps `owner` only on a shared network whose evidence holds a code
-  citation that checks out, and never when it looks like a secret. A shared network in an account frame that holds
-  none of the stack's other nodes moves to the account frame that holds the most of them, in the same cloud and, when
-  both sit in a region frame, the same region label. The tool then removes the frames the move leaves without a node,
-  with the groups inside them. With a single account frame it changes nothing. The account a network sits in is a
-  network claim, so a move makes `build` stop for a new curation.
+  networks (their placement facts). With no placed node, a `remote` network fact in its evidence makes it shared. The
+  tool keeps `owner` only on a shared network whose evidence holds a code citation that checks out and whose
+  `contains` text names the owner (the owner's letters and digits, less the word account). It drops an `owner` that
+  looks like a secret. A shared network in an account frame that holds none of the stack's other nodes moves to the
+  one account frame of its cloud that holds them. With none or several such frames, it stays and the report warns.
+  The tool removes the frames the move leaves without a node, with the groups inside them. The move is drawn: it is a
+  warning, and `build` goes on.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.
 
 ## tf_layout.py (stage 4)

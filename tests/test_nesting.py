@@ -113,6 +113,7 @@ def test_a_shared_vpc_label_names_the_account_that_owns_it() -> None:
     values = {c.get("id"): c.get("value") for c in ET.fromstring(_rendered(curated)[0]).iter("mxCell")}
     assert values["vpc"] == "shop-vpc (10.0.0.0/16, in Networking account)"
 
+
 def test_a_vpc_without_cidrs_keeps_its_plain_label() -> None:
     curated = _shop()
     del curated["groups"][3]["cidrs"]

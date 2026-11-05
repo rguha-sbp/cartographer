@@ -5,7 +5,7 @@ import pytest
 
 from cartographer import tf_extract, tf_verify, verify_description
 from cartographer.curated_format import FRAME_KINDS
-from cartographer.verify_shared import cloud_warnings
+from cartographer.verify_shared import cloud_warnings, group_claims
 
 REPO = Path(__file__).parent / "fixtures" / "network"
 FACTS = tf_extract.extract(Path("infra"), REPO)
@@ -175,7 +175,7 @@ def test_a_shared_vpc_in_an_account_frame_of_its_own_moves_into_the_stacks_accou
     assert "netacct" not in {g["id"] for g in verified["groups"]}
     assert "group shared: shared network sat in account netacct" in report
     assert "group netacct: no node left after the move, removed" in report
-    assert tf_verify.needs_attention(curated, verified)
+    assert group_claims(curated) <= group_claims(verified)  # a move is drawn, it does not stop the build
 
 
 def test_frames_left_empty_by_the_move_go_too() -> None:
@@ -193,18 +193,19 @@ def test_the_owner_account_frame_goes_with_the_empty_role_groups_in_it() -> None
     assert {g["id"] for g in verified["groups"]} == {"acct", "apps", "shared", "priv", "work"}
 
 
-def test_the_move_stays_in_the_region_of_the_shared_vpc() -> None:
-    curated = _shared_vpc(
-        _group("eu", "region", None, label="eu-west-1"),
-        _group("us", "region", None, label="us-east-1"),
-        _group("acct2", "account", "us"),
-        _group("usapps", None, "acct2"),
-        {**NETWORKING, "parent": "eu"},
-    )
-    curated["groups"][0]["parent"] = "eu"
-    curated["nodes"] += [_node("misc", "aws_instance.misc", "usapps"), _node("orders", "aws_instance.orders", "usapps")]
+def test_with_several_accounts_of_the_stack_the_shared_vpc_stays_with_a_warning() -> None:
+    curated = _shared_vpc(NETWORKING, _group("acct2", "account", None), _group("more", None, "acct2"))
+    curated["nodes"].append(_node("misc", "aws_instance.misc", "more"))
+    verified, report = _verify(curated)
+    assert _group_of(verified, "shared")["parent"] == "netacct"
+    assert "no single account of its cloud does, left in place" in report
+
+
+def test_a_parent_loop_among_the_left_frames_ends() -> None:
+    curated = _shared_vpc({**NETWORKING, "parent": "loop"}, _group("loop", "region", "netacct"))
     verified, _ = _verify(curated)
     assert _group_of(verified, "shared")["parent"] == "acct"
+    assert not {"netacct", "loop"} & {g["id"] for g in verified["groups"]}
 
 
 def test_a_node_without_placement_in_the_shared_vpc_keeps_it_shared() -> None:
@@ -212,6 +213,20 @@ def test_a_node_without_placement_in_the_shared_vpc_keeps_it_shared() -> None:
     curated["nodes"].append(_node("sg", "module.worker.aws_security_group.sg", "shared"))
     verified, _ = _verify(curated)
     assert _group_of(verified, "shared")["owner"] == "Networking account"
+
+
+def test_a_shared_vpc_with_no_placed_node_is_known_by_its_remote_fact() -> None:
+    curated = _shared_vpc(vpc_parent="acct", owner="Networking account")
+    curated["nodes"] = [_node("sg", "module.worker.aws_security_group.sg", "shared"), curated["nodes"][1]]
+    verified, _ = _verify(curated)
+    assert _group_of(verified, "shared")["owner"] == "Networking account"
+
+
+def test_the_owner_citation_must_name_the_owner() -> None:
+    curated = _shared_vpc(vpc_parent="acct", owner="Security account")
+    verified, report = _verify(curated)
+    assert "owner" not in _group_of(verified, "shared")
+    assert "group shared: owner dropped, no code citation names the owning account" in report
 
 
 def test_owner_needs_a_code_citation() -> None:
