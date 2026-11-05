@@ -167,33 +167,23 @@ def _shared_vpc(*account_groups: dict, vpc_parent: str = "netacct", **vpc: objec
 NETWORKING = _group("netacct", "account", None, label="Networking account")
 
 
-def test_a_shared_vpc_in_an_account_frame_of_its_own_is_a_warning() -> None:
+def test_a_shared_vpc_in_the_owners_account_frame_is_a_warning() -> None:
     curated = _shared_vpc(NETWORKING)
     verified, report = _verify(curated)
     assert verified["groups"] == curated["groups"]
-    assert "group shared: shared network sits in account netacct, which holds none of the stack's other nodes" in report
-    assert "draw it in the stack's account (acct) with `owner` set" in report
+    assert "group shared: shared network sits in account netacct (Networking account), the account that owns it" in report
     assert group_claims(curated) <= group_claims(verified)  # a warning, it does not stop the build
 
 
-def test_the_warning_names_every_account_of_the_stack() -> None:
-    curated = _shared_vpc(NETWORKING, _group("acct2", "account", None), _group("more", None, "acct2"))
-    curated["nodes"].append(_node("misc", "aws_instance.misc", "more"))
-    verified, report = _verify(curated)
-    assert verified["groups"] == curated["groups"]
-    assert "draw it in the stack's account (acct, acct2)" in report
-
-
-def test_no_warning_when_no_other_account_frame_holds_a_node() -> None:
+def test_the_owners_frame_is_a_warning_when_every_node_runs_in_the_shared_vpc() -> None:
     curated = _shared_vpc(NETWORKING)
     curated["nodes"] = curated["nodes"][:1]
     _, report = _verify(curated)
-    assert "shared network sits in account" not in report
+    assert "shared network sits in account netacct" in report
 
 
-def test_no_warning_when_the_other_account_is_of_another_cloud() -> None:
-    curated = _shared_vpc(NETWORKING)
-    curated["groups"][0]["cloud"] = "azure"
+def test_a_shared_vpc_in_a_second_account_of_the_stack_is_no_warning() -> None:
+    curated = _shared_vpc(_group("acct2", "account", None, label="Shop data account"), vpc_parent="acct2")
     _, report = _verify(curated)
     assert "shared network sits in account" not in report
 
@@ -212,7 +202,7 @@ def test_a_shared_vpc_with_no_placed_node_is_known_by_its_remote_fact() -> None:
     assert _group_of(verified, "shared")["owner"] == "Networking account"
 
 
-OWNER_DROPPED = "owner dropped, it cites no remote network fact whose source names it"
+OWNER_DROPPED = "owner dropped, it is not a shared network whose cited source names it"
 
 
 def test_the_remote_source_must_name_the_owner() -> None:
@@ -235,6 +225,15 @@ def test_an_owner_that_looks_like_a_secret_is_dropped() -> None:
     verified, report = _verify(curated)
     assert "owner" not in _group_of(verified, "shared")
     assert "group shared: owner looks like a secret, dropped" in report
+
+
+def test_cidrs_on_a_shared_vpc_drop_but_its_owner_stays() -> None:
+    curated = _shared_vpc(vpc_parent="acct", owner="Networking account", cidrs=["10.9.0.0/16"])
+    curated["nodes"] = [_node("sg", "module.worker.aws_security_group.sg", "shared"), curated["nodes"][1]]
+    verified, report = _verify(curated)
+    assert "cidrs" not in _group_of(verified, "shared")
+    assert _group_of(verified, "shared")["owner"] == "Networking account"
+    assert "owner dropped" not in report
 
 
 def test_a_code_citation_does_not_back_a_networks_cidrs() -> None:
@@ -278,10 +277,10 @@ def test_owner_on_a_vpc_the_stack_creates_is_dropped() -> None:
     assert tf_verify.needs_attention(curated, verified)
 
 
-def test_owner_on_a_vpc_the_stack_creates_holding_a_remote_placed_node_is_dropped() -> None:
+def test_owner_on_a_local_vpc_that_also_cites_the_remote_fact_is_dropped() -> None:
     curated = _curated()
     curated["groups"][1]["owner"] = "Networking account"
-    curated["nodes"].append(_node("fn", SHARED_FN, "vpc"))
+    curated["groups"][1]["evidence"].append({"fact": REMOTE["id"]})
     verified, report = _verify(curated)
     assert "owner" not in _group_of(verified, "vpc")
     assert f"group vpc: {OWNER_DROPPED}" in report
@@ -408,6 +407,7 @@ def test_an_external_icon_of_another_cloud_than_its_frame_is_a_warning() -> None
 def test_described_owner_on_a_network_passes() -> None:
     curated = _described()
     curated["groups"][1]["owner"] = "Networking account"
+    curated["groups"][1]["evidence"].append({"stated": "the Networking account shares the VPC"})
     verified, _ = verify_description.verify(curated, Path("."))
     assert verified["groups"] == curated["groups"]
 
@@ -418,4 +418,12 @@ def test_described_owner_without_evidence_is_dropped() -> None:
     curated["groups"][1].pop("cidrs", None)
     verified, report = verify_description.verify(curated, Path("."))
     assert "owner" not in _group_of(verified, curated["groups"][1]["id"])
-    assert "owner dropped, no evidence" in report
+    assert "owner dropped, no evidence names it" in report
+
+
+def test_described_owner_needs_evidence_that_names_it() -> None:
+    curated = _described()
+    curated["groups"][1]["owner"] = "Networking account"
+    verified, report = verify_description.verify(curated, Path("."))
+    assert "owner" not in _group_of(verified, "vpc")
+    assert "group vpc: owner dropped, no evidence names it" in report

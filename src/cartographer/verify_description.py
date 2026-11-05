@@ -15,6 +15,7 @@ from cartographer.verify_shared import (
     edge_name,
     fix_groups,
     isolated_ids,
+    names,
     render_report,
     shape_warnings,
 )
@@ -42,12 +43,12 @@ def _supported(evidence: list[dict], repo_root: Path) -> tuple[list[dict], list[
 
 
 def _check_owners(curated: dict, notes: list[str], repo_root: Path) -> None:
-    """A network names the account that owns it only with `stated` or code evidence, as its cidrs need."""
+    """A network names the account that owns it only when a `stated` or code evidence item that checks out names it."""
     for g in curated["groups"]:
-        if g.get("owner"):
-            good, why = _supported(g.get("evidence", []), repo_root)
-            if not good:
-                notes.append(f"group {g['id']}: owner dropped, {'; '.join(why)}")
+        if owner := g.get("owner"):
+            good, _ = _supported(g.get("evidence", []), repo_root)
+            if not any(names(owner, ev.get("stated") or ev["contains"]) for ev in good):
+                notes.append(f"group {g['id']}: owner dropped, no evidence names it")
                 del g["owner"]
 
 

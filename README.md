@@ -180,7 +180,7 @@ side:
   the Terraform or you gave the ranges. The tool never guesses a CIDR.
 - A network frame for a VPC that another account shares in names that account in the title, for example
   `shared-vpc (in Networking account)`. The frame stays in your workload account, because the services in it belong to
-  that account. Verify warns when a shared VPC sits in an account frame of its own, and keeps the owner only on a VPC
+  that account. Verify warns when a shared VPC sits in the frame of the account that owns it, and keeps the owner only on a VPC
   the Terraform does not create, and only when the Terraform source the VPC is read from names the owner.
 - Subnet frames group the services of one tier: public, private or isolated. The tool does not draw Availability
   Zones.

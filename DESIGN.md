@@ -216,17 +216,19 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - dropped edges with reason
   - `unshown` facts of kind iam/trigger/route between two shown nodes that no curated edge covers (recall hints)
   - IAM-only vs code-only mismatches for code-cited edges
-- Shared networks (`tf_network_check`): a network group is shared when its placed nodes all run only in `remote`
-  networks (their placement facts). With no placed node, a `remote` network fact in its evidence makes it shared. The
-  tool keeps `owner` only on a network group whose evidence cites a `remote` network fact whose source names the
-  owner. The source is the block the fact's address reads from (`networking` in `data.tfe_outputs.networking...`). The
-  name must match as whole words, less the words account and subscription. A `remote` network can also be a VPC of
-  the same account that another stack creates, so that name is the only proof of another owner. The tool drops an
-  `owner` that looks like a secret. A network group's `cidrs` need its network fact; a code citation does not back
-  them. In described mode, `owner` needs `stated` or code evidence, as `cidrs` do.
-  The report warns when a shared network sits in an account frame that holds none of the stack's other nodes while
-  another account frame of its cloud does. The tool moves nothing: the diagram cannot tell the owner's frame from a
-  second account of the stack. The warning does not stop `build`; review rule 17 gets the frame fixed.
+- Shared networks (`tf_network_check`): this check runs first, on the evidence as curated, because the cidrs check
+  prunes evidence. A network group is shared when its placed nodes all run only in `remote` networks (their
+  placement facts). With no placed node, a `remote` network fact in its evidence makes it shared. The tool keeps
+  `owner` only on a shared network whose evidence cites a `remote` network fact whose source names the owner. The
+  source is the data block the fact's address reads from (`networking` in `data.tfe_outputs.networking...`). The name
+  must match as whole words, less the words account and subscription. The tool drops an `owner` that looks like a
+  secret. A network group's `cidrs` need its network fact; a code citation does not back them. In described mode,
+  `owner` needs a `stated` or code evidence item that names it.
+  - Known limit: Terraform does not say which account owns a remote VPC. The source name is the best proof it has; a
+    networking stack in the same account would pass too. The prompt tells the curator to set `owner` only when the
+    source names another account.
+  - The report warns when a shared network sits in an account frame whose label names the network's source, the
+    owner's account. The tool moves nothing, and the warning does not stop `build`; review rule 17 gets it fixed.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.
 
 ## tf_layout.py (stage 4)

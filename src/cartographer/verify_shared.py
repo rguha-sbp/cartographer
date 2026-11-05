@@ -1,5 +1,6 @@
 """What the Terraform and the description verification share: structure checks, code citations and the report."""
 
+import re
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -152,6 +153,14 @@ def fix_network_groups(curated: dict, notes: list[str]) -> None:
 
 
 Supported = Callable[[dict, list[dict]], tuple[list[dict], list[str]]]
+
+
+def names(name: str, text: str) -> bool:
+    """True when `text` names `name`, less the words account and subscription, as whole words: `Networking account`
+    matches `networking` and `shared_networking`, but `Network account` does not."""
+    words = re.findall(r"[a-z0-9]+", re.sub(r"(?i)\b(account|subscription)\b", "", name).lower())
+    pattern = r"(?<![a-z0-9])" + r"[_\s-]*".join(words) + r"(?![a-z0-9])"
+    return bool(words) and re.search(pattern, text.lower()) is not None
 
 
 def check_claims(curated: dict, notes: list[str], supported: Supported) -> None:
