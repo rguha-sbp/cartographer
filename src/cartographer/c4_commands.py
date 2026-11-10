@@ -1,11 +1,22 @@
 """`cartographer prompt --c4` and `cartographer build --c4`: curate one C4 model of a system, then write every view
-it supports as a page of one .drawio, replacing the views an earlier model wrote."""
+it supports as a page of one .drawio, replacing the views an earlier model wrote, and the model as a Structurizr
+workspace beside it."""
 
 import argparse
 import json
 from pathlib import Path
 
-from cartographer import c4_model, c4_styles, c4_verify, c4_views, files, gen_drawio, tf_layout, tfdiagram
+from cartographer import (
+    c4_model,
+    c4_structurizr,
+    c4_styles,
+    c4_verify,
+    c4_views,
+    files,
+    gen_drawio,
+    tf_layout,
+    tfdiagram,
+)
 from cartographer.build import EXIT_VERIFY, Refusal, cached_facts, publish, read_curation, render_images
 from cartographer.workdir import cache_dir
 
@@ -47,9 +58,13 @@ def build(args: argparse.Namespace) -> int:
         for v in views
     ])
     images = render_images(drawio, mxfile, args.drawio_url)
+    workspace = c4_structurizr.workspace(model)
 
     for stale in out.glob("*"):
         if stale not in images and c4_views.written_by_c4(args.name, stale):
             stale.unlink()
     publish(drawio, mxfile, images)
+    dsl = out / c4_structurizr.dsl_name(args.name)
+    dsl.write_text(workspace)
+    print(dsl)
     return 0
