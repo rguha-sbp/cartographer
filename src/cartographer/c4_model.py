@@ -59,14 +59,18 @@ def edge_text(label: str, technology: str | None) -> str:
     return f"{label}\n[{technology}]" if technology else label
 
 
-def _edge_label(pair: tuple[str, str], parts: list[dict]) -> str:
-    """One relationship keeps its own label; several need one text, their shared summary (else their shared label),
-    over every technology behind them."""
+def edge_parts(pair: tuple[str, str], parts: list[dict]) -> tuple[str, str | None]:
+    """The text and technology of one edge. One relationship keeps its own label; several need one text, their
+    shared summary (else their shared label), over every technology behind them."""
     texts = {r["label"] if len(parts) == 1 else r.get("summary", r["label"]) for r in parts}
     if len(texts) > 1:
         raise RollupError(pair, sorted(r["id"] for r in parts))
     technologies = sorted({r["technology"] for r in parts if r.get("technology")})
-    return edge_text(texts.pop(), ", ".join(technologies) or None)
+    return texts.pop(), ", ".join(technologies) or None
+
+
+def _edge_label(pair: tuple[str, str], parts: list[dict]) -> str:
+    return edge_text(*edge_parts(pair, parts))
 
 
 def rollup(model: Model, shown: set[str]) -> list[dict]:

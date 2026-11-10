@@ -4,7 +4,18 @@ from xml.etree import ElementTree
 
 import pytest
 
-from cartographer import c4_model, c4_styles, c4_views, cli, files, gen_drawio, snapshot, svg_export, tf_layout
+from cartographer import (
+    c4_model,
+    c4_structurizr,
+    c4_styles,
+    c4_views,
+    cli,
+    files,
+    gen_drawio,
+    snapshot,
+    svg_export,
+    tf_layout,
+)
 from cartographer.workdir import cache_dir
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -13,6 +24,7 @@ STATED = [{"stated": "the engineer said so"}]
 SLUGS = ["1-context", "2-container", "3-component-api", "6-dynamic-buy"]
 DRAWIO = "shop-c4-c4.drawio"
 IMAGES = [f"shop-c4-c4-{slug}.svg" for slug in SLUGS]
+DSL = "shop-c4-c4.dsl"
 
 
 @pytest.fixture(autouse=True)
@@ -87,7 +99,7 @@ def test_build_c4_writes_one_file_with_a_page_and_an_image_per_view(tmp_path: Pa
     _model(_shop())
     assert _build(tmp_path) == 0
     out = tmp_path / "out"
-    assert sorted(p.name for p in out.iterdir()) == sorted(["README.md", DRAWIO, *IMAGES])
+    assert sorted(p.name for p in out.iterdir()) == sorted(["README.md", DRAWIO, DSL, *IMAGES])
     drawio = out / DRAWIO
     pages = ElementTree.parse(drawio).getroot().findall("diagram")
     assert [p.get("id") for p in pages] == SLUGS
@@ -113,7 +125,7 @@ def test_build_c4_prints_every_written_path(tmp_path: Path, capsys, renderer) ->
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "C4 model: ok"
     out = tmp_path / "out"
-    assert lines[-5:] == [str(out / name) for name in (DRAWIO, *IMAGES)]
+    assert lines[-6:] == [str(out / name) for name in (DRAWIO, *IMAGES, DSL)]
 
 
 def test_build_c4_lists_what_rests_only_on_stated(tmp_path: Path, capsys, renderer) -> None:
@@ -122,6 +134,20 @@ def test_build_c4_lists_what_rests_only_on_stated(tmp_path: Path, capsys, render
     out = capsys.readouterr().out
     assert out.startswith("C4 model: ok\n")
     assert "Stated by the engineer, not found in the repo (8)\n  api\n  auth\n  cart\n  db\n  r1\n" in out
+
+
+def test_build_c4_writes_the_model_as_a_structurizr_workspace(tmp_path: Path, renderer) -> None:
+    _model(_shop())
+    assert _build(tmp_path) == 0
+    assert (tmp_path / "out" / DSL).read_text() == c4_structurizr.workspace(_shop())
+
+
+def test_build_c4_writes_no_workspace_when_verify_fails(tmp_path: Path, renderer) -> None:
+    model = _shop()
+    model["relationships"][0]["dst"] = "nowhere"
+    _model(model)
+    assert _build(tmp_path) != 0
+    assert not (tmp_path / "out" / DSL).exists()
 
 
 def test_build_c4_overwrites_without_asking(tmp_path: Path, renderer) -> None:

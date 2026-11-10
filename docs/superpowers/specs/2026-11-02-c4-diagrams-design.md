@@ -51,7 +51,9 @@ relationships consistent across levels. This design takes the second approach an
 
 - Other diagram kinds (data flow with trust boundaries, CI/CD pipeline, IAM access view, network topology, BPMN). They
   come later as further views over the same pipeline; this design only has to leave room for them.
-- Structurizr DSL, PlantUML or Mermaid output. draw.io is the deliverable.
+- PlantUML or Mermaid output. draw.io is the deliverable. A Structurizr DSL workspace is written beside it, so the
+  same model can be explored with drill-down (see "Structurizr workspace" below); it is not a second rendering of the
+  views.
 - Rendering from a running cloud account. No credentials, as today.
 
 ## Anti-goals
@@ -223,3 +225,18 @@ is built and the model has no `code` elements.
 - C4 notation: https://c4model.com/diagrams/notation
 - C4 review checklist: https://c4model.com/diagrams/checklist
 - Models as code (Structurizr): https://docs.structurizr.com/as-code
+
+## Structurizr workspace
+
+Added after the first release. C4's main strength is moving between levels, and static draw.io pages cannot be drilled
+into. `build --c4` therefore also writes `<name>-c4.dsl`, a Structurizr DSL workspace of the same model
+(`c4_structurizr.py`), from which `structurizr export -f static` makes a static site with drill-down, Dynamic view
+playback and evidence tooltips.
+
+- Structurizr's implied relationships are turned off. Its default labels a rolled-up arrow with the first relationship's
+  text, which would contradict the shared `summary` the draw.io pages show. Each rolled-up edge of a core view is
+  written as an explicit relationship instead, with the text and technologies `c4_model.edge_parts` gives the page.
+- Views keep the slugs and titles of the draw.io pages. Code views and code elements are left out: Structurizr has no
+  level below components.
+- Evidence travels as element and relationship properties; deployment nodes keep their Terraform addresses.
+- The workspace is computed before anything is written, like the images, so a failed build leaves the folder as it was.
