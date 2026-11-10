@@ -30,8 +30,28 @@ CHROME_WINDOWS_ROOTS = ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA")
 CHROME_PATH_NAMES = ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "chrome")
 CHROME_HINT = (
     "install Google Chrome or Chromium (macOS app bundle, or the Windows per-machine or per-user install), "
-    "or put google-chrome / chromium on PATH"
+    "put google-chrome / chromium on PATH, or, without admin rights, run `uvx playwright install chromium`"
 )
+# Playwright's own builds of full Chromium, newest revision first. Its headless shell is left out: it has no window,
+# so the editor could not open in it.
+PLAYWRIGHT_CHROMIUM = (
+    "chromium-*/chrome-linux*/chrome",
+    "chromium-*/chrome-mac*/Chromium.app/Contents/MacOS/Chromium",
+    "chromium-*/chrome-mac*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    "chromium-*/chrome-win*/chrome.exe",
+)
+MISSING_LIBRARIES = (
+    "Chrome is installed but a system library it needs is missing: install your distribution's chromium package, "
+    "which pulls the libraries in, or run `playwright install-deps chromium` as root"
+)
+# Opt-in only: Chrome's sandbox is a security boundary, and turning it off is the user's call. Containers often
+# disable the unprivileged user namespaces it needs, and then Chrome aborts at start-up.
+NO_SANDBOX_ENV = "CARTOGRAPHER_CHROME_NO_SANDBOX"
+NO_SANDBOX = (
+    "Chrome found no usable sandbox, as happens in containers without unprivileged user namespaces: enable them, "
+    f"or set {NO_SANDBOX_ENV}=1 to run Chrome without its sandbox"
+)
+_CAUSES = (("error while loading shared libraries", MISSING_LIBRARIES), ("No usable sandbox", NO_SANDBOX))
 DRAWIO_DOWN = "no draw.io answers at the given --drawio-url: start it, or omit the flag to use the bundled one"
 OFFLINE_RULES = "MAP * ~NOTFOUND , EXCLUDE 127.0.0.1 , EXCLUDE localhost"
 
@@ -137,6 +157,31 @@ def chrome_candidates() -> list[Path]:
     return [Path(CHROME_MAC), *(Path(root) / CHROME_WINDOWS for root in roots)]
 
 
+def playwright_root() -> Path:
+    """Where `playwright install` puts its browsers: PLAYWRIGHT_BROWSERS_PATH, else the platform default."""
+    if custom := os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        return Path(custom)
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Caches" / "ms-playwright"
+    if sys.platform == "win32":
+        return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ms-playwright"
+    return Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "ms-playwright"
+
+
+def _revision(path: Path, root: Path) -> int:
+    return int(path.relative_to(root).parts[0].removeprefix("chromium-"))
+
+
+def playwright_chromium() -> Path | None:
+    """The newest full Chromium that Playwright installed, if any."""
+    root = playwright_root()
+    if not root.is_dir():
+        return None
+    found = [p for pattern in PLAYWRIGHT_CHROMIUM for p in root.glob(pattern)
+             if p.is_file() and p.relative_to(root).parts[0].removeprefix("chromium-").isdigit()]
+    return max(found, key=lambda p: _revision(p, root), default=None)
+
+
 def find_chrome() -> str:
     for path in chrome_candidates():
         if path.exists():
@@ -144,7 +189,24 @@ def find_chrome() -> str:
     for name in CHROME_PATH_NAMES:
         if found := shutil.which(name):
             return found
+    if found := playwright_chromium():
+        return str(found)
     raise SnapshotError(f"Chrome not found: {CHROME_HINT}")
+
+
+def sandbox_flags() -> list[str]:
+    return ["--no-sandbox"] if os.environ.get(NO_SANDBOX_ENV) == "1" else []
+
+
+def chrome_failure(stderr: str) -> str:
+    """What went wrong when Chrome failed: for a known cause the line that names it and the fix, else the end of
+    its error output."""
+    stderr = stderr or ""
+    for marker, fix in _CAUSES:
+        if marker in stderr:
+            line = next(line for line in stderr.splitlines() if marker in line)
+            return f"{line[line.index(marker):][:200]} ({fix})"
+    return stderr.strip()[-300:]
 
 
 def drawio_up(url: str) -> bool:
@@ -157,7 +219,8 @@ def drawio_up(url: str) -> bool:
 
 def headless_cmd(chrome: str, size: tuple[int, int], *tail: str) -> list[str]:
     return [
-        chrome, "--headless=new", "--disable-gpu", "--hide-scrollbars", f"--force-device-scale-factor={SCALE}",
+        chrome, *sandbox_flags(), "--headless=new", "--disable-gpu", "--hide-scrollbars",
+        f"--force-device-scale-factor={SCALE}",
         f"--virtual-time-budget={VIRTUAL_TIME_MS}", f"--host-resolver-rules={OFFLINE_RULES}", f"--window-size={size[0]},{size[1]}", *tail,
     ]
 
@@ -166,7 +229,7 @@ def _shoot(chrome: str, url: str, size: tuple[int, int], png: Path) -> None:
     cmd = headless_cmd(chrome, size, f"--screenshot={png}", url)
     result = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if result.returncode != 0 or not png.exists():
-        raise SnapshotError(f"Chrome failed for {png.name}: {(result.stderr or '').strip()[-300:]}")
+        raise SnapshotError(f"Chrome failed for {png.name}: {chrome_failure(result.stderr)}")
 
 
 def _tile_html(png: Path, size: tuple[int, int], tile: Tile) -> str:

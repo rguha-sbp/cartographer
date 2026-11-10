@@ -115,6 +115,7 @@ def test_main_shoots_every_page_of_a_book_alone(tmp_path, monkeypatch, capsys, b
 
 
 def test_find_chrome_missing(monkeypatch):
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", "/nonexistent-playwright")
     monkeypatch.setattr(snapshot.Path, "exists", lambda self: False)
     monkeypatch.setattr(snapshot.shutil, "which", lambda name: None)
     with pytest.raises(snapshot.SnapshotError, match="Chrome"):
@@ -124,6 +125,7 @@ def test_find_chrome_missing(monkeypatch):
 def _no_chrome_anywhere(monkeypatch):
     for var in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
         monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", "/nonexistent-playwright")
     monkeypatch.setattr(snapshot.Path, "exists", lambda self: False)
     monkeypatch.setattr(snapshot.shutil, "which", lambda name: None)
 
@@ -165,6 +167,106 @@ def test_find_chrome_prefers_install_path_over_path(monkeypatch):
     monkeypatch.setattr(snapshot.Path, "exists", lambda self: self == mac)
     monkeypatch.setattr(snapshot.shutil, "which", lambda n: "/usr/bin/chromium")
     assert snapshot.find_chrome() == str(mac)
+
+
+def _playwright_chromium(root: Path, revision: int, rel: str) -> Path:
+    exe = root / f"chromium-{revision}" / rel
+    exe.parent.mkdir(parents=True)
+    exe.write_text("")
+    return exe
+
+
+def test_find_chrome_falls_back_to_playwright_newest_revision(monkeypatch, tmp_path):
+    _no_chrome_anywhere(monkeypatch)
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+    _playwright_chromium(tmp_path, 1200, "chrome-linux/chrome")
+    newest = _playwright_chromium(tmp_path, 1248, "chrome-linux-arm64/chrome")
+    _playwright_chromium(tmp_path, 999, "chrome-win/chrome.exe")
+    assert snapshot.find_chrome() == str(newest)
+
+
+@pytest.mark.parametrize("rel", [
+    "chrome-linux64/chrome",
+    "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
+    "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    "chrome-win64/chrome.exe",
+])
+def test_find_chrome_knows_every_playwright_layout(monkeypatch, tmp_path, rel):
+    _no_chrome_anywhere(monkeypatch)
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+    exe = _playwright_chromium(tmp_path, 1248, rel)
+    assert snapshot.find_chrome() == str(exe)
+
+
+def test_find_chrome_ignores_playwrights_headless_shell(monkeypatch, tmp_path):
+    """The headless shell has no window, so the editor could not open in it."""
+    _no_chrome_anywhere(monkeypatch)
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+    shell = tmp_path / "chromium_headless_shell-1248" / "chrome-headless-shell-linux64" / "chrome-headless-shell"
+    shell.parent.mkdir(parents=True)
+    shell.write_text("")
+    with pytest.raises(snapshot.SnapshotError, match="Chrome not found"):
+        snapshot.find_chrome()
+
+
+def test_find_chrome_prefers_a_system_install_over_playwright(monkeypatch, tmp_path):
+    _no_chrome_anywhere(monkeypatch)
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+    _playwright_chromium(tmp_path, 1248, "chrome-linux/chrome")
+    monkeypatch.setattr(snapshot.shutil, "which", lambda n: "/usr/bin/chromium" if n == "chromium" else None)
+    assert snapshot.find_chrome() == "/usr/bin/chromium"
+
+
+@pytest.mark.parametrize(("platform", "env", "expected"), [
+    ("linux", {}, Path.home() / ".cache" / "ms-playwright"),
+    ("linux", {"XDG_CACHE_HOME": "/xdg"}, Path("/xdg") / "ms-playwright"),
+    ("darwin", {}, Path.home() / "Library" / "Caches" / "ms-playwright"),
+    ("win32", {"LOCALAPPDATA": "C:/Users/me/AppData/Local"}, Path("C:/Users/me/AppData/Local") / "ms-playwright"),
+])
+def test_playwright_root_follows_playwrights_defaults(monkeypatch, platform, env, expected):
+    for var in ("PLAYWRIGHT_BROWSERS_PATH", "XDG_CACHE_HOME", "LOCALAPPDATA"):
+        monkeypatch.delenv(var, raising=False)
+    for var, value in env.items():
+        monkeypatch.setenv(var, value)
+    monkeypatch.setattr(snapshot.sys, "platform", platform)
+    assert snapshot.playwright_root() == expected
+
+
+def test_chrome_not_found_names_playwright():
+    assert "playwright install chromium" in snapshot.CHROME_HINT
+
+
+def test_a_chrome_without_its_system_libraries_says_so(tmp_path, monkeypatch):
+    stderr = "chrome: error while loading shared libraries: libnss3.so: cannot open shared object file"
+    monkeypatch.setattr(snapshot.subprocess, "run",
+                        lambda *a, **k: subprocess.CompletedProcess(a[0], 127, stdout="", stderr=stderr))
+    with pytest.raises(snapshot.SnapshotError) as err:
+        snapshot._shoot("/bin/chrome", "http://x", (100, 100), tmp_path / "x.png")
+    assert "libnss3.so" in str(err.value)
+    assert snapshot.MISSING_LIBRARIES in str(err.value)
+
+
+@pytest.mark.parametrize(("value", "flagged"), [(None, False), ("0", False), ("", False), ("1", True)])
+def test_headless_chrome_keeps_the_sandbox_unless_turned_off(monkeypatch, value, flagged):
+    monkeypatch.delenv(snapshot.NO_SANDBOX_ENV, raising=False)
+    if value is not None:
+        monkeypatch.setenv(snapshot.NO_SANDBOX_ENV, value)
+    assert ("--no-sandbox" in snapshot.headless_cmd("/bin/chrome", (10, 10))) is flagged
+
+
+def test_a_chrome_without_a_usable_sandbox_says_how_to_run_it():
+    stderr = (
+        "[1:1:FATAL:zygote_host_impl_linux.cc:130] No usable sandbox! If you are running on Ubuntu 23.10+ ...\n"
+        + "\n".join(f"#{n} 0xaaaa (chrome+0x{n})" for n in range(40))
+    )
+    message = snapshot.chrome_failure(stderr)
+    assert message.startswith("No usable sandbox!")
+    assert snapshot.NO_SANDBOX_ENV in message
+    assert "#39" not in message, "the stack trace is noise once the cause is known"
+
+
+def test_other_chrome_failures_carry_no_library_hint():
+    assert snapshot.chrome_failure("Trace/breakpoint trap") == "Trace/breakpoint trap"
 
 
 def test_tiles_json_maps_icons_to_tiles() -> None:
