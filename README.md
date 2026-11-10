@@ -23,7 +23,13 @@ regenerates the image. When you close the window, the server stops.
   `git` clones over HTTPS.
 - `uv` (`uv --version` must work). You do not need a Python install: if the machine has none, `uv` gets one.
 - Google Chrome or Chromium on macOS, Linux or Windows. Chrome opens the editor window. Chrome also renders images and
-  screenshots in headless mode.
+  screenshots in headless mode. cartographer looks for an installed Chrome or Chromium, then on `PATH`, then for a
+  Chromium that Playwright installed (`PLAYWRIGHT_BROWSERS_PATH`, else Playwright's default folder). Without admin
+  rights, for example in a dev container, `uvx playwright install chromium` gets one. That Chromium still needs the
+  system libraries a browser uses: when one is missing, the error says so and names the fix. Containers often also
+  lack the user namespaces Chrome's sandbox needs, and Chrome then stops with "No usable sandbox". Set
+  `CARTOGRAPHER_CHROME_NO_SANDBOX=1` to run it without its sandbox; that is your call, so cartographer never does it
+  by itself.
 
 ## What gets installed
 
@@ -165,7 +171,26 @@ Commit the four files that always exist: the `.drawio`, the `.svg`, the curated 
 A C4 set writes different files. It writes one `<name>-c4.drawio` with a page (a tab in draw.io) for each view. It
 writes an `.svg` for each view (for example `shop-c4-1-context.svg`, `shop-c4-2-container.svg`,
 `shop-c4-3-component-api.svg`, `shop-c4-5-deployment.svg`). It also writes the index `README.md`, with one row for each
-view. There is no curated file to commit.
+view, and `<name>-c4.dsl`, the same model as a Structurizr workspace. There is no curated file to commit.
+
+### Explore a C4 set interactively
+
+C4 is most useful when you can drill down: from the system to its containers, and from a container to its components.
+The `.drawio` pages are static, so every C4 build also writes `<name>-c4.dsl`, a
+[Structurizr](https://structurizr.com) workspace of the same model. Its views carry the same arrows as the `.drawio`
+pages: an arrow that several relationships roll up onto reads their shared `summary`, as on the page. Code elements are
+left out, since Structurizr models nothing below a component. Each element and relationship keeps its evidence as a
+property, which the viewer shows as a tooltip.
+
+Turn the workspace into a static site with the Structurizr CLI (it needs Java and Graphviz, or use the
+`structurizr/cli` Docker image):
+
+```
+structurizr export -w docs/architecture/diagrams/<name>-c4.dsl -f static -o site
+```
+
+Open `site/index.html` in a browser. It needs no server. Double-click an element with a magnifying glass to go one
+level down; the arrow keys move between views and `,` and `.` step through a Dynamic view.
 
 The intermediates (facts, schema, screenshots) stay in the plugin data folder (`~/.cache/cartographer/<name>/` for the
 standalone CLI). Do not commit them. Claude never commits or pushes for you.
@@ -256,7 +281,7 @@ latest release at https://github.com/rguha-sbp/cartographer/releases/latest.
 | `prompt --name NAME [--describe]` | print the curation prompt, or the describe prompt for a new solution |
 | `prompt --name NAME --c4 [--describe]` | print the C4 curation prompt, or the C4 prompt that starts with an interview |
 | `build --name NAME [--replace \| --side-file]` | verify, then write the `.drawio`, the `.svg` and the folder index |
-| `build --name NAME --c4` | verify `model.json`, then write `NAME-c4.drawio` with a page and an `.svg` for each C4 view. It overwrites files and deletes stale view images |
+| `build --name NAME --c4` | verify `model.json`, then write `NAME-c4.drawio` with a page and an `.svg` for each C4 view, and `NAME-c4.dsl`, the model as a Structurizr workspace. It overwrites files and deletes stale view images |
 | `image FILE.drawio` | regenerate the `.svg` next to a `.drawio`, one for each page of a file with several pages |
 | `check FOLDER` | offline: fail when a page of a `.drawio` has no image or has a stale image |
 | `snapshot FILE.drawio -o DIR` | for each page: print `view: <page name>`, then its PNG and tiles from the bundled draw.io, for the visual review |
