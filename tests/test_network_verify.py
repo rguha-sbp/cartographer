@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 from cartographer import tf_extract, tf_verify, verify_description
-from cartographer.account_names import named_after
 from cartographer.curated_format import FRAME_KINDS
+from cartographer.stack_names import named_after
 from cartographer.verify_shared import cloud_warnings, group_claims
 
 REPO = Path(__file__).parent / "fixtures" / "network"

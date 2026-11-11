@@ -242,7 +242,7 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     networks its evidence cites, when its nodes have any; else by all placements of its nodes.
   - The report warns when a shared network sits in an account frame whose label has the same words as the stack's
     name, less the words account, subscription and terraform, cloud names (aws, azure), environment words (prod, dev,
-    test and the like), AWS regions such as `us-east-1` or `us_east_1` and account numbers, each word less a plural `s`, an `ing` and one of a doubled last consonant (`account_names`), in
+    test and the like), AWS regions such as `us-east-1` or `us_east_1` and account numbers, each word less a plural `s`, an `ing` and one of a doubled last consonant (`stack_names`), in
     any order. For example "Networking account" or "Network account" around a VPC from `data.tfe_outputs.networking`, workspace `networking-prod` or state key
     `prod/networking/terraform.tfstate`; "Prod account" around a VPC from `prod-networking` is no warning. The tool
     moves nothing, and the warning does not stop `build`; review rule 17 gets it fixed.

@@ -1,9 +1,10 @@
-"""Whether an account label on a diagram names a Terraform stack."""
+"""The words that name a Terraform stack: the extract reads a stack name from a state path with them, and verify
+matches an account label on a diagram to a stack."""
 
 import re
 
 ENVIRONMENTS = {"prod", "production", "prd", "dev", "development", "develop", "test", "tst", "acc", "acceptance", "stag",
-                "stage", "stg", "preprod", "qa", "uat", "sandbox", "nonprod", "non", "pre", "env"}
+                "stage", "stg", "preprod", "qa", "uat", "sandbox", "nonprod", "non", "pre", "env", "live", "int", "integration", "perf"}
 IGNORED = {"account", "subscription", "terraform", "aws", "azure", "amazon", "microsoft", *ENVIRONMENTS}
 REGION = re.compile(r"\b(us|eu|ap|sa|ca|me|af|il|mx|cn)(-gov|-iso[a-z]?)?-(north|south|east|west|central)[a-z]*-\d+[a-z]?\b")  # us-east-1, us-gov-west-1
 

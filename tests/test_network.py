@@ -381,3 +381,26 @@ def test_one_output_of_one_stack_read_under_two_data_source_names_is_one_network
     facts = _two_modules(tmp_path, module("net"), module("networking") + 'module "m" {\n  source = "./a"\n}\n')
     assert [n["stack"] for n in facts["networks"]] == ["networking"]
     assert len(facts["placements"]) == 2
+
+
+def test_one_state_key_in_two_workspaces_and_buckets_is_two_networks_and_each_subnet_stays_in_its_own(tmp_path: Path) -> None:
+    def state(name: str, env: str) -> str:
+        return (f'data "terraform_remote_state" "{name}" {{\n  backend = "s3"\n  workspace = "{env}"\n'
+                f'  config = {{ bucket = "acme-{env}-state", key = "networking/terraform.tfstate" }}\n}}\n'
+                f'resource "aws_security_group" "{name}" {{ vpc_id = data.terraform_remote_state.{name}.outputs.vpc_id }}\n'
+                f'resource "aws_lambda_function" "{name}" {{\n'
+                f'  vpc_config {{ subnet_ids = data.terraform_remote_state.{name}.outputs.vpc_private_subnet_ids }}\n}}\n')
+    (tmp_path / "main.tf").write_text(state("net_prod", "prod") + state("net_dev", "dev"))
+    facts = tf_extract.extract(Path("."), tmp_path)
+    address = {n["id"]: n["address"] for n in facts["networks"]}
+    assert [n["stack"] for n in facts["networks"]] == ["networking", "networking"]
+    assert {p["resource"].rpartition(".")[2]: address[p["network"]].split(".")[2] for p in facts["placements"]} == {
+        "net_prod": "net_prod", "net_dev": "net_dev"}
+
+
+def test_the_stack_reads_a_config_given_as_one_local(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'locals {\n  net_state = { key = "networking/terraform.tfstate" }\n}\n'
+        'data "terraform_remote_state" "net" {\n  backend = "s3"\n  config = local.net_state\n}\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.net.outputs.shared_vpc_id }\n')
+    assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == ["networking"]

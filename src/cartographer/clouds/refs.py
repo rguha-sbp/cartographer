@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from cartographer.account_names import names_a_stack
+from cartographer.stack_names import names_a_stack
 from cartographer.tf_policies import norm_keys
 
 TIERS = ("isolated", "private", "public")
@@ -25,6 +25,7 @@ class Ref:
     address: str
     name: str | None = None
     stack: str | None = None
+    store: str = ""  # where a remote reference's state is kept: `stack`s of one name in two stores are two
 
     @property
     def remote(self) -> bool:
@@ -33,9 +34,14 @@ class Ref:
     @property
     def key(self) -> str:
         """The key of the network this reference is or reads: the output and its stack for a remote output, whatever
-        the data source that reads it is called, so modules that read one output of one stack share it and one data
+        the data source that reads it is called and where its state is kept, so modules that read one output of one stack share it and one data
         source name read against two workspaces gives two."""
-        return f"{self.name}@{self.stack}" if self.stack else self.address
+        return f"{self.name}@{self.state}" if self.stack else self.address
+
+    @property
+    def state(self) -> str:
+        """The state a remote reference reads: its stack, in its store when the data source names one."""
+        return f"{self.stack}@{self.store}" if self.store else self.stack or ""
 
 
 def token(heads: str, data: str) -> re.Pattern[str]:
@@ -57,7 +63,7 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
         seen.add(key)
         head, second, third = m["head"], m["second"], m["third"]
         if m["kind"]:
-            out[Ref(m["remote"], m["out"], stack(inst, m["kind"], m["state"]))] = None
+            out[Ref(m["remote"], m["out"], stack(inst, m["kind"], m["state"]), store(inst, m["kind"], m["state"]))] = None
         elif m["ds"]:
             out[Ref(f"{inst.prefix}{m['remote']}", m["ds"])] = None
         elif head == "var" and inst.parent is not None:
@@ -83,15 +89,33 @@ def stack(inst: Inst, kind: str, name: str) -> str:
     `terraform.tfstate` file or `.tfstate` suffix and any leading `./` or `../`: `config.workspaces.name`, `config.key`,
     `config.workspace_key_prefix`, `config.path`, `config.prefix`, then the `workspace` of `tfe_outputs`; when none counts, `name` and the first of them, as in `networking/prod` (the `workspace` of
     `terraform_remote_state` is an environment, not a stack)."""
-    block = inst.mod.data.get((kind, name))
-    body = norm_keys(block.body) if block else {}
-    config = body["config"] if isinstance(body.get("config"), dict) else {}
+    body, config = _remote_state(inst, kind, name)
     workspaces = config["workspaces"] if isinstance(config.get("workspaces"), dict) else {}
     named = [workspaces.get("name"), *(config.get(k) for k in ("key", "workspace_key_prefix", "path", "prefix")),
              body.get("workspace") if kind == "tfe_outputs" else None]
     states = [STATE_FILE.sub("", re.sub(r"^(\.\.?/)+", "", v)) for v in map(inst.value, named) if isinstance(v, str)]
     # `prod/terraform.tfstate` names no stack, but keeps the `prod` and `dev` states of one data source name apart
     return next((s for s in states if names_a_stack(s)), "/".join([name, *filter(None, states[:1])]))
+
+
+def store(inst: Inst, kind: str, name: str) -> str:
+    """Where the state the data source `kind`.`name` reads is kept, as far as its body says in literals: the
+    `workspace` of `terraform_remote_state` and the backend's organization, bucket or storage container. One state
+    key in two of them is two stacks' worth of networks under one stack name."""
+    body, config = _remote_state(inst, kind, name)
+    places = [body.get("workspace") if kind == "terraform_remote_state" else body.get("organization"),
+              *(config.get(k) for k in ("organization", "bucket", "storage_account_name", "container_name"))]
+    return "/".join(v for v in map(inst.value, places) if isinstance(v, str))
+
+
+def _remote_state(inst: Inst, kind: str, name: str) -> tuple[dict, dict]:
+    """The body of the data source `kind`.`name` and its `config` object, written in place or as one `local.`."""
+    block = inst.mod.data.get((kind, name))
+    body = norm_keys(block.body) if block else {}
+    config = body.get("config")
+    if isinstance(config, str) and (m := re.fullmatch(r"(?:\$\{)?local\.([\w-]+)\}?", config.strip('"'))):
+        config = norm_keys(inst.mod.locals.get(m[1]))
+    return body, config if isinstance(config, dict) else {}
 
 
 def network_fact(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
@@ -109,15 +133,16 @@ def add_remote(networks: dict[str, dict], ref: Ref, res: Res, suffixes: str = "i
 def place_remote(networks: dict[str, dict], ref: Ref, suffixes: str = "ids?") -> tuple[str, str, str] | None:
     """(network key, tier, what decided the tier) for a subnet another stack or a lookup gives, None when either
     is unknown. The network is a remote one whose name prefixes the output name (`shared-vpc` for
-    `shared_vpc_private_subnet_ids`): one of the reference's own stack before any other, then the longest name, then
+    `shared_vpc_private_subnet_ids`): one of the reference's own state, then one of its stack, before any other, then the longest name, then
     for a lookup a network its own module looks up, then a network of another stack before a lookup."""
     name, tier = derive(ref.name or "", suffixes), tier_in(ref.name or "")
 
-    def rank(key: str) -> tuple[bool, int, bool, bool, str]:
+    def rank(key: str) -> tuple[bool, bool, int, bool, bool, str]:
         n = networks[key]
         same_stack = ref.stack is not None and n["stack"] == ref.stack
+        same_state = same_stack and key.partition("@")[2] == ref.state  # a remote key is `output@state`
         same_module = ref.stack is None and n["stack"] is None and _module(key) == _module(ref.address)  # both lookups
-        return same_stack, len(n["name"]), same_module, n["stack"] is not None, key
+        return same_state, same_stack, len(n["name"]), same_module, n["stack"] is not None, key
 
     named = [key for key, n in networks.items() if n["remote"] and name.startswith(n["name"] + "-")]
     return (max(named, key=rank), tier, ref.name or "") if named and tier else None

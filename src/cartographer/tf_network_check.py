@@ -3,7 +3,7 @@
 from collections import defaultdict
 from pathlib import Path
 
-from cartographer.account_names import named_after
+from cartographer.stack_names import named_after
 from cartographer.verify_shared import (
     check_claims,
     code_hit,
