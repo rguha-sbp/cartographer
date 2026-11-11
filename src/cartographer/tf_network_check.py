@@ -49,38 +49,58 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
     placed: dict[str, list[dict]] = defaultdict(list)  # a resource -> its placements
     for p in facts.get("placements", []):
         placed[p["resource"]].append(p)
-    for n in out["nodes"]:
-        subnet = enclosing(groups, n["group"], "subnet")
-        runs = [p for address in n["tf"] for p in placed[address]]
-        if subnet and not any(p["tier"] == subnet["tier"] for p in runs):
-            notes.append(f"{n['id']}: no {subnet['tier']} placement fact, moved out of subnet group {subnet['id']}")
-            n["group"] = subnet["parent"] if runs else outside_network(groups, subnet)  # the network check comes next
     check_boxes(out, networks, groups, placed, notes)
 
 
 def check_boxes(out: dict, networks: dict[str, dict], groups: dict[str, dict], placed: dict[str, list[dict]],
                 notes: list[str]) -> None:
-    """A network group stands for the network facts its evidence cites. Move each placed node out of a network group
-    that stands for none of the networks it runs in, note a placed node outside every network group, a group that
-    cites no network and one that cites more than one, then mark `external` the groups that stand only for remote
-    networks and still hold a node."""
+    """A network group stands for the network facts its evidence cites. Put each node where its placements say
+    (`_place`), note a group that cites no network and one that cites more than one, then mark `external` the groups
+    that stand only for remote networks and still hold a node."""
     stands = {g["id"]: {ev["fact"] for ev in g.get("evidence", []) if ev.get("fact") in networks}
               for g in groups.values() if g["kind"] == "network"}
     notes += [f"group {gid}: cites no network fact, its nodes cannot be checked" for gid, cited in stands.items() if not cited]
     notes += [f"group {gid}: cites {len(cited)} network facts ({', '.join(sorted(cited))}), draw one group per network "
               "unless they are one network" for gid, cited in stands.items() if len(cited) > 1]
     for n in out["nodes"]:
-        runs_in = {p["network"] for address in n["tf"] for p in placed[address]}
-        if not runs_in:
-            continue
-        names = ", ".join(sorted({networks[i]["name"] for i in runs_in if i in networks}))
-        box = enclosing(groups, n["group"], "network")
-        if box is None:
-            notes.append(f"{n['id']}: placed in {names}, drawn outside any network group")
-        elif stands[box["id"]] and not runs_in & stands[box["id"]]:
-            notes.append(f"{n['id']}: placed in {names}, not in network group {box['id']}; moved out")
-            n["group"] = outside_network(groups, box)
+        _place(n, [p for address in n["tf"] for p in placed[address]], groups, stands, networks, notes)
     holding = {box["id"] for n in out["nodes"] if (box := enclosing(groups, n["group"], "network"))}
     for gid, cited in stands.items():
         if cited and gid in holding and all(networks[i]["remote"] for i in cited):
             groups[gid]["external"] = True
+
+
+def _place(n: dict, runs: list[dict], groups: dict[str, dict], stands: dict[str, set[str]], networks: dict[str, dict],
+           notes: list[str]) -> None:
+    """Keep node `n` in a network group only when it runs in a network the group stands for, else move it to the one
+    group that does, or out of the network when there is not exactly one; keep it in a subnet group only when it runs in
+    that tier, else move it to a subnet group of a tier it runs in, or to the network group itself. A placed node
+    outside every network group gets a note only; a node without placements is not checked against networks."""
+    runs_in = {p["network"] for p in runs}
+    names = ", ".join(sorted({networks[i]["name"] for i in runs_in if i in networks}))
+    box = enclosing(groups, n["group"], "network")
+    subnet = enclosing(groups, n["group"], "subnet")
+    if box is None:
+        if runs_in:
+            notes.append(f"{n['id']}: placed in {names}, drawn outside any network group")
+        return
+    if runs_in and stands[box["id"]] and not runs_in & stands[box["id"]]:
+        homes = [gid for gid, cited in stands.items() if runs_in & cited]
+        if len(homes) != 1:
+            notes.append(f"{n['id']}: placed in {names}, not in network group {box['id']}; moved out")
+            n["group"] = outside_network(groups, box)
+            return
+        notes.append(f"{n['id']}: placed in {names}, not in network group {box['id']}; moved to network group {homes[0]}")
+        box, subnet = groups[homes[0]], None
+    elif subnet is None:
+        return
+    tiers = {p["tier"] for p in runs if not stands[box["id"]] or p["network"] in stands[box["id"]]}
+    if subnet and subnet["tier"] in tiers:
+        return
+    if subnet:
+        notes.append(f"{n['id']}: no {subnet['tier']} placement fact, moved out of subnet group {subnet['id']}")
+    if not runs:
+        n["group"] = outside_network(groups, box)
+        return
+    fits = sorted(g["id"] for g in groups.values() if g["kind"] == "subnet" and g["parent"] == box["id"] and g["tier"] in tiers)
+    n["group"] = fits[0] if fits else box["id"]

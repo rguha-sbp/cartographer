@@ -77,8 +77,8 @@ Step 3: produce the curated JSON
   and a node stays in it only when a placement fact of that tier exists for one of its `tf` addresses. Give a `network`
   group `cidrs` only copied from a `networks` fact (the same list), and cite that fact in the group's `evidence`; with no
   cidrs in the fact, leave `cidrs` out. A network group that comes from a remote fact is named after it, without cidrs.
-- Every `network` group cites the `networks` fact it stands for in its `evidence`. Cite two facts only when they are
-  one network (`tfe_outputs` and `terraform_remote_state` of one workspace); verify notes it. Name it after that fact's `name`
+- Every `network` group cites the `networks` fact it stands for in its `evidence`. Cite two facts only when you know
+  they are one network; verify notes it. Name it after that fact's `name`
   in words that start with a capital letter, plus `VPC` (AWS) or `VNet` (Azure): `ingress` gives "Ingress VPC",
   `shared-vpc` gives "Shared VPC", `hub` gives "Hub VNet". Verify checks that each node with a
   placement fact runs in a network its group cites, and moves it out of the group when it does not.

@@ -133,9 +133,9 @@ def _lookup(inst: Inst, m: re.Match[str]) -> Ref:
 
 
 def _tier(path: tuple[str | None, ...]) -> str | None:
-    """The tier the last name of a path gives; a key or object name before it never sets the tier, and a list index
-    or a non-literal index is no name."""
-    return tier_in(next((p for p in reversed(path) if p is not None and not p.isdigit()), ""))
+    """The tier the last name of a path gives; a key or object name before it never sets the tier. A list index, a
+    non-literal index and an identifier attribute (`.id`) are no name."""
+    return tier_in(next((p for p in reversed(path) if p is not None and not p.isdigit() and p not in IDENTIFIERS), ""))
 
 
 def _dig(value: Any, path: tuple[str | None, ...]) -> tuple[Any, tuple[str | None, ...]]:
@@ -159,36 +159,53 @@ SELECTORS = ("id", "name", "filter", "tags")  # the arguments by which a lookup 
 MAX_PATH = 16  # longer attribute paths only come from a local or variable that reads itself
 SELECTING = ("backend", "workspace", "organization")
 TFE_HOST = "app.terraform.io"  # the `tfe` provider's default hostname
+IDENTIFIERS = ("id", "ids", "arn", "name")  # attributes that read a resource, not a part of it
 LITERAL_INDEX = re.compile(r'"[^"]*"|\d+')
 
 
 def state_of(inst: Inst, kind: str, name: str, index: str | None) -> State | str:
-    """The `State` the data source `kind`.`name` names, read from its `.tf` block with `Inst.agreed_value`. Its
+    """The `State` the data source `kind`.`name` names, read from its `.tf` block with `Inst.value(agree=True)`. Its
     full address instead when the block is not found, selects nothing, or any setting or the index is no literal."""
     address = f"{inst.prefix}data.{kind}.{name}" + (f"[{index}]" if index is not None else "")
     body, config = _remote_state(inst, kind, name)
     if config is None:
         return address
     written = [(k, body[k]) for k in SELECTING if k in body] + _leaves("config", config)
-    settings = [(path, inst.agreed_value(v)) for path, v in written]
+    settings = {path: inst.value(v, agree=True) for path, v in written}
     if kind == "tfe_outputs" and settings:
-        settings.append(("hostname", _tfe_host(inst, body)))
+        settings = _tfe_defaults(inst, body) | settings
     literal = LITERAL_INDEX.fullmatch(index) if index is not None else None
-    if not settings or any(not isinstance(v, str) for _, v in settings) or (index is not None and not literal):
+    if not settings or any(not isinstance(v, str) for v in settings.values()) or (index is not None and not literal):
         return address
     if kind == "terraform_remote_state":
-        settings = [(k, v) for k, v in settings if (k, v) != ("workspace", "default")]
-    return State(kind, tuple(sorted(settings)), literal[0].strip('"') if literal else None)  # type: ignore[arg-type]
+        kind, settings = _as_workspace(settings)
+    return State(kind, tuple(sorted(settings.items())), literal[0].strip('"') if literal else None)
 
 
-def _tfe_host(inst: Inst, body: dict) -> str | object:
-    """The `hostname` of the `tfe` provider a `tfe_outputs` block uses (its `provider` meta-argument, through the
-    module calls' `providers` maps): two hosts can each hold a workspace of one name. UNRESOLVED when no literal."""
+def _tfe_defaults(inst: Inst, body: dict) -> dict[str, Any]:
+    """The `hostname` and any `organization` of the `tfe` provider a `tfe_outputs` block uses (its `provider`
+    meta-argument, through the module calls' `providers` maps): two hosts or two organizations can each hold a
+    workspace of one name. A setting with no literal is UNRESOLVED."""
     owner, key = declared_provider(inst, unq(body.get("provider", "tfe")).removeprefix("${").removesuffix("}"))
     if owner is None or not key:
-        return TFE_HOST if key == "tfe" else UNRESOLVED  # the implicit default provider of the root
-    host = owner.agreed_value(owner.mod.providers[key].get("hostname"))
-    return TFE_HOST if host is None else host
+        return {"hostname": TFE_HOST if key == "tfe" else UNRESOLVED}  # the implicit default provider of the root
+    provider = owner.mod.providers[key]
+    host = owner.value(provider.get("hostname"), agree=True)
+    org = {"organization": owner.value(provider["organization"], agree=True)} if "organization" in provider else {}
+    return {"hostname": TFE_HOST if host is None else host, **org}
+
+
+def _as_workspace(settings: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """A `terraform_remote_state` read: the `remote` backend of one named workspace is the workspace a `tfe_outputs`
+    block reads, so both get the same identity. Any other read keeps its settings, without the default workspace."""
+    settings = {k: v for k, v in settings.items() if (k, v) != ("workspace", "default")}
+    remote = {"backend": "remote", "config.organization": settings.get("config.organization"),
+              "config.workspaces.name": settings.get("config.workspaces.name")}
+    if remote.items() <= settings.items() and set(settings) <= {*remote, "config.hostname"}:
+        return "tfe_outputs", {"hostname": settings.get("config.hostname", TFE_HOST),
+                               "organization": settings["config.organization"],
+                               "workspace": settings["config.workspaces.name"]}
+    return "terraform_remote_state", settings
 
 
 def _leaves(path: str, value: Any) -> list[tuple[str, Any]]:

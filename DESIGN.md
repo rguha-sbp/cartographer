@@ -218,27 +218,32 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - IAM-only vs code-only mismatches for code-cited edges
 - Networks (`tf_network_check.check_boxes`): a network group stands for the network facts its evidence cites. In a
   Terraform diagram a network group that cites none gets a note, and its nodes are not checked. Networks do not nest:
-  a network group inside another network group becomes a plain group, with a note. A node with placement
-  facts inside a network group that stands for networks must be placed in one of them (any tier); otherwise verify
-  moves it to the nearest ancestor that is not a network or subnet group, with a note. A placed node outside every
-  network group gets a note only. A node in a subnet group without a placement of that tier moves to the subnet's
-  network group when it has placements (the network check then judges it), else out of the network. Nodes without placement facts (security groups, gateways) are not checked. After the
+  a network group inside another network group moves beside it, with a note. One pass per node (`_place`) decides
+  its network group, then its subnet group. A node with placement facts inside a network group that stands for
+  networks must be placed in one of them (any tier); otherwise verify moves it to the one network group that stands
+  for a network it runs in, or, when there is not exactly one, to the nearest ancestor that is not a network or
+  subnet group, with a note. A placed node outside every network group gets a note only. Inside its network group,
+  a node in a subnet group without a placement of that tier, or one just moved there, goes to a subnet group of a
+  tier it runs in, else to the network group itself; a node without placements leaves the network. Nodes without placement facts (security groups, gateways) are not checked. After the
   moves, a group that stands only for remote networks and still holds a node gets `external`. Verify drops any curated
   `external` first, in both modes, with a note. A network group that cites more than one network fact gets a note:
   it stands for all of them, which is right only when they are one network that extract keys twice. Dropping a wrong `cidrs` claim keeps the citation.
   - Extract reads only `.tf` text. A remote output's network is identified by the state its data block names plus the
     network name derived from the output. The state is a `State(kind, settings, index)` value: `backend`,
-    `workspace` (dropped when `"default"` on `terraform_remote_state`), `organization`, the `hostname` of the `tfe` provider a `tfe_outputs` block uses, and every `config` leaf as a
+    `workspace` (dropped when `"default"` on `terraform_remote_state`), `organization`, the `hostname` and any default `organization` of the `tfe` provider a `tfe_outputs` block uses, and every `config` leaf as a
     dotted path, resolved to literals through `var.` and `local.` and compared exactly as written. A setting that does
     not resolve, calls of one module instance that disagree (also on which `tfe` provider they pass), a non-literal index or a data block without settings
     make the identity the data source's full address, module prefix included, so separate modules get separate networks. The calls that one
-    module instance stands for share that instance's network, as they share its nodes.
+    module instance stands for share that instance's network, as they share its nodes. A `terraform_remote_state`
+    with the `remote` backend and only `organization`, `workspaces.name` and `hostname` reads the workspace a
+    `tfe_outputs` block reads, so it gets that block's identity. Settings resolve with `Inst.value(agree=True)`.
   - An index or attribute after a remote output is part of the network name: `vpcs["blue"]` is `vpcs-blue`,
     `vpc_ids[0]` is `vpc-ids-0`. An attribute path through locals, variables and module outputs reads object keys and
     list indexes; an index that is no literal reads the whole value. After a remote output it is named `any`, so
     every key of `vpcs[each.key]` reads one network `vpcs-any`. The index of a module call (`module.net[0]`) is
     skipped: every instance has the same outputs. A remote subnet's tier comes only from the last name of its path
-    (`vpcs["private-net"].public_subnet_ids` is public); a key or object name before it never sets the tier.
+    (`vpcs["private-net"].public_subnet_ids` is public); a key or object name before it never sets the tier, and
+    a trailing index or identifier attribute (`id`, `ids`, `arn`, `name`) is skipped.
   - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module and a
     literal index (`data.aws_vpc.x[0]` is network `x-0`). A lookup whose `id`, `name`, `filter` or `tags` reads a
     network this stack creates is that local network; `depends_on`, `resource_group_name` and other arguments do not

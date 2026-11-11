@@ -89,6 +89,15 @@ def test_node_without_placement_of_that_tier_leaves_the_subnet_group() -> None:
     assert tf_verify.needs_attention(curated, verified)
 
 
+def test_a_node_in_a_subnet_group_of_the_wrong_tier_moves_to_one_of_its_tier() -> None:
+    curated = _curated()
+    curated["groups"].append(_group("priv", "subnet", "vpc", tier="private", evidence=[{"fact": PLACED["aws_instance.orders"]}]))
+    curated["nodes"] = [_node("lb", "aws_lb.front", "shop"), _node("vm", "aws_instance.orders", "shop")]
+    verified, report = _verify(curated)
+    assert {n["id"]: n["group"] for n in verified["nodes"]} == {"lb": "shop", "vm": "priv"}
+    assert "vm: no public placement fact, moved out of subnet group pub" in report
+
+
 def test_a_node_directly_in_the_subnet_group_is_checked_too() -> None:
     curated = _curated()
     curated["nodes"] = [_node("vm", "aws_instance.orders", "pub")]
@@ -179,15 +188,15 @@ def _placement(resource: str, network: str) -> dict:
 
 
 EXTERNAL = (_node("fn", SHARED_FN, "shared"),)
-MOVED_VM = "vm: placed in main, not in network group shared; moved out"
-MOVED_FN = "fn: placed in shared-vpc, not in network group vpc; moved out"
+MOVED_VM = "vm: placed in main, not in network group shared; moved to network group vpc"
+MOVED_FN = "fn: placed in shared-vpc, not in network group vpc; moved to network group shared"
 
 
 @pytest.mark.parametrize(("nodes", "extra", "group_of", "external", "note"), [
     (EXTERNAL, [], {"fn": "shared"}, True, None),
-    ((_node("fn", SHARED_FN, "shared"), _node("vm", LOCAL_VM, "shared")), [], {"fn": "shared", "vm": "acct"}, True, MOVED_VM),
-    ((_node("vm", LOCAL_VM, "shared"),), [], {"vm": "acct"}, False, MOVED_VM),  # emptied: no marker
-    ((_node("fn", SHARED_FN, "vpc"),), [], {"fn": "acct"}, False, MOVED_FN),
+    ((_node("fn", SHARED_FN, "shared"), _node("vm", LOCAL_VM, "shared")), [], {"fn": "shared", "vm": "vpc"}, True, MOVED_VM),
+    ((_node("vm", LOCAL_VM, "shared"),), [], {"vm": "vpc"}, False, MOVED_VM),  # emptied: no marker
+    ((_node("fn", SHARED_FN, "vpc"),), [], {"fn": "shared"}, True, MOVED_FN),
     ((_node("sg", SG, "vpc"),), [], {"sg": "vpc"}, False, None),  # no placement fact: not checked
     ((_node("sg", SG, "shared"),), [], {"sg": "shared"}, True, None),
     ((_node("fn", SHARED_FN, "acct"),), [], {"fn": "acct"}, False, "fn: placed in shared-vpc, drawn outside any network group"),
@@ -200,9 +209,17 @@ def test_correct_box(nodes: tuple, extra: list, group_of: dict, external: bool, 
     assert _group_of(verified, "shared").get("external", False) is external
     assert "external" not in _group_of(verified, "vpc")
     assert note is None or note in report
-    assert ("moved out" in report) is (note is not None and "moved out" in note)
-    if note and "moved out" in note:
+    assert ("moved" in report) is (note is not None and "moved" in note)
+    if note and "moved" in note:
         assert tf_verify.needs_attention(curated, verified)  # a node left a box it was drawn in
+
+
+def test_a_node_in_a_wrong_network_group_moves_out_when_no_group_stands_for_its_network() -> None:
+    curated = _boxes([_node("vm", LOCAL_VM, "shared")])
+    _group_of(curated, "vpc")["evidence"] = []
+    verified, report = _verify(curated)
+    assert "vm: placed in main, not in network group shared; moved out" in report
+    assert next(n for n in verified["nodes"] if n["id"] == "vm")["group"] == "acct"
 
 
 def test_a_group_citing_a_local_and_a_remote_network_is_not_external() -> None:
@@ -365,10 +382,12 @@ def test_described_mode_drops_a_curated_external_and_notes_nothing_about_boxes()
     assert "cites no network fact" not in report
 
 
-def test_a_network_inside_a_network_becomes_a_plain_group_and_its_nodes_are_checked_against_the_outer_one() -> None:
+def test_a_network_inside_a_network_moves_beside_it_and_keeps_its_nodes() -> None:
     curated = _boxes(list(EXTERNAL))
     _group_of(curated, "shared")["parent"] = "vpc"
     verified, report = _verify(curated)
-    assert _group_of(verified, "shared")["kind"] is None
-    assert "group shared: network inside network group vpc, now a plain group" in report
-    assert next(n for n in verified["nodes"] if n["id"] == "fn")["group"] == "acct"
+    assert _group_of(verified, "shared")["kind"] == "network"
+    assert _group_of(verified, "shared")["parent"] == _group_of(verified, "vpc")["parent"]
+    assert "group shared: network inside network group vpc, moved beside it" in report
+    assert next(n for n in verified["nodes"] if n["id"] == "fn")["group"] == "shared"
+    assert _group_of(verified, "shared")["external"] is True

@@ -471,6 +471,8 @@ def test_a_quoted_local_keeps_the_attribute_path(tmp_path: Path) -> None:
     ("vpc_id", 'vpc_subnets["private"]', "private"),
     ("vpc_id", "vpc_private_subnet_ids[0]", "private"),
     ("private_vpc.id", "private_vpc.subnet_ids", None),
+    ("shared_vpc_id", "shared_vpc_private_subnet.id", "private"),
+    ("shared_vpc_id", 'shared_vpc_subnets["private"].id', "private"),
 ])
 def test_only_the_last_name_of_a_remote_path_sets_the_tier(tmp_path: Path, vpc: str, path: str, tier: str | None) -> None:
     (tmp_path / "main.tf").write_text(
@@ -490,3 +492,35 @@ def test_only_the_last_name_of_a_remote_path_sets_the_tier(tmp_path: Path, vpc: 
 def test_the_module_of_a_lookup_address_ignores_keys(address: str, module: str) -> None:
     from cartographer.clouds.refs import _module
     assert _module(address) == module
+
+
+REMOTE_BACKEND = ('data "terraform_remote_state" "net" {{\n  backend = "remote"\n'
+                  '  config = {{\n    organization = "acme"\n{host}    workspaces = {{ name = "networking" }}\n  }}\n}}\n'
+                  'resource "aws_lambda_function" "a" {{\n'
+                  '  vpc_config {{ subnet_ids = data.terraform_remote_state.net.outputs.shared_vpc_private_subnet_ids }}\n}}\n')
+
+
+@pytest.mark.parametrize(("host", "workspace", "one"), [
+    ("", "networking", True),
+    ('    hostname = "app.terraform.io"\n', "networking", True),
+    ('    hostname = "tfe.corp.example"\n', "networking", False),
+    ("", "platform", False),
+])
+def test_a_remote_backend_read_of_a_workspace_is_the_network_tfe_outputs_reads(
+        tmp_path: Path, host: str, workspace: str, one: bool) -> None:
+    (tmp_path / "main.tf").write_text(_tfe(workspace) + REMOTE_BACKEND.format(host=host))
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert len(facts["networks"]) == 1
+    assert bool(facts["placements"]) is one
+
+
+@pytest.mark.parametrize(("orgs", "networks"), [(("o1", "o2"), 2), (("o1", "o1"), 1)])
+def test_the_tfe_provider_organization_identifies_a_tfe_outputs_without_one(
+        tmp_path: Path, orgs: tuple[str, str], networks: int) -> None:
+    blocks = "".join(
+        f'provider "tfe" {{\n  alias = "{a}"\n  organization = "{o}"\n}}\n'
+        f'data "tfe_outputs" "{a}" {{\n  provider = tfe.{a}\n  workspace = "network"\n}}\n'
+        f'resource "aws_security_group" "{a}" {{ vpc_id = data.tfe_outputs.{a}.values.shared_vpc_id }}\n'
+        for a, o in zip(("a", "b"), orgs))
+    (tmp_path / "main.tf").write_text(blocks)
+    assert len(tf_extract.extract(Path("."), tmp_path)["networks"]) == networks
