@@ -136,6 +136,14 @@ def test_a_remote_vpc_fact_cannot_back_cidrs() -> None:
     assert "cidrs" not in _group_of(_verify(curated)[0], "vpc")
 
 
+def test_a_network_group_keeps_only_evidence_that_cites_a_network_fact_or_code() -> None:
+    bad = [{"fact": "n999"}, {"fact": PLACED["aws_lb.front"]}, {"stated": "trust me"}, {"file": "nope.tf", "line": 1, "contains": "x"}]
+    for cidrs in ({"cidrs": VPC["cidrs"]}, {}):
+        curated = _curated()
+        curated["groups"][1] = _group("vpc", "network", "acct", **cidrs, evidence=[{"fact": VPC["id"]}, *bad])
+        assert _group_of(_verify(curated)[0], "vpc") == {**curated["groups"][1], "evidence": [{"fact": VPC["id"]}]}
+
+
 def test_edges_cannot_cite_network_facts() -> None:
     curated = _curated()
     curated["nodes"].append(_node("vm", "aws_instance.orders", None))

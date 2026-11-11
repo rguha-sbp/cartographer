@@ -228,7 +228,11 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     `workspace` (dropped when `"default"` on `terraform_remote_state`), `organization` and every `config` leaf as a
     dotted path, resolved to literals through `var.` and `local.` and compared exactly as written. A setting that does
     not resolve, calls of one module instance that disagree, a non-literal index or a data block without settings
-    make the identity the data source's full address, so those modules get separate networks.
+    make the identity the data source's full address, so separate modules get separate networks. The calls that one
+    module instance stands for share that instance's network, as they share its nodes.
+  - An index or attribute after a remote output is part of the network name: `vpcs["blue"]` is `vpcs-blue`,
+    `vpc_ids[0]` is `vpc-ids-0`. An attribute path through locals, variables and module outputs reads object keys and
+    list indexes; an index that is no literal reads the whole value.
   - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module.
   - A remote subnet output places a resource in a remote network whose name prefixes the output name: one of the same
     state first, then the longest name, then for a lookup one of the same module, then the network key.
