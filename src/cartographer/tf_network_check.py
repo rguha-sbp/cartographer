@@ -52,9 +52,9 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
 
 
 ENVIRONMENTS = {"prod", "production", "prd", "dev", "development", "develop", "test", "tst", "acc", "acceptance", "stag",
-                "stage", "qa", "uat", "sandbox", "nonprod"}
+                "stage", "stg", "preprod", "qa", "uat", "sandbox", "nonprod", "env"}
 IGNORED = {"account", "subscription", "terraform", "aws", "azure", "amazon", "microsoft", *ENVIRONMENTS}
-REGION = re.compile(r"\b[a-z]{2}(-[a-z]+)?-(north|south|east|west|central)[a-z]*-\d+\b")  # us-east-1, us-gov-west-1
+REGION = re.compile(r"\b[a-z]{2}(-[a-z]+)?-(north|south|east|west|central)[a-z]*-\d+[a-z]?\b")  # us-east-1, us-gov-west-1
 
 
 def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], cited: dict[str, set], placed: dict[str, list[dict]],

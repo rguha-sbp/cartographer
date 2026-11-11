@@ -322,3 +322,30 @@ def test_a_root_subnet_lookup_stays_with_the_root_vpc_lookup_of_the_same_name(tm
     facts = tf_extract.extract(Path("."), tmp_path)
     address = {n["id"]: n["address"] for n in facts["networks"]}
     assert [address[p["network"]] for p in facts["placements"]] == ["data.aws_vpc.shared_vpc"]
+
+
+TIED_NAMES = (
+    'resource "aws_security_group" "a" { vpc_id = data.aws_vpc.shared_vpc.id }\n'
+    'resource "aws_security_group" "b" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
+    'resource "aws_lambda_function" "fn" {\n'
+    '  vpc_config { subnet_ids = data.tfe_outputs.other.values.shared_vpc_private_subnet_ids }\n}\n')
+
+
+@pytest.mark.parametrize("root", [TIED_NAMES, 'module "m" {\n  source = "./a"\n}\n'])
+def test_a_remote_subnet_goes_to_a_remote_vpc_before_a_lookup_of_the_same_name_in_any_module(tmp_path: Path, root: str) -> None:
+    facts = _two_modules(tmp_path, TIED_NAMES, root)
+    stack = {n["id"]: n["stack"] for n in facts["networks"]}
+    assert [stack[p["network"]] for p in facts["placements"]] == ["networking"]
+
+
+@pytest.mark.parametrize(("config", "stack"), [
+    ('{ "key" = "networking/terraform.tfstate" }', "networking"),
+    ('{ "workspaces" = { "name" = "networking" } }', "networking"),
+    ('{ key = "infraterraform.tfstate" }', "infraterraform"),
+    ('{ key = "terraform.tfstate" }', "n"),
+])
+def test_the_stack_reads_quoted_config_keys_and_cuts_only_a_whole_terraform_word(tmp_path: Path, config: str, stack: str) -> None:
+    (tmp_path / "main.tf").write_text(
+        f'data "terraform_remote_state" "n" {{\n  backend = "s3"\n  config = {config}\n}}\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.n.outputs.shared_vpc_id }\n')
+    assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == [stack]

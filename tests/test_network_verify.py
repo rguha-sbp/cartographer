@@ -416,6 +416,8 @@ def test_described_mode_drops_a_curated_shared_from() -> None:
     ("Networking account", "networking-us-gov-west-1", True),
     ("Network account", "network-s", True),
     ("Networking", "networking_us_east_1", True),
+    ("Network us-east-1a", "networking-stg", True),
+    ("Networking", "env:/preprod/networking", True),
 ])
 def test_an_account_label_is_named_after_a_stack_with_the_same_words_less_environments(label: str, stack: str, named: bool) -> None:
     assert named_after(label, stack) is named

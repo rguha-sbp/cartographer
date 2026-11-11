@@ -5,6 +5,8 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from cartographer.tf_policies import unq
+
 TIERS = ("isolated", "private", "public")
 CIDR = re.compile(r"\d{1,3}(\.\d{1,3}){3}/\d{1,2}")
 
@@ -77,12 +79,17 @@ def stack(inst: Inst, kind: str, name: str) -> str:
     `terraform_remote_state` is an environment, not a stack)."""
     block = inst.mod.data.get((kind, name))
     body = block.body if block else {}
-    config = body.get("config") if isinstance(body.get("config"), dict) else {}
-    workspaces = config.get("workspaces") if isinstance(config.get("workspaces"), dict) else {}
+    config = _object(body.get("config"))
+    workspaces = _object(config.get("workspaces"))
     for named in (workspaces.get("name"), config.get("key"), body.get("workspace") if kind == "tfe_outputs" else None):
         if isinstance(found := inst.value(named), str):
-            return re.sub(r"([/._-]?terraform)?\.tfstate$", "", found) or name
+            return re.sub(r"((^|[/._-])terraform)?\.tfstate$", "", found) or name
     return name
+
+
+def _object(value: Any) -> dict:
+    """An object expression with its keys unquoted (`{ "key" = ... }` is `{ key = ... }`), empty for anything else."""
+    return {unq(k): v for k, v in value.items()} if isinstance(value, dict) else {}
 
 
 def network_fact(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
@@ -101,14 +108,14 @@ def place_remote(networks: dict[str, dict], ref: Ref, suffixes: str = "ids?") ->
     """(network key, tier, what decided the tier) for a subnet another stack or a lookup gives, None when either
     is unknown. The network is a remote one whose name prefixes the output name (`shared-vpc` for
     `shared_vpc_private_subnet_ids`): one of the reference's own stack before any other, then the longest name, then
-    for a lookup a network its own module looks up."""
+    for a lookup a network its own module looks up, then a network of another stack before a lookup."""
     name, tier = derive(ref.name or "", suffixes), tier_in(ref.name or "")
 
-    def rank(key: str) -> tuple[bool, int, bool, str]:
+    def rank(key: str) -> tuple[bool, int, bool, bool, str]:
         n = networks[key]
         same_stack = ref.stack is not None and n["stack"] == ref.stack
         same_module = ref.stack is None and n["stack"] is None and _module(key) == _module(ref.address)  # both lookups
-        return same_stack, len(n["name"]), same_module, key
+        return same_stack, len(n["name"]), same_module, n["stack"] is not None, key
 
     named = [key for key, n in networks.items() if n["remote"] and name.startswith(n["name"] + "-")]
     return (max(named, key=rank), tier, ref.name or "") if named and tier else None
