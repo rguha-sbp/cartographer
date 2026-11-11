@@ -36,7 +36,8 @@ def cloud_group(g: Group) -> Cell:
     """A frame in the style its cloud draws it, else a group tinted faintly in its purpose colour.
 
     The tint sits behind the icons and lines, so the group reads as a background area. A nested group's tint
-    stacks on its parent's (about 15 % at two levels): the layers carry no meaning of their own.
+    stacks on its parent's (about 15 % at two levels), so a nested group reads a shade darker: the shade shows the
+    nesting.
     """
     if g.kind:
         key = f"subnet-{g.tier}" if g.kind == "subnet" else g.kind
