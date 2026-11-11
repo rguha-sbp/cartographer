@@ -285,3 +285,30 @@ def test_a_call_without_the_workspace_reads_the_default(tmp_path: Path, passed: 
         tmp_path, WORKSPACE_FROM_A_VARIABLE.replace('"net_ws" {}', '"net_ws" {\n  default = "platform-prod"\n}'),
         f'module "x" {{\n  source = "./a"\n  net_ws = "{passed}"\n}}\nmodule "y" {{\n  source = "./a"\n}}\n')
     assert [n["stack"] for n in facts["networks"]] == [stack]
+
+
+def test_a_remote_subnet_read_in_a_module_goes_to_the_longest_name_not_to_a_root_lookup(tmp_path: Path) -> None:
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "main.tf").write_text(
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.shared_vpc.id }\n'
+        'resource "aws_lambda_function" "fn" {\n'
+        '  vpc_config { subnet_ids = data.tfe_outputs.net.values.shared_vpc_private_subnet_ids }\n}\n')
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.shared.id }\nmodule "a" {\n  source = "./a"\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    address = {n["id"]: n["address"] for n in facts["networks"]}
+    assert [address[p["network"]] for p in facts["placements"]] == ["module.a.data.aws_vpc.shared_vpc"]
+
+
+def test_a_module_named_data_keeps_the_lookups_of_its_submodules_apart(tmp_path: Path) -> None:
+    for name in ("x", "y"):
+        (tmp_path / "data" / name).mkdir(parents=True)
+        (tmp_path / "data" / name / "main.tf").write_text(
+            'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.main.id }\n'
+            'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = data.aws_subnets.main_private.ids }\n}\n')
+    (tmp_path / "data" / "main.tf").write_text('module "x" {\n  source = "./x"\n}\nmodule "y" {\n  source = "./y"\n}\n')
+    (tmp_path / "main.tf").write_text('module "data" {\n  source = "./data"\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    address = {n["id"]: n["address"] for n in facts["networks"]}
+    assert all(address[p["network"]].startswith(p["resource"].removesuffix("aws_lambda_function.fn"))
+               for p in facts["placements"]) and len(facts["placements"]) == 2

@@ -100,20 +100,21 @@ def add_remote(networks: dict[str, dict], ref: Ref, res: Res, suffixes: str = "i
 def place_remote(networks: dict[str, dict], ref: Ref, suffixes: str = "ids?") -> tuple[str, str, str] | None:
     """(network key, tier, what decided the tier) for a subnet another stack or a lookup gives, None when either
     is unknown. The network is a remote one whose name prefixes the output name (`shared-vpc` for
-    `shared_vpc_private_subnet_ids`): one of the reference's own stack before any other, then one the reference's own
+    `shared_vpc_private_subnet_ids`): one of the reference's own stack before any other, for a lookup one its own
     module looks up, then the longest name."""
     name, tier = derive(ref.name or "", suffixes), tier_in(ref.name or "")
-    named = [(ref.stack is not None and n["stack"] == ref.stack, _module(a) == _module(ref.address), len(n["name"]), a)
+    lookup = ref.stack is None  # only a lookup's address carries its module
+    named = [(not lookup and n["stack"] == ref.stack, lookup and _module(a) == _module(ref.address), len(n["name"]), a)
              for a, n in networks.items() if n["remote"] and name.startswith(n["name"] + "-")]
     return (max(named)[3], tier, ref.name or "") if named and tier else None
 
 
 def _module(address: str) -> str:
     """The module path a data source address starts with: `module.a.` for `module.a.data.aws_vpc.main`."""
-    return address.partition("data.")[0]
+    return address.rpartition("data.")[0]
 
 
-def placement_facts(found: dict[tuple[str, str, str], tuple[str, Any, str | None]]) -> list[dict]:
+def placement_facts(found: dict[tuple[str, str, str], tuple[str, Res, str | None]]) -> list[dict]:
     """The placement facts of (resource, network, tier) -> (what decided the tier, the resource, the stack of a
     remote subnet output)."""
     return [{"resource": address, "network": network, "tier": tier, "via": via, "stack": stack, "file": r.block.file,
