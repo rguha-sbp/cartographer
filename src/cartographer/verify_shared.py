@@ -110,9 +110,9 @@ def enclosing(groups: dict[str, dict], gid: str | None, kind: str) -> dict | Non
     return next((g for g in ancestors(groups, gid) if g["kind"] == kind), None)
 
 
-def outside_network(groups: dict[str, dict], subnet: dict) -> str | None:
-    """The nearest ancestor of a subnet group that is not a network or subnet frame."""
-    return next((g["id"] for g in ancestors(groups, subnet["parent"]) if g["kind"] not in NETWORK_KINDS), None)
+def outside_network(groups: dict[str, dict], group: dict) -> str | None:
+    """The nearest ancestor of a network or subnet group that is not a network or subnet frame."""
+    return next((g["id"] for g in ancestors(groups, group["parent"]) if g["kind"] not in NETWORK_KINDS), None)
 
 
 def _demote(group: dict) -> None:
@@ -129,8 +129,8 @@ def fix_clouds(curated: dict, notes: list[str]) -> None:
 
 
 def fix_network_groups(curated: dict, notes: list[str]) -> None:
-    """Drop `tier` and `cidrs` from groups they do not belong to and `shared_from`, which only verify sets, from every
-    group; a subnet group needs a tier and a network parent."""
+    """Drop `tier` and `cidrs` from groups they do not belong to and `external` (and the older `shared_from`), which
+    only verify sets, from every group; a subnet group needs a tier and a network parent."""
     groups = {g["id"]: g for g in curated["groups"]}
     for g in curated["groups"]:
         if g["kind"] != "subnet" and "tier" in g:
@@ -139,9 +139,10 @@ def fix_network_groups(curated: dict, notes: list[str]) -> None:
         if g["kind"] != "network" and "cidrs" in g:
             notes.append(f"group {g['id']}: cidrs on a group that is not a network, dropped")
             del g["cidrs"]
-        if "shared_from" in g:
-            notes.append(f"group {g['id']}: shared_from is set by verify, not the curator, dropped")
-            del g["shared_from"]
+        for key in ("external", "shared_from"):
+            if key in g:
+                notes.append(f"group {g['id']}: {key} is set by verify, not the curator, dropped")
+                del g[key]
         if g["kind"] == "subnet" and "tier" not in g:
             notes.append(f"group {g['id']}: subnet without a tier, now a plain group")
             _demote(g)
@@ -154,19 +155,22 @@ Supported = Callable[[dict, list[dict]], tuple[list[dict], list[str]]]
 
 
 def check_claims(curated: dict, notes: list[str], supported: Supported) -> None:
-    """Keep a network group's `cidrs` and a subnet group's tier only while `supported(group, evidence)` finds evidence."""
+    """Keep a network group's `cidrs` and a subnet group's tier only while `supported(group, evidence)` finds evidence.
+    A network group keeps its evidence when its cidrs drop: it still names the network the group stands for."""
     for g in curated["groups"]:
         if g["kind"] == "network" and not g.get("cidrs") or g["kind"] not in NETWORK_KINDS:
             continue
         good, why = supported(g, g.get("evidence", []))
-        if contains_secret(g):
+        if secret := contains_secret(g):
             good, why = [], [SECRET_REASON]
-        if good:
+        if g["kind"] == "network":
+            if not good:
+                notes.append(f"group {g['id']}: cidrs dropped, {'; '.join(why) or 'no evidence'}")
+                del g["cidrs"]
+            if secret:
+                g.pop("evidence", None)
+        elif good:
             g["evidence"] = good
-        elif g["kind"] == "network":
-            notes.append(f"group {g['id']}: cidrs dropped, {'; '.join(why) or 'no evidence'}")
-            del g["cidrs"]
-            g.pop("evidence", None)
         else:
             notes.append(f"group {g['id']}: tier {g['tier']} dropped, {'; '.join(why) or 'no evidence'}")
             _demote(g)
@@ -174,11 +178,11 @@ def check_claims(curated: dict, notes: list[str], supported: Supported) -> None:
 
 
 def group_claims(diagram: dict) -> set[tuple]:
-    """Network claims the diagram makes: network cidrs, subnet tiers and parents, nodes inside a subnet."""
+    """Network claims the diagram makes: network cidrs, subnet tiers and parents, nodes inside a network."""
     groups = {g["id"]: g for g in diagram["groups"]}
     claims = {("cidrs", g["id"], tuple(g["cidrs"])) for g in diagram["groups"] if g.get("cidrs")}
     claims |= {("subnet", g["id"], g.get("tier"), g["parent"]) for g in diagram["groups"] if g["kind"] == "subnet"}
-    claims |= {("inside", n["id"], n["group"]) for n in diagram["nodes"] if enclosing(groups, n["group"], "subnet")}
+    claims |= {("inside", n["id"], n["group"]) for n in diagram["nodes"] if enclosing(groups, n["group"], "network")}
     return claims
 
 

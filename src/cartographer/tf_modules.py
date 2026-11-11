@@ -92,24 +92,43 @@ class Inst:
 
     def value(self, expr: Any, depth: int = 0) -> str | None | object:
         """The literal `expr` is here, through `local.`, module arguments and variable defaults; None when absent,
-        UNRESOLVED when it is no literal or the calls this instance stands for pass different ones."""
-        if expr is None:
-            return None
-        if isinstance(expr, (bool, int, float)):
-            return str(expr).lower()
-        if not isinstance(expr, str):
-            return UNRESOLVED
-        s = unq(expr)
-        if not (m := SINGLE.fullmatch(s)):
-            return UNRESOLVED if "${" in s else s
-        kind, name = m.groups()
-        if depth >= MAX_DEPTH:
-            return UNRESOLVED
+        UNRESOLVED when it is no literal. A variable reads the first call that passes it."""
+        head = _head(expr, depth)
+        if not isinstance(head, tuple):
+            return head
+        kind, name = head
+        where, target = self, (self.mod.locals if kind == "local" else self.mod.variables).get(name)
+        if kind == "var" and self.parent is not None and (passed := [a[name] for a in self.args if name in a]):
+            where, target = self.parent, passed[0]
+        found = where.value(target, depth + 1)
+        return UNRESOLVED if found is None else found
+
+    def agreed_value(self, expr: Any, depth: int = 0) -> str | None | object:
+        """`value`, but UNRESOLVED when the calls this instance stands for pass different values, or one passes a value
+        and another reads the default: what identifies a remote state must hold for every call."""
+        head = _head(expr, depth)
+        if not isinstance(head, tuple):
+            return head
+        kind, name = head
         calls = self.args if kind == "var" and self.parent is not None else []
-        found = {self.parent.value(a[name], depth + 1) for a in calls if name in a}
-        if not calls or any(name not in a for a in calls):  # a call that leaves the variable out reads its default
-            found.add(self.value((self.mod.locals if kind == "local" else self.mod.variables).get(name), depth + 1))
+        found = {self.parent.agreed_value(a[name], depth + 1) for a in calls if name in a}  # type: ignore[union-attr]
+        if not calls or any(name not in a for a in calls):
+            found.add(self.agreed_value((self.mod.locals if kind == "local" else self.mod.variables).get(name), depth + 1))
         return found.pop() if len(found) == 1 and None not in found else UNRESOLVED
+
+
+def _head(expr: Any, depth: int) -> str | None | object | tuple[str, str]:
+    """A literal `expr` (None when absent, UNRESOLVED when no literal), or the (`var` | `local`, name) it reads."""
+    if expr is None:
+        return None
+    if isinstance(expr, (bool, int, float)):
+        return str(expr).lower()
+    if not isinstance(expr, str):
+        return UNRESOLVED
+    s = unq(expr)
+    if not (m := SINGLE.fullmatch(s)):
+        return UNRESOLVED if "${" in s else s
+    return UNRESOLVED if depth >= MAX_DEPTH else (m[1], m[2])
 
 
 def provider_map(calls: list[Block]) -> dict[str, str]:

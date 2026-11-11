@@ -75,18 +75,18 @@ class Network:
         if subnet.type != "aws_subnet":
             return None
         tier, how = _local_tier(subnet)
-        vpc = next((r.key for r in sources(subnet.inst, subnet.block.body.get("vpc_id"), TOKEN) if r.key in self.vpcs), None)
+        vpc = next((r.key() for r in sources(subnet.inst, subnet.block.body.get("vpc_id"), TOKEN) if r.key() in self.vpcs), None)
         return (vpc, tier, f"{ref.address} {how}") if vpc else None
 
     def placements(self) -> list[dict]:
-        found: dict[tuple[str, str, str], tuple[str, Res, str | None]] = {}
+        found: dict[tuple[str, str, str], tuple[str, Res]] = {}
         for r in self.ex.res:
             if r.type in NOT_PLACED:
                 continue
             for value in find(r.block.body, SUBNET_KEY):
                 for ref in sources(r.inst, value, TOKEN):
                     if placed := self.place(ref):
-                        found.setdefault((r.address, placed[0], placed[1]), (placed[2], r, ref.stack))
+                        found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
         return placement_facts(found)
 
 

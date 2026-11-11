@@ -92,7 +92,7 @@ class Network:
         for r in self.ex.res:
             body = r.block.body
             if r.type == "azurerm_subnet":
-                owner = next((x.key for x in self.refs(r.inst, body.get("virtual_network_name")) if x.key in self.nets), None)
+                owner = next((x.key(NAME_SUFFIXES) for x in self.refs(r.inst, body.get("virtual_network_name")) if x.key(NAME_SUFFIXES) in self.nets), None)
                 self.subnets[r.address] = Subnet(r.address, owner, body, r)
             elif r.type == "azurerm_virtual_network":
                 for i, block in enumerate(blocks(body.get("subnet"))):
@@ -203,18 +203,18 @@ class Network:
         return (named, f"{s.address} name") if named else ("private", f"{s.address} default")
 
     def placements(self) -> list[dict]:
-        found: dict[tuple[str, str, str], tuple[str, Res, str | None]] = {}
+        found: dict[tuple[str, str, str], tuple[str, Res]] = {}
         for r in self.ex.res:
             if r.type in NOT_PLACED or self.ex.folded(r.address):
                 continue
             for s in self.subnet_refs(r):
                 if s.network in self.nets:
                     tier, via = self.tier(s)
-                    found.setdefault((r.address, s.network, tier), (via, r, None))
+                    found.setdefault((r.address, s.network, tier), (via, r))
             for value in find(r.block.body, SUBNET_KEY):
                 for ref in self.refs(r.inst, value):
                     if ref.remote and (placed := place_remote(self.nets, ref, NAME_SUFFIXES)):
-                        found.setdefault((r.address, placed[0], placed[1]), (placed[2], r, ref.stack))
+                        found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
         return placement_facts(found)
 
 

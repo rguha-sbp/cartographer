@@ -3,7 +3,6 @@
 from collections import defaultdict
 from pathlib import Path
 
-from cartographer.stack_names import named_after
 from cartographer.verify_shared import (
     check_claims,
     code_hit,
@@ -31,14 +30,14 @@ def _problem(group: dict, ev: dict, facts_by_id: dict, repo_root: Path) -> str |
 
 def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, notes: list[str]) -> None:
     """Keep cidrs and subnet tiers only when a fact or a code citation backs them, keep each node inside a subnet group
-    only when it has a placement fact of that tier, then mark the networks other stacks create."""
+    only when it has a placement fact of that tier, and inside a network group only when it runs in a network the group
+    cites; then mark the network groups that stand only for external networks."""
 
     def supported(group: dict, evidence: list[dict]) -> tuple[list[dict], list[str]]:
         problems = [(ev, _problem(group, ev, facts_by_id, repo_root)) for ev in evidence]
         return [ev for ev, p in problems if p is None], [p for _, p in problems if p]
 
     groups = {g["id"]: g for g in out["groups"]}
-    cited = {g["id"]: {ev.get("fact") for ev in g.get("evidence", [])} for g in out["groups"]}  # before claims drop any
     check_claims(out, notes, supported)
     placed: dict[str, list[dict]] = defaultdict(list)  # a resource -> its placements
     for p in facts.get("placements", []):
@@ -48,44 +47,29 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
         if subnet and not any(p["tier"] == subnet["tier"] for address in n["tf"] for p in placed[address]):
             notes.append(f"{n['id']}: no {subnet['tier']} placement fact, moved out of subnet group {subnet['id']}")
             n["group"] = outside_network(groups, subnet)
-    _mark_shared(out, facts, groups, cited, placed, notes)
+    check_boxes(out, {n["id"]: n for n in facts.get("networks", [])}, groups, placed, notes)
 
 
-def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], cited: dict[str, set], placed: dict[str, list[dict]],
-                 notes: list[str]) -> None:
-    """Set `shared_from` on each network group that another stack creates: it holds a placed node, and the networks its
-    nodes are placed in and the network facts its evidence cites all come from other stacks' outputs. Evidence alone
-    never makes a group shared, but a cited network of this stack, created or looked up, keeps it local. Warn when its evidence cites a network of a
-    stack none of its nodes is placed in, and when it sits in an account frame named after its stack: the stack's
-    nodes run in the stack's account."""
-    networks = {n["id"]: n for n in facts.get("networks", [])}
-    inside: dict[str, list[dict]] = defaultdict(list)  # a network group -> the placements of its nodes
+def check_boxes(out: dict, networks: dict[str, dict], groups: dict[str, dict], placed: dict[str, list[dict]],
+                notes: list[str]) -> None:
+    """A network group stands for the network facts its evidence cites. Move each placed node out of a network group
+    that stands for none of the networks it runs in, note a placed node outside every network group and a group that
+    cites no network, then mark `external` the groups that stand only for remote networks and still hold a node."""
+    stands = {g["id"]: {ev["fact"] for ev in g.get("evidence", []) if ev.get("fact") in networks}
+              for g in groups.values() if g["kind"] == "network"}
+    notes += [f"group {gid}: cites no network fact, its nodes cannot be checked" for gid, cited in stands.items() if not cited]
     for n in out["nodes"]:
-        if network := enclosing(groups, n["group"], "network"):
-            inside[network["id"]] += [p for address in n["tf"] for p in placed[address]]
-    for g in groups.values():
-        if g["kind"] != "network":
+        runs_in = {p["network"] for address in n["tf"] for p in placed[address]}
+        if not runs_in:
             continue
-        # a resource can sit in several networks: the group stands for the ones it cites, when its nodes are in any
-        own = [p for p in inside[g["id"]] if p["network"] in cited[g["id"]]] or inside[g["id"]]
-        stacks = {s for p in own for s in _stacks(p, networks)}
-        cited_stacks = {networks[fact].get("stack") for fact in cited[g["id"]] if fact in networks}
-        if None in cited_stacks and stacks and None not in stacks:
-            notes.append(f"group {g['id']}: evidence cites a network this stack creates or looks up, but its nodes are "
-                         f"placed in a network of {', '.join(sorted(stacks))}; cite the network the nodes run in")
-        if not stacks or None in stacks | cited_stacks:
-            continue
-        g["shared_from"] = " and ".join(sorted(stacks))
-        if elsewhere := cited_stacks - stacks:
-            notes.append(f"group {g['id']}: evidence cites a network of {', '.join(sorted(elsewhere))}, but its nodes are "
-                         f"placed in a network of {g['shared_from']}; cite the network the nodes run in")
-        account = enclosing(groups, g["id"], "account")
-        if account and any(named_after(account["label"], s) for s in stacks):
-            notes.append(f"group {g['id']}: shared network sits in account {account['id']} ({account['label']}), "
-                         f"named after the stack it comes from; if the stack's nodes run in another account, draw it there")
-
-
-def _stacks(placement: dict, networks: dict[str, dict]) -> set[str | None]:
-    """The stacks a placement's network and subnet come from, None for this one: a remote subnet output names its
-    stack, which can differ from the VPC's."""
-    return {networks[placement["network"]].get("stack")} | ({placement["stack"]} if placement.get("stack") else set())
+        names = ", ".join(sorted({networks[i]["name"] for i in runs_in if i in networks}))
+        box = enclosing(groups, n["group"], "network")
+        if box is None:
+            notes.append(f"{n['id']}: placed in {names}, drawn outside any network group")
+        elif stands[box["id"]] and not runs_in & stands[box["id"]]:
+            notes.append(f"{n['id']}: placed in {names}, not in network group {box['id']}; moved out")
+            n["group"] = outside_network(groups, box)
+    holding = {box["id"] for n in out["nodes"] if (box := enclosing(groups, n["group"], "network"))}
+    for gid, cited in stands.items():
+        if cited and gid in holding and all(networks[i]["remote"] for i in cited):
+            groups[gid]["external"] = True

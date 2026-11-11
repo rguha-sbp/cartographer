@@ -37,9 +37,8 @@ def test_remote_vpc_found_through_module_variable() -> None:
     assert len(remote) == 1
     assert remote[0]["address"] == "data.tfe_outputs.networking.nonsensitive_values.shared_vpc_id"
     assert remote[0]["name"] == "shared-vpc"
-    assert remote[0]["stack"] == "networking"
     assert remote[0]["cidrs"] == []
-    assert _vpcs()["aws_vpc.main"]["stack"] is None
+    assert "stack" not in remote[0]
 
 
 def test_local_subnet_tiers() -> None:
@@ -92,52 +91,111 @@ def test_networks_replace_vpcs() -> None:
     assert all(p["cloud"] == "aws" for p in facts["placements"])
 
 
-def test_a_remote_subnet_goes_to_the_vpc_of_its_own_stack_first(tmp_path: Path) -> None:
+def _two_modules(tmp_path: Path, a: str, b: str | None = None, root: str = 'module "a" { source = "./a" }\nmodule "b" { source = "./b" }\n') -> dict:
+    """Facts of a root that calls modules `a` and `b`, with bodies `a` and `b` (`a` for both by default)."""
+    for name, body in (("a", a), ("b", a if b is None else b)):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "main.tf").write_text(body)
+    (tmp_path / "main.tf").write_text(root)
+    return tf_extract.extract(Path("."), tmp_path)
+
+
+def _remote_state(config: str, extra: str = "", name: str = "net", ref: str = "net") -> str:
+    return (f'data "terraform_remote_state" "{name}" {{\n  backend = "s3"\n{extra}  config = {config}\n}}\n'
+            f'resource "aws_security_group" "sg" {{ vpc_id = data.terraform_remote_state.{ref}.outputs.shared_vpc_id }}\n')
+
+
+def _tfe(workspace: str, organization: str = "acme", name: str = "net") -> str:
+    return (f'data "tfe_outputs" "{name}" {{\n  organization = "{organization}"\n  workspace = "{workspace}"\n}}\n'
+            f'resource "aws_security_group" "sg" {{ vpc_id = data.tfe_outputs.{name}.values.shared_vpc_id }}\n')
+
+
+KEY = '{ bucket = "states", key = "networking/terraform.tfstate" }'
+INDEXED = ('data "terraform_remote_state" "net" {{\n  count = 2\n  backend = "s3"\n  config = {{ key = "n.tfstate" }}\n}}\n'
+           'resource "aws_security_group" "sg" {{ vpc_id = data.terraform_remote_state.net[{index}].outputs.shared_vpc_id }}\n')
+
+
+@pytest.mark.parametrize(("a", "b", "networks"), [
+    (_remote_state(KEY), None, 1),
+    (_remote_state('{ key = "a/terraform.tfstate" }'), _remote_state('{ key = "./a/terraform.tfstate" }'), 2),
+    (_remote_state(KEY, '  workspace = "default"\n'), _remote_state(KEY), 1),
+    (_remote_state(KEY, '  workspace = "prod"\n'), _remote_state(KEY, '  workspace = "dev"\n'), 2),
+    (_remote_state('{ bucket = "default", key = "n" }'), _remote_state('{ bucket = "other", key = "n" }'), 2),
+    (_remote_state(KEY), _remote_state(KEY, name="other", ref="other"), 1),  # one state under two data source names
+    (_remote_state('{ key = "${var.env}/net.tfstate" }'), None, 2),  # not a literal: one per module
+    (_remote_state("local.state").replace("data", 'locals {\n  state = { key = "n" }\n}\ndata', 1), None, 1),
+    (INDEXED.format(index="0"), INDEXED.format(index="1"), 2),
+    (INDEXED.format(index="0"), None, 1),
+    (INDEXED.format(index="count.index"), None, 2),  # not a literal index: one per module
+    (_tfe("networking"), None, 1),
+    (_tfe("networking"), _tfe("networking", organization="other"), 2),
+    (_tfe("default"), _tfe("networking"), 2),  # a tfe workspace named default is a workspace like any other
+    ('resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.net.values.shared_vpc_id }\n', None, 2),  # no block
+])
+def test_state_identity(tmp_path: Path, a: str, b: str | None, networks: int) -> None:
+    facts = _two_modules(tmp_path, a, b)
+    assert len(facts["networks"]) == networks
+    assert all(n["remote"] and "stack" not in n for n in facts["networks"])
+
+
+WORKSPACE_FROM_A_VARIABLE = (
+    'variable "ws" {\n  default = "platform"\n}\n'
+    'data "tfe_outputs" "net" {\n  organization = "acme"\n  workspace = var.ws\n}\n'
+    'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.net.values.shared_vpc_id }\n')
+
+
+@pytest.mark.parametrize(("root", "networks"), [
+    ('module "a" {\n  source = "./a"\n  ws = "networking"\n}\nmodule "b" {\n  source = "./b"\n  ws = "networking"\n}\n', 1),
+    ('module "a" {\n  source = "./a"\n  ws = "networking"\n}\nmodule "b" {\n  source = "./b"\n  ws = "platform"\n}\n', 2),
+    ('module "a" {\n  source = "./a"\n  ws = "platform"\n}\nmodule "b" {\n  source = "./b"\n}\n', 1),  # the default agrees
+])
+def test_settings_passed_through_module_variables(tmp_path: Path, root: str, networks: int) -> None:
+    assert len(_two_modules(tmp_path, WORKSPACE_FROM_A_VARIABLE, root=root)["networks"]) == networks
+
+
+@pytest.mark.parametrize("second", ['  ws = "platform"\n', ""])
+def test_calls_of_one_module_instance_that_disagree_fall_back_to_its_address(tmp_path: Path, second: str) -> None:
+    root = f'module "x" {{\n  source = "./a"\n  ws = "networking"\n}}\nmodule "y" {{\n  source = "./a"\n{second}}}\n'
+    facts = _two_modules(tmp_path, WORKSPACE_FROM_A_VARIABLE, root=root)
+    assert [n["address"] for n in facts["networks"]] == ["data.tfe_outputs.net.values.shared_vpc_id"]
+
+
+def test_other_values_read_the_first_call(tmp_path: Path) -> None:
+    facts = _two_modules(
+        tmp_path, 'variable "cidr" {}\nresource "aws_vpc" "v" { cidr_block = var.cidr }\n',
+        root='module "x" {\n  source = "./a"\n  cidr = "10.0.0.0/16"\n}\nmodule "y" {\n  source = "./a"\n  cidr = "10.1.0.0/16"\n}\n')
+    assert [n["cidrs"] for n in facts["networks"]] == [["10.0.0.0/16"]]
+
+
+def _placed(facts: dict, field: str = "address") -> dict[str, str]:
+    network = {n["id"]: n[field] for n in facts["networks"]}
+    return {p["resource"]: network[p["network"]] for p in facts["placements"]}
+
+
+def test_a_remote_subnet_goes_to_the_vpc_of_its_own_state_first(tmp_path: Path) -> None:
     (tmp_path / "main.tf").write_text(
-        'resource "aws_security_group" "a" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
-        'resource "aws_security_group" "b" { vpc_id = data.tfe_outputs.platform.values.shared_vpc_id }\n'
-        'resource "aws_lambda_function" "a" {\n'
+        _tfe("networking", name="networking") + _tfe("platform", name="platform").replace('"sg"', '"sg2"')
+        + 'resource "aws_lambda_function" "a" {\n'
         '  vpc_config { subnet_ids = data.tfe_outputs.networking.values.shared_vpc_private_subnet_ids }\n}\n'
         'resource "aws_lambda_function" "b" {\n'
         '  vpc_config { subnet_ids = data.tfe_outputs.platform.values.shared_vpc_private_subnet_ids }\n}\n'
         'resource "aws_lambda_function" "c" {\n'
         '  vpc_config { subnet_ids = data.tfe_outputs.other.values.shared_vpc_private_subnet_ids }\n}\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
-    stack = {n["id"]: n["stack"] for n in facts["networks"]}
-    placed = {p["resource"]: stack[p["network"]] for p in facts["placements"]}
-    assert placed["aws_lambda_function.a"] == "networking"
-    assert placed["aws_lambda_function.b"] == "platform"
-    assert "aws_lambda_function.c" in placed  # no VPC of its own stack: it still gets one, as before stacks
+    placed = _placed(tf_extract.extract(Path("."), tmp_path))
+    assert placed["aws_lambda_function.a"] == "data.tfe_outputs.networking.values.shared_vpc_id"
+    assert placed["aws_lambda_function.b"] == "data.tfe_outputs.platform.values.shared_vpc_id"
+    assert "aws_lambda_function.c" in placed  # no VPC of its own state: it still gets one
 
 
-def test_modules_that_read_one_workspace_share_its_network(tmp_path: Path) -> None:
-    for name in ("a", "b"):
-        (tmp_path / name).mkdir()
-        (tmp_path / name / "main.tf").write_text(
-            'data "tfe_outputs" "networking" {\n  workspace = "networking"\n}\n'
-            'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
-            'resource "aws_lambda_function" "fn" {\n'
-            '  vpc_config { subnet_ids = data.tfe_outputs.networking.values.shared_vpc_private_subnet_ids }\n}\n')
-    (tmp_path / "main.tf").write_text('module "a" { source = "./a" }\nmodule "b" { source = "./b" }\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
-    assert [n["stack"] for n in facts["networks"]] == ["networking"]
-    assert {p["network"] for p in facts["placements"]} == {facts["networks"][0]["id"]}
-    assert len(facts["placements"]) == 2
-
-
-def test_one_data_source_name_read_against_two_workspaces_gives_two_networks(tmp_path: Path) -> None:
-    for name in ("a", "b"):
-        (tmp_path / name).mkdir()
-        (tmp_path / name / "main.tf").write_text(
-            f'data "tfe_outputs" "networking" {{\n  workspace = "networking-{name}"\n}}\n'
-            'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
-            'resource "aws_lambda_function" "fn" {\n'
-            '  vpc_config { subnet_ids = data.tfe_outputs.networking.values.shared_vpc_private_subnet_ids }\n}\n')
-    (tmp_path / "main.tf").write_text('module "a" { source = "./a" }\nmodule "b" { source = "./b" }\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
-    stack = {n["id"]: n["stack"] for n in facts["networks"]}
-    placed = sorted((p["resource"], stack[p["network"]]) for p in facts["placements"])
-    assert placed == [("module.a.aws_lambda_function.fn", "networking-a"), ("module.b.aws_lambda_function.fn", "networking-b")]
+def test_modules_that_read_one_state_share_its_network_and_each_state_keeps_its_subnets(tmp_path: Path) -> None:
+    body = ('resource "aws_lambda_function" "fn" {\n'
+            '  vpc_config { subnet_ids = data.tfe_outputs.net.values.shared_vpc_private_subnet_ids }\n}\n')
+    for case in ("same", "apart"):
+        (tmp_path / case).mkdir()
+    same = _two_modules(tmp_path / "same", _tfe("networking") + body)
+    assert len(same["networks"]) == 1 and len(same["placements"]) == 2
+    apart = _two_modules(tmp_path / "apart", _tfe("net-a") + body, _tfe("net-b") + body)
+    assert len(apart["networks"]) == 2 and len(set(_placed(apart, "id").values())) == 2
 
 
 def test_a_remote_subnet_falls_back_to_a_looked_up_vpc(tmp_path: Path) -> None:
@@ -145,35 +203,10 @@ def test_a_remote_subnet_falls_back_to_a_looked_up_vpc(tmp_path: Path) -> None:
         'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.shared_vpc.id }\n'
         'resource "aws_lambda_function" "a" {\n'
         '  vpc_config { subnet_ids = data.tfe_outputs.networking.values.shared_vpc_private_subnet_ids }\n}\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
-    ids = {n["address"]: n["id"] for n in facts["networks"]}
-    placed = [(p["resource"], p["network"]) for p in facts["placements"]]
-    assert placed == [("aws_lambda_function.a", ids["data.aws_vpc.shared_vpc"])]
+    assert _placed(tf_extract.extract(Path("."), tmp_path)) == {"aws_lambda_function.a": "data.aws_vpc.shared_vpc"}
 
 
-def test_the_stack_is_the_workspace_a_remote_state_names_literally(tmp_path: Path) -> None:
-    (tmp_path / "main.tf").write_text(
-        'data "tfe_outputs" "this" {\n  workspace = "networking-prod"\n}\n'
-        'data "tfe_outputs" "other" {\n  workspace = var.workspace\n}\n'
-        'data "terraform_remote_state" "net" {\n  backend = "remote"\n  config = { workspaces = { name = "hub" } }\n}\n'
-        'data "terraform_remote_state" "s3" {\n  backend = "s3"\n  config = { key = "core/terraform.tfstate" }\n}\n'
-        'data "terraform_remote_state" "az" {\n  backend = "azurerm"\n  config = { key = "edge.terraform.tfstate" }\n}\n'
-        'data "terraform_remote_state" "gcs" {\n  backend = "s3"\n  config = { key = "spoke-terraform.tfstate" }\n}\n'
-        'data "terraform_remote_state" "env" {\n  backend = "local"\n  workspace = "prod"\n}\n'
-        'resource "aws_security_group" "a" { vpc_id = data.tfe_outputs.this.values.a_vpc_id }\n'
-        'resource "aws_security_group" "b" { vpc_id = data.tfe_outputs.other.values.b_vpc_id }\n'
-        'resource "aws_security_group" "c" { vpc_id = data.terraform_remote_state.net.outputs.c_vpc_id }\n'
-        'resource "aws_security_group" "d" { vpc_id = data.terraform_remote_state.s3.outputs.d_vpc_id }\n'
-        'resource "aws_security_group" "e" { vpc_id = data.terraform_remote_state.az.outputs.e_vpc_id }\n'
-        'resource "aws_security_group" "f" { vpc_id = data.terraform_remote_state.gcs.outputs.f_vpc_id }\n'
-        'resource "aws_security_group" "g" { vpc_id = data.terraform_remote_state.env.outputs.g_vpc_id }\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
-    stacks = sorted((n["name"], n["stack"]) for n in facts["networks"])
-    assert stacks == [("a-vpc", "networking-prod"), ("b-vpc", "other"), ("c-vpc", "hub"), ("d-vpc", "core"), ("e-vpc", "edge"),
-                      ("f-vpc", "spoke"), ("g-vpc", "env")]  # a remote state's workspace is an environment
-
-
-def test_a_subnet_lookup_falls_back_to_a_vpc_of_another_stack(tmp_path: Path) -> None:
+def test_a_subnet_lookup_falls_back_to_a_remote_vpc(tmp_path: Path) -> None:
     (tmp_path / "main.tf").write_text(
         'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
         'resource "aws_lambda_function" "a" {\n'
@@ -183,13 +216,10 @@ def test_a_subnet_lookup_falls_back_to_a_vpc_of_another_stack(tmp_path: Path) ->
 
 
 def test_a_subnet_in_one_module_belongs_to_a_remote_vpc_another_module_reads(tmp_path: Path) -> None:
-    for name, body in (("a", 'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'),
-                       ("b", ('resource "aws_subnet" "private" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
-                             'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = [aws_subnet.private.id] }\n}\n'))):
-        (tmp_path / name).mkdir()
-        (tmp_path / name / "main.tf").write_text(body)
-    (tmp_path / "main.tf").write_text('module "a" { source = "./a" }\nmodule "b" { source = "./b" }\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
+    facts = _two_modules(
+        tmp_path, _tfe("networking", name="networking"),
+        _tfe("networking", name="networking").replace('"aws_security_group" "sg"', '"aws_subnet" "private"')
+        + 'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = [aws_subnet.private.id] }\n}\n')
     assert [n["address"] for n in facts["networks"]] == ["data.tfe_outputs.networking.values.shared_vpc_id"]
     assert [p["resource"] for p in facts["placements"]] == ["module.b.aws_lambda_function.fn"]
 
@@ -199,61 +229,7 @@ def test_a_subnet_lookup_goes_to_the_remote_vpc_with_the_longest_name(tmp_path: 
         'resource "aws_security_group" "a" { vpc_id = data.aws_vpc.shared.id }\n'
         'resource "aws_security_group" "b" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
         'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = data.aws_subnets.shared_vpc_private.ids }\n}\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
-    stack = {n["id"]: n["stack"] for n in facts["networks"]}
-    assert [stack[p["network"]] for p in facts["placements"]] == ["networking"]
-
-
-def _two_modules(tmp_path: Path, body: str, root: str) -> dict:
-    """Facts of a root that calls modules `a` and `b`, each with `body`."""
-    for name in ("a", "b"):
-        (tmp_path / name).mkdir()
-        (tmp_path / name / "main.tf").write_text(body)
-    (tmp_path / "main.tf").write_text(root)
-    return tf_extract.extract(Path("."), tmp_path)
-
-
-WORKSPACE_FROM_A_VARIABLE = (
-    'variable "net_ws" {}\n'
-    'data "tfe_outputs" "this" {\n  workspace = var.net_ws\n}\n'
-    'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.this.values.shared_vpc_id }\n')
-
-
-def test_the_stack_follows_a_workspace_passed_as_a_module_variable(tmp_path: Path) -> None:
-    facts = _two_modules(
-        tmp_path, WORKSPACE_FROM_A_VARIABLE,
-        'module "a" {\n  source = "./a"\n  net_ws = "networking-prod"\n}\n'
-        'module "b" {\n  source = "./b"\n  net_ws = "platform-prod"\n}\n')
-    assert sorted(n["stack"] for n in facts["networks"]) == ["networking-prod", "platform-prod"]
-
-
-def test_calls_of_one_module_that_pass_different_workspaces_name_no_workspace(tmp_path: Path) -> None:
-    facts = _two_modules(
-        tmp_path, WORKSPACE_FROM_A_VARIABLE,
-        'module "x" {\n  source = "./a"\n  net_ws = "networking-prod"\n}\n'
-        'module "y" {\n  source = "./a"\n  net_ws = "platform-prod"\n}\n')
-    assert [n["stack"] for n in facts["networks"]] == ["this"]  # one instance stands for both calls
-
-
-def test_the_stack_is_a_state_key_with_any_characters(tmp_path: Path) -> None:
-    (tmp_path / "main.tf").write_text(
-        'data "terraform_remote_state" "n" {\n  backend = "s3"\n  config = { key = "env:/prod/networking.tfstate" }\n}\n'
-        'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.n.outputs.shared_vpc_id }\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
-    assert [n["stack"] for n in facts["networks"]] == ["env:/prod/networking"]
-
-
-def test_a_placement_names_the_stack_its_subnet_output_comes_from(tmp_path: Path) -> None:
-    (tmp_path / "main.tf").write_text(
-        'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
-        'resource "aws_subnet" "own" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
-        'resource "aws_lambda_function" "far" {\n'
-        '  vpc_config { subnet_ids = data.tfe_outputs.other.values.shared_vpc_private_subnet_ids }\n}\n'
-        'resource "aws_lambda_function" "near" {\n  vpc_config { subnet_ids = [aws_subnet.own.id] }\n}\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
-    assert [n["stack"] for n in facts["networks"]] == ["networking"]
-    assert {p["resource"]: p["stack"] for p in facts["placements"]} == {
-        "aws_lambda_function.far": "other", "aws_lambda_function.near": None}
+    assert _placed(tf_extract.extract(Path("."), tmp_path), "name") == {"aws_lambda_function.fn": "shared-vpc"}
 
 
 def test_two_modules_that_look_up_a_vpc_under_one_name_give_two_networks(tmp_path: Path) -> None:
@@ -262,7 +238,7 @@ def test_two_modules_that_look_up_a_vpc_under_one_name_give_two_networks(tmp_pat
         'variable "name" {}\n'
         'data "aws_vpc" "main" {\n  tags = { Name = var.name }\n}\n'
         'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.main.id }\n',
-        'module "a" {\n  source = "./a"\n  name = "shop"\n}\nmodule "b" {\n  source = "./b"\n  name = "bank"\n}\n')
+        root='module "a" {\n  source = "./a"\n  name = "shop"\n}\nmodule "b" {\n  source = "./b"\n  name = "bank"\n}\n')
     assert [n["address"] for n in facts["networks"]] == ["module.a.data.aws_vpc.main", "module.b.data.aws_vpc.main"]
 
 
@@ -271,20 +247,9 @@ def test_a_subnet_lookup_stays_with_the_vpc_its_own_module_looks_up(tmp_path: Pa
         tmp_path,
         'data "aws_vpc" "main" {}\n'
         'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.main.id }\n'
-        'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = data.aws_subnets.main_private.ids }\n}\n',
-        'module "a" {\n  source = "./a"\n}\nmodule "b" {\n  source = "./b"\n}\n')
-    address = {n["id"]: n["address"] for n in facts["networks"]}
-    assert {p["resource"]: address[p["network"]] for p in facts["placements"]} == {
-        "module.a.aws_lambda_function.fn": "module.a.data.aws_vpc.main",
-        "module.b.aws_lambda_function.fn": "module.b.data.aws_vpc.main"}
-
-
-@pytest.mark.parametrize(("passed", "stack"), [("networking-prod", "this"), ("platform-prod", "platform-prod")])
-def test_a_call_without_the_workspace_reads_the_default(tmp_path: Path, passed: str, stack: str) -> None:
-    facts = _two_modules(
-        tmp_path, WORKSPACE_FROM_A_VARIABLE.replace('"net_ws" {}', '"net_ws" {\n  default = "platform-prod"\n}'),
-        f'module "x" {{\n  source = "./a"\n  net_ws = "{passed}"\n}}\nmodule "y" {{\n  source = "./a"\n}}\n')
-    assert [n["stack"] for n in facts["networks"]] == [stack]
+        'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = data.aws_subnets.main_private.ids }\n}\n')
+    assert _placed(facts) == {"module.a.aws_lambda_function.fn": "module.a.data.aws_vpc.main",
+                              "module.b.aws_lambda_function.fn": "module.b.data.aws_vpc.main"}
 
 
 def test_a_remote_subnet_read_in_a_module_goes_to_the_longest_name_not_to_a_root_lookup(tmp_path: Path) -> None:
@@ -295,9 +260,7 @@ def test_a_remote_subnet_read_in_a_module_goes_to_the_longest_name_not_to_a_root
         '  vpc_config { subnet_ids = data.tfe_outputs.net.values.shared_vpc_private_subnet_ids }\n}\n')
     (tmp_path / "main.tf").write_text(
         'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.shared.id }\nmodule "a" {\n  source = "./a"\n}\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
-    address = {n["id"]: n["address"] for n in facts["networks"]}
-    assert [address[p["network"]] for p in facts["placements"]] == ["module.a.data.aws_vpc.shared_vpc"]
+    assert list(_placed(tf_extract.extract(Path("."), tmp_path)).values()) == ["module.a.data.aws_vpc.shared_vpc"]
 
 
 def test_a_module_named_data_keeps_the_lookups_of_its_submodules_apart(tmp_path: Path) -> None:
@@ -308,10 +271,8 @@ def test_a_module_named_data_keeps_the_lookups_of_its_submodules_apart(tmp_path:
             'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = data.aws_subnets.main_private.ids }\n}\n')
     (tmp_path / "data" / "main.tf").write_text('module "x" {\n  source = "./x"\n}\nmodule "y" {\n  source = "./y"\n}\n')
     (tmp_path / "main.tf").write_text('module "data" {\n  source = "./data"\n}\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
-    address = {n["id"]: n["address"] for n in facts["networks"]}
-    assert all(address[p["network"]].startswith(p["resource"].removesuffix("aws_lambda_function.fn"))
-               for p in facts["placements"]) and len(facts["placements"]) == 2
+    placed = _placed(tf_extract.extract(Path("."), tmp_path))
+    assert len(placed) == 2 and all(vpc.startswith(fn.removesuffix("aws_lambda_function.fn")) for fn, vpc in placed.items())
 
 
 def test_a_root_subnet_lookup_stays_with_the_root_vpc_lookup_of_the_same_name(tmp_path: Path) -> None:
@@ -319,120 +280,18 @@ def test_a_root_subnet_lookup_stays_with_the_root_vpc_lookup_of_the_same_name(tm
         'resource "aws_security_group" "a" { vpc_id = data.aws_vpc.shared_vpc.id }\n'
         'resource "aws_security_group" "b" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
         'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = data.aws_subnets.shared_vpc_private.ids }\n}\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
-    address = {n["id"]: n["address"] for n in facts["networks"]}
-    assert [address[p["network"]] for p in facts["placements"]] == ["data.aws_vpc.shared_vpc"]
+    assert list(_placed(tf_extract.extract(Path("."), tmp_path)).values()) == ["data.aws_vpc.shared_vpc"]
 
 
-TIED_NAMES = (
-    'resource "aws_security_group" "a" { vpc_id = data.aws_vpc.shared_vpc.id }\n'
-    'resource "aws_security_group" "b" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
-    'resource "aws_lambda_function" "fn" {\n'
-    '  vpc_config { subnet_ids = data.tfe_outputs.other.values.shared_vpc_private_subnet_ids }\n}\n')
-
-
-@pytest.mark.parametrize("root", [TIED_NAMES, 'module "m" {\n  source = "./a"\n}\n'])
-def test_a_remote_subnet_goes_to_a_remote_vpc_before_a_lookup_of_the_same_name_in_any_module(tmp_path: Path, root: str) -> None:
-    facts = _two_modules(tmp_path, TIED_NAMES, root)
-    stack = {n["id"]: n["stack"] for n in facts["networks"]}
-    assert [stack[p["network"]] for p in facts["placements"]] == ["networking"]
-
-
-@pytest.mark.parametrize(("config", "stack"), [
-    ('{ "key" = "networking/terraform.tfstate" }', "networking"),
-    ('{ "workspaces" = { "name" = "networking" } }', "networking"),
-    ('{ key = "infraterraform.tfstate" }', "infraterraform"),
-    ('{ key = "terraform.tfstate" }', "n"),
-    ('{ key = "terraform.tfstate", workspace_key_prefix = "networking" }', "networking"),
-    ('{ path = "../networking/terraform.tfstate" }', "networking"),
-    ('{ prefix = "networking/" }', "networking"),
-    ('{ path = "../.terraform/terraform.tfstate" }', "n/.terraform"),
-    ('{ path = "../.state/networking.tfstate" }', ".state/networking"),
-    ('{ key = "staging/terraform.tfstate" }', "n/staging"),
-    ('{ key = "accounting/terraform.tfstate" }', "accounting"),
-    ('{ organization = "acme", workspaces = { prefix = "networking-" } }', "networking"),
-    ('{ organization = "acme", workspaces = { prefix = "networking_" } }', "networking"),
-    ('{ path = "/srv/state/core/terraform.tfstate" }', "core"),
-    ('{ bucket = "b", key = "/networking/prod/terraform.tfstate" }', "networking/prod"),
-    ('{ bucket = "b", prefix = "/networking" }', "networking"),
-    ('{ key = "pre-prod/terraform.tfstate" }', "n/pre-prod"),
-    ('{ key = "envs/non-prod/terraform.tfstate" }', "n/envs/non-prod"),
-    ('{ key = "envs/prod/terraform.tfstate" }', "n/envs/prod"),
-    ('{ key = "us-east-1/123456789012/prod.tfstate" }', "n/us-east-1/123456789012/prod"),
-    ('{ path = "./terraform.tfstate" }', "n"),
-    ('{ key = "prod.terraform.tfstate" }', "n/prod"),
-    ('{ key = "prod/terraform.tfstate", workspace_key_prefix = "networking" }', "networking"),
-    ('{ key = "prod/networking.tfstate" }', "prod/networking"),
-])
-def test_the_stack_reads_quoted_config_keys_and_cuts_only_a_whole_terraform_word(tmp_path: Path, config: str, stack: str) -> None:
+def test_a_remote_state_name_with_a_hyphen_or_an_empty_index_is_a_remote_network(tmp_path: Path) -> None:
     (tmp_path / "main.tf").write_text(
-        f'data "terraform_remote_state" "n" {{\n  backend = "s3"\n  config = {config}\n}}\n'
-        'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.n.outputs.shared_vpc_id }\n')
-    assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == [stack]
+        _tfe("networking", name="shared-net")
+        + 'data "terraform_remote_state" "e" {\n  for_each = toset([""])\n  backend = "s3"\n  config = { key = "n" }\n}\n'
+        'resource "aws_security_group" "e" { vpc_id = data.terraform_remote_state.e[""].outputs.hub_vpc_id }\n')
+    assert sorted(n["name"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]) == ["hub-vpc", "shared-vpc"]
 
 
-def test_a_remote_state_name_with_a_hyphen_is_a_remote_network(tmp_path: Path) -> None:
-    (tmp_path / "main.tf").write_text(
-        'data "tfe_outputs" "shared-net" {\n  workspace = "networking"\n}\n'
-        'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.shared-net.values.shared_vpc_id }\n')
-    assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == ["networking"]
-
-
-def test_one_output_of_one_stack_read_under_two_data_source_names_is_one_network(tmp_path: Path) -> None:
-    def module(data: str) -> str:
-        return (f'data "tfe_outputs" "{data}" {{\n  workspace = "networking"\n}}\n'
-                f'resource "aws_security_group" "sg" {{ vpc_id = data.tfe_outputs.{data}.values.shared_vpc_id }}\n'
-                'resource "aws_lambda_function" "fn" {\n'
-                f'  vpc_config {{ subnet_ids = data.tfe_outputs.{data}.values.shared_vpc_private_subnet_ids }}\n}}\n')
-    facts = _two_modules(tmp_path, module("net"), module("networking") + 'module "m" {\n  source = "./a"\n}\n')
-    assert [n["stack"] for n in facts["networks"]] == ["networking"]
-    assert len(facts["placements"]) == 2
-
-
-def test_one_state_key_in_two_workspaces_and_buckets_is_two_networks_and_each_subnet_stays_in_its_own(tmp_path: Path) -> None:
-    def state(name: str, env: str) -> str:
-        return (f'data "terraform_remote_state" "{name}" {{\n  backend = "s3"\n  workspace = "{env}"\n'
-                f'  config = {{ bucket = "acme-{env}-state", key = "networking/terraform.tfstate" }}\n}}\n'
-                f'resource "aws_security_group" "{name}" {{ vpc_id = data.terraform_remote_state.{name}.outputs.vpc_id }}\n'
-                f'resource "aws_lambda_function" "{name}" {{\n'
-                f'  vpc_config {{ subnet_ids = data.terraform_remote_state.{name}.outputs.vpc_private_subnet_ids }}\n}}\n')
-    (tmp_path / "main.tf").write_text(state("net_prod", "prod") + state("net_dev", "dev"))
-    facts = tf_extract.extract(Path("."), tmp_path)
-    address = {n["id"]: n["address"] for n in facts["networks"]}
-    assert [n["stack"] for n in facts["networks"]] == ["networking", "networking"]
-    assert {p["resource"].rpartition(".")[2]: address[p["network"]].split(".")[2] for p in facts["placements"]} == {
-        "net_prod": "net_prod", "net_dev": "net_dev"}
-
-
-def test_the_default_workspace_named_or_left_out_is_one_state(tmp_path: Path) -> None:
-    for name, workspace in (("a", '  workspace = "default"\n'), ("b", "")):
-        (tmp_path / name).mkdir()
-        (tmp_path / name / "main.tf").write_text(
-            f'data "terraform_remote_state" "net" {{\n  backend = "s3"\n{workspace}'
-            '  config = { bucket = "acme-state", key = "networking/terraform.tfstate" }\n}\n'
-            'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.net.outputs.vpc_id }\n')
-    (tmp_path / "main.tf").write_text('module "a" { source = "./a" }\nmodule "b" { source = "./b" }\n')
-    assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == ["networking"]
-
-
-def test_a_bucket_named_default_is_no_default_workspace(tmp_path: Path) -> None:
-    (tmp_path / "main.tf").write_text("".join(
-        f'data "terraform_remote_state" "{name}" {{\n  backend = "s3"\n'
-        f'  config = {{ bucket = "{bucket}", key = "networking/terraform.tfstate" }}\n}}\n'
-        f'resource "aws_security_group" "{name}" {{ vpc_id = data.terraform_remote_state.{name}.outputs.vpc_id }}\n'
-        for name, bucket in (("a", "default"), ("b", "other"))))
-    assert len(tf_extract.extract(Path("."), tmp_path)["networks"]) == 2
-
-
-def test_the_stack_reads_a_config_given_as_one_local(tmp_path: Path) -> None:
-    (tmp_path / "main.tf").write_text(
-        'locals {\n  net_state = { key = "networking/terraform.tfstate" }\n}\n'
-        'data "terraform_remote_state" "net" {\n  backend = "s3"\n  config = local.net_state\n}\n'
-        'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.net.outputs.shared_vpc_id }\n')
-    assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == ["networking"]
-
-
-def test_two_instances_of_one_remote_state_are_two_networks(tmp_path: Path) -> None:
+def test_an_indexed_remote_state_places_its_own_subnets(tmp_path: Path) -> None:
     (tmp_path / "main.tf").write_text(
         'data "terraform_remote_state" "net" {\n  for_each = toset(["prod", "dev"])\n  backend = "s3"\n'
         '  config = { bucket = "states", key = "${each.key}/networking/terraform.tfstate" }\n}\n'
@@ -440,22 +299,4 @@ def test_two_instances_of_one_remote_state_are_two_networks(tmp_path: Path) -> N
                   f'resource "aws_lambda_function" "{env}" {{\n  vpc_config {{ subnet_ids = '
                   f'data.terraform_remote_state.net["{env}"].outputs.shared_vpc_private_subnet_ids }}\n}}\n' for env in ("prod", "dev")))
     facts = tf_extract.extract(Path("."), tmp_path)
-    assert len(facts["networks"]) == 2 and len({p["network"] for p in facts["placements"]}) == 2
-
-
-def test_an_empty_index_of_a_remote_state_is_a_remote_network(tmp_path: Path) -> None:
-    (tmp_path / "main.tf").write_text(
-        'data "terraform_remote_state" "net" {\n  for_each = toset([""])\n  backend = "s3"\n  config = { key = "networking.tfstate" }\n}\n'
-        'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.net[""].outputs.hub_vpc_id }\n')
-    assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == ["networking"]
-
-
-def test_an_indexed_remote_state_is_a_remote_network(tmp_path: Path) -> None:
-    (tmp_path / "main.tf").write_text(
-        'data "terraform_remote_state" "c" {\n  count = 1\n  backend = "s3"\n  config = { key = "networking.tfstate" }\n}\n'
-        'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.c[0].outputs.hub_vpc_id }\n'
-        'resource "aws_lambda_function" "fn" {\n'
-        '  vpc_config { subnet_ids = data.terraform_remote_state.c[0].outputs.hub_vpc_private_subnet_ids }\n}\n')
-    facts = tf_extract.extract(Path("."), tmp_path)
-    assert [n["stack"] for n in facts["networks"]] == ["networking"]
-    assert len(facts["placements"]) == 1
+    assert len(facts["networks"]) == 2 and len(set(_placed(facts, "id").values())) == 2
