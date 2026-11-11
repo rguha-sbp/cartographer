@@ -131,6 +131,9 @@ INDEXED = ('data "terraform_remote_state" "net" {{\n  count = 2\n  backend = "s3
     (_tfe("networking"), _tfe("networking", organization="other"), 2),
     (_tfe("default"), _tfe("networking"), 2),  # a tfe workspace named default is a workspace like any other
     ('resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.net.values.shared_vpc_id }\n', None, 2),  # no block
+    (_remote_state("var.cfg"), None, 2),  # a config that cannot be read: one per module, never one by backend alone
+    (_remote_state("local.all.net").replace("data", 'locals {\n  all = { net = { key = "n" } }\n}\ndata', 1), None, 2),
+    (_remote_state('merge(local.base, { key = "n" })'), None, 2),
 ])
 def test_state_identity(tmp_path: Path, a: str, b: str | None, networks: int) -> None:
     facts = _two_modules(tmp_path, a, b)
@@ -184,7 +187,7 @@ def test_a_remote_subnet_goes_to_the_vpc_of_its_own_state_first(tmp_path: Path) 
     placed = _placed(tf_extract.extract(Path("."), tmp_path))
     assert placed["aws_lambda_function.a"] == "data.tfe_outputs.networking.values.shared_vpc_id"
     assert placed["aws_lambda_function.b"] == "data.tfe_outputs.platform.values.shared_vpc_id"
-    assert "aws_lambda_function.c" in placed  # no VPC of its own state: it still gets one
+    assert "aws_lambda_function.c" not in placed  # no VPC of its own state: never one of another state
 
 
 def test_modules_that_read_one_state_share_its_network_and_each_state_keeps_its_subnets(tmp_path: Path) -> None:
@@ -342,3 +345,33 @@ def test_an_attribute_path_that_leaves_the_object_keeps_every_reference(tmp_path
         'resource "aws_security_group" "sg" { vpc_id = var.base.vpc.id }\n')
     facts = tf_extract.extract(Path("infra"), tmp_path)
     assert [n["address"] for n in facts["networks"]] == ["data.aws_vpc.shared"]
+
+
+def _vpc_networks(tmp_path: Path, tf: str) -> list[tuple[str, bool]]:
+    (tmp_path / "main.tf").write_text(tf)
+    return [(n["address"], n["remote"]) for n in tf_extract.extract(Path("."), tmp_path)["networks"]]
+
+
+@pytest.mark.parametrize("selects", ["id = aws_vpc.main.id", 'filter {\n    name = "vpc-id"\n    values = [aws_vpc.main.id]\n  }'])
+def test_a_lookup_of_a_vpc_this_stack_creates_is_that_local_vpc(tmp_path: Path, selects: str) -> None:
+    tf = ('resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }\n'
+          f'data "aws_vpc" "main" {{\n  {selects}\n}}\n'
+          'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.main.id }\n')
+    assert _vpc_networks(tmp_path, tf) == [("aws_vpc.main", False)]
+
+
+QUOTED_KEYS = ('locals {\n  nets = {\n    "blue" = { vpc = data.tfe_outputs.blue.values.blue_vpc_id }\n'
+               '    "green" = { vpc = data.tfe_outputs.green.values.green_vpc_id }\n  }\n}\n'
+               'resource "aws_security_group" "sg" { vpc_id = local.nets.KEY.vpc }\n')
+
+
+@pytest.mark.parametrize(("key", "names"), [("blue", ["blue-vpc"]), ("red", [])])
+def test_an_attribute_path_reads_a_quoted_key_and_a_missing_key_reads_nothing(tmp_path: Path, key: str,
+                                                                              names: list[str]) -> None:
+    (tmp_path / "main.tf").write_text(QUOTED_KEYS.replace("KEY", key))
+    assert [n["name"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == names
+
+
+def test_a_local_that_reads_itself_gives_no_network_and_no_crash(tmp_path: Path) -> None:
+    tf = 'locals {\n  a = local.a.x\n}\nresource "aws_security_group" "sg" { vpc_id = local.a.x }\n'
+    assert _vpc_networks(tmp_path, tf) == []

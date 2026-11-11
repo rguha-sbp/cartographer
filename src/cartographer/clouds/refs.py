@@ -53,7 +53,7 @@ def token(heads: str, data: str) -> re.Pattern[str]:
     """A reference to a local resource whose type matches `heads`, a data source matching `data`, or a remote output."""
     return re.compile(
         r"(?<![\w.\-])(?:(?P<remote>data\.(?P<kind>tfe_outputs|terraform_remote_state)\.(?P<state>[\w-]+)(?:\[(?P<index>[^\]]*)\])?"
-        rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.(?:{data})\.(?P<ds>[\w-]+))"
+        rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.(?P<ds_type>{data})\.(?P<ds>[\w-]+))"
         rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?:\[[^\]]*\])?(?P<path>(?:\.[\w-]+)*))"
     )
 
@@ -71,14 +71,14 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str, ...], pattern: re.Pattern[s
     out: dict[Ref, None] = {}
     for m in pattern.finditer(text):
         path = (*(m["path"] or "").split(".")[1:], *(unread if whole else ()))
-        if (key := (id(inst), m[0], path)) in seen:
+        if len(path) > MAX_PATH or (key := (id(inst), m[0], path)) in seen:
             continue
         seen.add(key)
         head, second = m["head"], m["second"]
         if m["kind"]:
             out[Ref(m["remote"], m["out"], state_of(inst, m["kind"], m["state"], m["index"]))] = None
         elif m["ds"]:
-            out[Ref(f"{inst.prefix}{m['remote']}", m["ds"])] = None
+            out |= _looked_up(inst, m["ds_type"], m["ds"], pattern, seen) or {Ref(f"{inst.prefix}{m['remote']}", m["ds"]): None}
         elif head == "var" and inst.parent is not None:
             for args in inst.args:
                 if second in args:
@@ -93,17 +93,25 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str, ...], pattern: re.Pattern[s
     return out
 
 
+def _looked_up(inst: Inst, ds_type: str, name: str, pattern: re.Pattern[str], seen: set) -> dict[Ref, None]:
+    """The resources of type `ds_type` this stack creates that the lookup `data.<ds_type>.<name>` selects
+    (`id = aws_vpc.main.id`): the lookup finds that resource, so it is no external network."""
+    block = inst.mod.data.get((ds_type, name))
+    found = _follow(inst, block.body, (), pattern, seen) if block else {}
+    return {r: None for r in found if not r.remote and r.address.split(".")[-2] == ds_type}
+
+
 def _dig(value: Any, path: tuple[str, ...]) -> tuple[Any, tuple[str, ...]]:
-    """The part of an object literal an attribute path reads, and the rest of the path where the literal ends."""
+    """The part of an object literal an attribute path reads, and the rest of the path where the literal ends. A key
+    the literal does not have reads nothing."""
     for i, attr in enumerate(path):
         if not isinstance(value, dict):
             return value, path[i:]
-        if attr not in value:
-            return value, ()
-        value = value[attr]
+        value = {k.strip('"'): v for k, v in value.items()}.get(attr, "")
     return value, ()
 
 
+MAX_PATH = 16  # longer attribute paths only come from a local or variable that reads itself
 SELECTING = ("backend", "workspace", "organization")
 LITERAL_INDEX = re.compile(r'"[^"]*"|\d+')
 
@@ -113,6 +121,8 @@ def state_of(inst: Inst, kind: str, name: str, index: str | None) -> State | str
     full address instead when the block is not found, selects nothing, or any setting or the index is no literal."""
     address = f"{inst.prefix}data.{kind}.{name}" + (f"[{index}]" if index is not None else "")
     body, config = _remote_state(inst, kind, name)
+    if config is None:
+        return address
     written = [(k, body[k]) for k in SELECTING if k in body] + _leaves("config", config)
     settings = [(path, inst.agreed_value(v)) for path, v in written]
     literal = LITERAL_INDEX.fullmatch(index) if index is not None else None
@@ -130,14 +140,17 @@ def _leaves(path: str, value: Any) -> list[tuple[str, Any]]:
     return [(path, value)]
 
 
-def _remote_state(inst: Inst, kind: str, name: str) -> tuple[dict, dict]:
-    """The body of the data source `kind`.`name` and its `config` object, written in place or as one `local.`."""
+def _remote_state(inst: Inst, kind: str, name: str) -> tuple[dict, dict | None]:
+    """The body of the data source `kind`.`name` and its `config` object, written in place or as one `local.`: empty
+    when the block has none, None when it has one that is no object literal (`var.x`, `merge(...)`)."""
     block = inst.mod.data.get((kind, name))
     body = norm_keys(block.body) if block else {}
-    config = body.get("config")
+    if "config" not in body:
+        return body, {}
+    config = body["config"]
     if isinstance(config, str) and (m := re.fullmatch(r"\$\{local\.([\w-]+)\}|local\.([\w-]+)", config.strip('"'))):
         config = norm_keys(inst.mod.locals.get(m[1] or m[2]))
-    return body, config if isinstance(config, dict) else {}
+    return body, config if isinstance(config, dict) else None
 
 
 def network_fact(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
@@ -154,17 +167,18 @@ def add_remote(networks: dict[str, dict], ref: Ref, res: Res, suffixes: str = "i
 def place_remote(networks: dict[str, dict], ref: Ref, suffixes: str = "ids?") -> tuple[str, str, str] | None:
     """(network key, tier, what decided the tier) for a subnet another stack or a lookup gives, None when either
     is unknown. The network is a remote one whose name prefixes the output name (`shared-vpc` for
-    `shared_vpc_private_subnet_ids`): one of the reference's own state first, then the longest name, then for a
-    lookup one its own module looks up, then the key."""
+    `shared_vpc_private_subnet_ids`). A remote output's subnet goes to a network of its own state or a lookup,
+    never to a network of another state; among the
+    candidates, the longest name wins, then for a lookup one its own module looks up, then the key."""
     name, tier = derive(ref.name or "", suffixes), tier_in(ref.name or "")
 
-    def rank(key: str) -> tuple[bool, int, bool, str]:
+    def rank(key: str) -> tuple[int, bool, str]:
         n = networks[key]
-        same_state = ref.state is not None and key == remote_key(ref.state, n["name"])
         same_module = ref.state is None and key == n["address"] and _module(key) == _module(ref.address)  # both lookups
-        return same_state, len(n["name"]), same_module, key
+        return len(n["name"]), same_module, key
 
-    named = [key for key, n in networks.items() if n["remote"] and name.startswith(n["name"] + "-")]
+    named = [key for key, n in networks.items() if n["remote"] and name.startswith(n["name"] + "-")
+             and (ref.state is None or key in (n["address"], remote_key(ref.state, n["name"])))]
     return (max(named, key=rank), tier, ref.name or "") if named and tier else None
 
 
