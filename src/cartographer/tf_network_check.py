@@ -69,14 +69,14 @@ def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], cited: dict[st
         # a resource can sit in several networks: the group stands for the ones it cites, when its nodes are in any
         own = [p for p in inside[g["id"]] if p["network"] in cited[g["id"]]] or inside[g["id"]]
         stacks = {s for p in own for s in _stacks(p, networks)}
-        cites_local = any(networks[fact].get("stack") is None for fact in cited[g["id"]] if fact in networks)
+        cites_local = any(not networks[fact]["remote"] for fact in cited[g["id"]] if fact in networks)
         if cites_local and stacks and None not in stacks:
             notes.append(f"group {g['id']}: evidence cites a network of this stack, but its nodes are placed in a network "
                          f"of {', '.join(sorted(stacks))}; cite the network the nodes run in")
         if not stacks or None in stacks or cites_local:
             continue
         g["shared_from"] = ", ".join(sorted(stacks))
-        if elsewhere := {networks[fact]["stack"] for fact in cited[g["id"]] if fact in networks} - stacks:
+        if elsewhere := {networks[fact]["stack"] for fact in cited[g["id"]] if fact in networks} - stacks - {None}:
             notes.append(f"group {g['id']}: evidence cites a network of {', '.join(sorted(elsewhere))}, but its nodes are "
                          f"placed in a network of {g['shared_from']}; cite the network the nodes run in")
         account = enclosing(groups, g["id"], "account")
