@@ -300,3 +300,45 @@ def test_an_indexed_remote_state_places_its_own_subnets(tmp_path: Path) -> None:
                   f'data.terraform_remote_state.net["{env}"].outputs.shared_vpc_private_subnet_ids }}\n}}\n' for env in ("prod", "dev")))
     facts = tf_extract.extract(Path("."), tmp_path)
     assert len(facts["networks"]) == 2 and len(set(_placed(facts, "id").values())) == 2
+
+
+def test_an_object_passed_to_a_module_gives_only_the_attribute_read(tmp_path: Path) -> None:
+    (tmp_path / "infra" / "lam").mkdir(parents=True)
+    (tmp_path / "infra" / "main.tf").write_text(
+        'data "aws_vpc" "shared" {}\n'
+        'data "tfe_outputs" "dns" {\n  organization = "o"\n  workspace = "dns"\n}\n'
+        'module "lam" {\n  source = "./lam"\n  base = {\n'
+        '    networking = { vpc_id = data.aws_vpc.shared.id }\n'
+        '    zone = data.tfe_outputs.dns.values.route53_zone_id\n  }\n}\n')
+    (tmp_path / "infra" / "lam" / "main.tf").write_text(
+        'variable "base" {}\n'
+        'resource "aws_security_group" "sg" { vpc_id = var.base.networking.vpc_id }\n')
+    facts = tf_extract.extract(Path("infra"), tmp_path)
+    assert [n["address"] for n in facts["networks"]] == ["data.aws_vpc.shared"]
+
+
+def test_an_attribute_path_reads_through_a_local_that_holds_the_object(tmp_path: Path) -> None:
+    (tmp_path / "infra" / "lam").mkdir(parents=True)
+    (tmp_path / "infra" / "main.tf").write_text(
+        'data "aws_vpc" "shared" {}\n'
+        'data "tfe_outputs" "dns" {\n  organization = "o"\n  workspace = "dns"\n}\n'
+        'locals {\n  base = {\n    networking = { vpc_id = data.aws_vpc.shared.id }\n'
+        '    zone = data.tfe_outputs.dns.values.route53_zone_id\n  }\n}\n'
+        'module "lam" {\n  source = "./lam"\n  base = local.base\n}\n')
+    (tmp_path / "infra" / "lam" / "main.tf").write_text(
+        'variable "base" {}\n'
+        'resource "aws_security_group" "sg" { vpc_id = var.base.networking.vpc_id }\n')
+    facts = tf_extract.extract(Path("infra"), tmp_path)
+    assert [n["address"] for n in facts["networks"]] == ["data.aws_vpc.shared"]
+
+
+def test_an_attribute_path_that_leaves_the_object_keeps_every_reference(tmp_path: Path) -> None:
+    (tmp_path / "infra" / "lam").mkdir(parents=True)
+    (tmp_path / "infra" / "main.tf").write_text(
+        'data "aws_vpc" "shared" {}\n'
+        'module "lam" {\n  source = "./lam"\n  base = { vpc = data.aws_vpc.shared }\n}\n')
+    (tmp_path / "infra" / "lam" / "main.tf").write_text(
+        'variable "base" {}\n'
+        'resource "aws_security_group" "sg" { vpc_id = var.base.vpc.id }\n')
+    facts = tf_extract.extract(Path("infra"), tmp_path)
+    assert [n["address"] for n in facts["networks"]] == ["data.aws_vpc.shared"]

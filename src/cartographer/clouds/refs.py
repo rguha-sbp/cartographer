@@ -54,19 +54,27 @@ def token(heads: str, data: str) -> re.Pattern[str]:
     return re.compile(
         r"(?<![\w.\-])(?:(?P<remote>data\.(?P<kind>tfe_outputs|terraform_remote_state)\.(?P<state>[\w-]+)(?:\[(?P<index>[^\]]*)\])?"
         rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.(?:{data})\.(?P<ds>[\w-]+))"
-        rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?:\[[^\]]*\])?(?:\.(?P<third>[\w-]+))?)"
+        rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?:\[[^\]]*\])?(?P<path>(?:\.[\w-]+)*))"
     )
 
 
-def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = None) -> dict[Ref, None]:
-    """Resources and remote references `obj` points at, followed through locals and module variables."""
-    seen = set() if seen is None else seen
+def sources(inst: Inst, obj: Any, pattern: re.Pattern[str]) -> dict[Ref, None]:
+    """Resources and remote references `obj` points at, followed through locals, module variables and outputs. An
+    attribute path (`var.base.networking.vpc_id`) reads only its part of an object literal, across every hop."""
+    return _follow(inst, obj, (), pattern, set())
+
+
+def _follow(inst: Inst, obj: Any, unread: tuple[str, ...], pattern: re.Pattern[str], seen: set) -> dict[Ref, None]:
+    """`sources`, where `unread` is the attribute path a reference that is all of `obj` still has to read."""
+    text = obj if isinstance(obj, str) else str(obj)
+    whole = pattern.fullmatch(text.removeprefix("${").removesuffix("}"))
     out: dict[Ref, None] = {}
-    for m in pattern.finditer(obj if isinstance(obj, str) else str(obj)):
-        if (key := (id(inst), m[0])) in seen:
+    for m in pattern.finditer(text):
+        path = (*(m["path"] or "").split(".")[1:], *(unread if whole else ()))
+        if (key := (id(inst), m[0], path)) in seen:
             continue
         seen.add(key)
-        head, second, third = m["head"], m["second"], m["third"]
+        head, second = m["head"], m["second"]
         if m["kind"]:
             out[Ref(m["remote"], m["out"], state_of(inst, m["kind"], m["state"], m["index"]))] = None
         elif m["ds"]:
@@ -74,15 +82,26 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
         elif head == "var" and inst.parent is not None:
             for args in inst.args:
                 if second in args:
-                    out |= sources(inst.parent, args[second], pattern, seen)
+                    out |= _follow(inst.parent, *_dig(args[second], path), pattern, seen)
         elif head == "local" and second in inst.mod.locals:
-            out |= sources(inst, inst.mod.locals[second], pattern, seen)
-        elif head == "module" and second in inst.children and third in inst.children[second].mod.outputs:
+            out |= _follow(inst, *_dig(inst.mod.locals[second], path), pattern, seen)
+        elif head == "module" and second in inst.children and path and path[0] in inst.children[second].mod.outputs:
             child = inst.children[second]
-            out |= sources(child, child.mod.outputs[third], pattern, seen)
+            out |= _follow(child, *_dig(child.mod.outputs[path[0]], path[1:]), pattern, seen)
         elif (head, second) in inst.mod.resources:
             out[Ref(f"{inst.prefix}{head}.{second}")] = None
     return out
+
+
+def _dig(value: Any, path: tuple[str, ...]) -> tuple[Any, tuple[str, ...]]:
+    """The part of an object literal an attribute path reads, and the rest of the path where the literal ends."""
+    for i, attr in enumerate(path):
+        if not isinstance(value, dict):
+            return value, path[i:]
+        if attr not in value:
+            return value, ()
+        value = value[attr]
+    return value, ()
 
 
 SELECTING = ("backend", "workspace", "organization")
