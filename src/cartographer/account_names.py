@@ -25,6 +25,11 @@ def named_after(label: str, stack: str) -> bool:
     return bool(words) and words == _stems(stack)
 
 
+def names_a_stack(name: str) -> bool:
+    """Whether `name` has a word of its own: `staging`, `envs/prod` and `us-east-1/123456789012` have none."""
+    return bool(_stems(name))
+
+
 def _stems(name: str) -> list[str]:
     """The words of `name` that are not IGNORED, AWS regions or numbers, each cut to its stem, sorted."""
     words = re.findall(r"[a-z0-9]+", REGION.sub(" ", name.lower().replace("_", "-")))
