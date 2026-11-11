@@ -397,7 +397,7 @@ def test_each_key_or_index_of_a_remote_output_is_its_own_network(tmp_path: Path)
         f'resource "aws_security_group" "{n}" {{ vpc_id = data.tfe_outputs.net.values.{ref} }}\n'
         for n, ref in (("g", 'vpcs["green"]'), ("x", "vpc_ids[0]"), ("y", "vpc_ids[1]"))))
     names = sorted(n["name"] for n in tf_extract.extract(Path("."), tmp_path)["networks"])
-    assert names == ["vpc-ids-0", "vpc-ids-1", "vpcs-blue", "vpcs-green"]
+    assert names == ["vpc[0]", "vpc[1]", "vpcs-blue", "vpcs-green"]
 
 
 def test_a_remote_subnet_goes_to_its_own_state_before_a_lookup_of_the_same_name(tmp_path: Path) -> None:
@@ -524,3 +524,42 @@ def test_the_tfe_provider_organization_identifies_a_tfe_outputs_without_one(
         for a, o in zip(("a", "b"), orgs))
     (tmp_path / "main.tf").write_text(blocks)
     assert len(tf_extract.extract(Path("."), tmp_path)["networks"]) == networks
+
+
+@pytest.mark.parametrize(("vpcs", "subnets", "network"), [
+    (("shared_vpc_ids[0]",), "shared_vpc_private_subnet_ids[0]", "shared-vpc[0]"),
+    (("network.vpc_id",), "network_private_subnet_ids", "network"),
+    (("network.vpc_id",), "network.private_subnet_ids", "network"),
+    (("vpc_ids[0]", "vpc_ids[1]"), "vpc_private_subnet_ids[1]", "vpc[1]"),
+    (("vpc_ids[0]", "vpc_ids[1]"), "vpc_private_subnet_ids", None),  # two networks fit equally well
+    (('vpcs["blue"].id', 'vpcs["green"].id'), 'vpcs["green"].private_subnet_ids', "vpcs-green"),
+])
+def test_a_remote_subnet_finds_the_network_its_path_names(tmp_path: Path, vpcs: tuple[str, ...], subnets: str,
+                                                          network: str | None) -> None:
+    (tmp_path / "main.tf").write_text(
+        _tfe("networking").replace("shared_vpc_id", vpcs[0]) + "".join(
+            f'resource "aws_security_group" "s{i}" {{ vpc_id = data.tfe_outputs.net.values.{v} }}\n'
+            for i, v in enumerate(vpcs[1:]))
+        + f'resource "aws_lb" "l" {{ subnets = data.tfe_outputs.net.values.{subnets} }}\n')
+    placed = _placed(tf_extract.extract(Path("."), tmp_path), "name")
+    assert placed == ({"aws_lb.l": network} if network else {})
+
+
+def test_a_subnet_lookup_filtered_by_a_local_vpc_is_in_that_vpc(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }\n'
+        'data "aws_subnet" "private" {\n  filter {\n    name = "vpc-id"\n    values = [aws_vpc.main.id]\n  }\n}\n'
+        'resource "aws_instance" "i" { subnet_id = data.aws_subnet.private.id }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert _placed(facts) == {"aws_instance.i": "aws_vpc.main"}
+    assert [p["tier"] for p in facts["placements"]] == ["private"]
+
+
+def test_a_path_after_an_index_that_is_no_literal_reads_each_element(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        _tfe("networking") + 'locals {\n  nets = {\n    a = {\n'
+        '      public_subnet_id = data.tfe_outputs.net.values.shared_vpc_public_subnet_ids\n'
+        '      private_subnet_id = data.tfe_outputs.net.values.shared_vpc_private_subnet_ids\n    }\n  }\n}\n'
+        'resource "aws_instance" "i" {\n  for_each = local.nets\n  subnet_id = local.nets[each.key].private_subnet_id\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [p["tier"] for p in facts["placements"]] == ["private"]

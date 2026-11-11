@@ -391,3 +391,23 @@ def test_a_network_inside_a_network_moves_beside_it_and_keeps_its_nodes() -> Non
     assert "group shared: network inside network group vpc, moved beside it" in report
     assert next(n for n in verified["nodes"] if n["id"] == "fn")["group"] == "shared"
     assert _group_of(verified, "shared")["external"] is True
+
+
+def test_networks_nested_three_deep_all_move_out_whatever_their_order() -> None:
+    from cartographer.verify_shared import fix_network_groups
+
+    groups = [_group("c", "network", "b"), _group("b", "network", "a"),
+              _group("a", "network", "acct", cidrs=["10.0.0.0/16"]), _group("acct", "account", None)]
+    notes: list[str] = []
+    fix_network_groups({"groups": groups}, notes)
+    assert {g["id"]: g["parent"] for g in groups} == {"c": "acct", "b": "acct", "a": "acct", "acct": None}
+    assert len(notes) == 2
+
+
+def test_a_frame_made_a_plain_group_names_the_cidrs_it_drops() -> None:
+    from cartographer.verify_shared import fix_clouds
+
+    group = _group("v", "network", None, cloud="nope", cidrs=["10.0.0.0/16"])
+    notes: list[str] = []
+    fix_clouds({"groups": [group]}, notes)
+    assert notes == ["group v: network frame without a known cloud, now a plain group, cidrs 10.0.0.0/16 dropped"]
