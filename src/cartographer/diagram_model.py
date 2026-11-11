@@ -39,7 +39,6 @@ class Group:
     parent: str | None = None
     kind: Kind | None = None
     tier: str | None = None
-    fill: str = "none"
     stroke: str = GREY
     cloud: str | None = None
 
