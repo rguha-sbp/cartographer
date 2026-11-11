@@ -58,13 +58,13 @@ class Network:
         return self._body_refs[r.address]
 
     def literal(self, res: Res, expr: Any) -> str | None:
-        found = self.ex.value(res.inst, expr)
+        found = res.inst.value(expr)
         return found if isinstance(found, str) else None
 
     def cidrs(self, vnet: Res) -> list[str]:
         """Every address prefix of a local virtual network, or none when any of them is not a literal."""
         raw = vnet.block.body.get("address_space")
-        found = [self.ex.value(vnet.inst, v) for v in (raw if isinstance(raw, list) else [raw])]
+        found = [vnet.inst.value(v) for v in (raw if isinstance(raw, list) else [raw])]
         return list(dict.fromkeys(found)) if all(isinstance(v, str) and CIDR.fullmatch(v) for v in found) else []  # type: ignore[arg-type]
 
     def collect_networks(self) -> None:
@@ -192,20 +192,20 @@ class Network:
         return (named, f"{s.address} name") if named else ("private", f"{s.address} default")
 
     def placements(self) -> list[dict]:
-        found: dict[tuple[str, str, str], tuple[str, Res]] = {}
+        found: dict[tuple[str, str, str], tuple[str, Res, str | None]] = {}
         for r in self.ex.res:
             if r.type in NOT_PLACED or self.ex.folded(r.address):
                 continue
             for s in self.subnet_refs(r):
                 if s.network in self.nets:
                     tier, via = self.tier(s)
-                    found.setdefault((r.address, s.network, tier), (via, r))
+                    found.setdefault((r.address, s.network, tier), (via, r, None))
             for value in find(r.block.body, SUBNET_KEY):
                 for ref in self.refs(r.inst, value):
                     if ref.remote and (placed := place_remote(self.nets, ref, NAME_SUFFIXES)):
-                        found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
-        return [{"resource": address, "network": net, "tier": tier, "via": via, "file": r.block.file, "line": r.block.line}
-                for (address, net, tier), (via, r) in sorted(found.items())]
+                        found.setdefault((r.address, placed[0], placed[1]), (placed[2], r, ref.stack))
+        return [{"resource": address, "network": net, "tier": tier, "via": via, "stack": stack, "file": r.block.file,
+                 "line": r.block.line} for (address, net, tier), (via, r, stack) in sorted(found.items())]
 
 
 def network_facts(ex: Extractor) -> dict:

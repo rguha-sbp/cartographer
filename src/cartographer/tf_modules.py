@@ -10,10 +10,12 @@ from typing import Any
 import hcl2
 
 from cartographer.tf_policies import OPTS, unq
-from cartographer.tf_values import attrs
+from cartographer.tf_values import UNRESOLVED, attrs
 
 HEADER = re.compile(r'^(resource|data)\s+"([^"]+)"\s+"([^"]+)"|^(module|output)\s+"([^"]+)"', re.MULTILINE)
 META = {"source", "version", "providers", "for_each", "count", "depends_on"}
+SINGLE = re.compile(r"\$\{(var|local)\.(\w+)\}")
+MAX_DEPTH = 8
 
 
 @dataclass
@@ -87,6 +89,27 @@ class Inst:
             if id(child := self.children[name]) not in done:
                 done.add(id(child))
                 yield from child.walk()
+
+    def value(self, expr: Any, depth: int = 0) -> str | None | object:
+        """The literal `expr` is here, through `local.`, module arguments and variable defaults; None when absent,
+        UNRESOLVED when it is no literal or the calls this instance stands for pass different ones."""
+        if expr is None:
+            return None
+        if isinstance(expr, (bool, int, float)):
+            return str(expr).lower()
+        if not isinstance(expr, str):
+            return UNRESOLVED
+        s = unq(expr)
+        if not (m := SINGLE.fullmatch(s)):
+            return UNRESOLVED if "${" in s else s
+        kind, name = m.groups()
+        if depth >= MAX_DEPTH:
+            return UNRESOLVED
+        where, targets = self, [self.mod.locals.get(name) if kind == "local" else self.mod.variables.get(name)]
+        if kind == "var" and (passed := [a[name] for a in self.args if name in a]) and self.parent is not None:
+            where, targets = self.parent, passed
+        found = {where.value(target, depth + 1) for target in targets}
+        return found.pop() if len(found) == 1 and None not in found else UNRESOLVED
 
 
 def provider_map(calls: list[Block]) -> dict[str, str]:

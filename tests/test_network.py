@@ -200,3 +200,65 @@ def test_a_subnet_lookup_goes_to_the_remote_vpc_with_the_longest_name(tmp_path: 
     facts = tf_extract.extract(Path("."), tmp_path)
     stack = {n["id"]: n["stack"] for n in facts["networks"]}
     assert [stack[p["network"]] for p in facts["placements"]] == ["networking"]
+
+
+def _two_modules(tmp_path: Path, body: str, root: str) -> dict:
+    """Facts of a root that calls modules `a` and `b`, each with `body`."""
+    for name in ("a", "b"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "main.tf").write_text(body)
+    (tmp_path / "main.tf").write_text(root)
+    return tf_extract.extract(Path("."), tmp_path)
+
+
+WORKSPACE_FROM_A_VARIABLE = (
+    'variable "net_ws" {}\n'
+    'data "tfe_outputs" "this" {\n  workspace = var.net_ws\n}\n'
+    'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.this.values.shared_vpc_id }\n')
+
+
+def test_the_stack_follows_a_workspace_passed_as_a_module_variable(tmp_path: Path) -> None:
+    facts = _two_modules(
+        tmp_path, WORKSPACE_FROM_A_VARIABLE,
+        'module "a" {\n  source = "./a"\n  net_ws = "networking-prod"\n}\n'
+        'module "b" {\n  source = "./b"\n  net_ws = "platform-prod"\n}\n')
+    assert sorted(n["stack"] for n in facts["networks"]) == ["networking-prod", "platform-prod"]
+
+
+def test_calls_of_one_module_that_pass_different_workspaces_name_no_workspace(tmp_path: Path) -> None:
+    facts = _two_modules(
+        tmp_path, WORKSPACE_FROM_A_VARIABLE,
+        'module "x" {\n  source = "./a"\n  net_ws = "networking-prod"\n}\n'
+        'module "y" {\n  source = "./a"\n  net_ws = "platform-prod"\n}\n')
+    assert [n["stack"] for n in facts["networks"]] == ["this"]  # one instance stands for both calls
+
+
+def test_the_stack_is_a_state_key_with_any_characters(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'data "terraform_remote_state" "n" {\n  backend = "s3"\n  config = { key = "env:/prod/networking.tfstate" }\n}\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.n.outputs.shared_vpc_id }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [n["stack"] for n in facts["networks"]] == ["env:/prod/networking"]
+
+
+def test_a_placement_names_the_stack_its_subnet_output_comes_from(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
+        'resource "aws_subnet" "own" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
+        'resource "aws_lambda_function" "far" {\n'
+        '  vpc_config { subnet_ids = data.tfe_outputs.other.values.shared_vpc_private_subnet_ids }\n}\n'
+        'resource "aws_lambda_function" "near" {\n  vpc_config { subnet_ids = [aws_subnet.own.id] }\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [n["stack"] for n in facts["networks"]] == ["networking"]
+    assert {p["resource"]: p["stack"] for p in facts["placements"]} == {
+        "aws_lambda_function.far": "other", "aws_lambda_function.near": None}
+
+
+def test_two_modules_that_look_up_a_vpc_under_one_name_give_two_networks(tmp_path: Path) -> None:
+    facts = _two_modules(
+        tmp_path,
+        'variable "name" {}\n'
+        'data "aws_vpc" "main" {\n  tags = { Name = var.name }\n}\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.main.id }\n',
+        'module "a" {\n  source = "./a"\n  name = "shop"\n}\nmodule "b" {\n  source = "./b"\n  name = "bank"\n}\n')
+    assert [n["address"] for n in facts["networks"]] == ["module.a.data.aws_vpc.main", "module.b.data.aws_vpc.main"]

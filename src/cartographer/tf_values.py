@@ -8,6 +8,8 @@ from typing import Any
 
 from cartographer.tf_policies import unq
 
+UNRESOLVED = object()  # the attribute exists but is not a literal (reference, local, var without default)
+
 
 def text(obj: Any) -> str:
     return obj if isinstance(obj, str) else json.dumps(obj, default=str)

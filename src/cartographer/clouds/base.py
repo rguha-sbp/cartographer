@@ -9,11 +9,12 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from cartographer.tf_values import UNRESOLVED
+
 if TYPE_CHECKING:
     from cartographer.tf_extract import Extractor
     from cartographer.tf_modules import Res
 
-UNRESOLVED = object()  # the attribute exists but is not a literal (reference, local, var without default)
 # attribute path such as "sku.tier" -> literal, None (absent) or UNRESOLVED; `present=True` -> whether any block sets it
 # to something other than null; `every=True` -> the values of that path in every repeated block
 Getter = Callable[..., str | None | bool | object]

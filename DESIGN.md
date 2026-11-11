@@ -98,7 +98,7 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   "networks": [{"id": "n1", "cloud": "aws", "name": "main", "cidrs": ["10.0.0.0/16"], "remote": false,
                 "stack": null, "address": "aws_vpc.main"}],
   "placements": [{"id": "p1", "resource": "aws_lambda_function.orders_api", "network": "n1", "tier": "private",
-                  "cloud": "aws"}],
+                  "stack": null, "cloud": "aws"}],
   "edges": [
     {"id": "f12", "src": "aws_lambda_function.orders_api", "dst": "aws_dynamodb_table.orders",
      "kind": "iam", "detail": "dynamodb:Query,dynamodb:GetItem", "file": "infra/orders_api.tf", "line": 40}
@@ -219,22 +219,27 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - IAM-only vs code-only mismatches for code-cited edges
 - Shared networks (`tf_network_check`): verify sets `shared_from` on a network group that another stack creates. The
   group must hold a placed node, and the networks its nodes are placed in (placement facts) must all carry a `stack`.
-  `shared_from` joins those stacks. Curated evidence adds no stack, but a cited network without one (a local VPC or a
-  data source lookup) keeps the group unshared. Terraform does not say which account owns a shared VPC, so the title
+  `shared_from` joins those stacks and the stacks of the remote subnet outputs that placed the nodes, which can differ
+  when a subnet output of one stack goes to a VPC of another. Curated evidence adds no stack, but a cited network
+  without one (a local VPC or a data source lookup) keeps the group unshared, and the report warns when the evidence
+  cites a network of a stack that none of the group's nodes is placed in. Terraform does not say which account owns a shared VPC, so the title
   names the stack, not an account. Verify drops any curated `shared_from` first, in both modes, with a note. This check
   runs after nodes without a matching placement leave their subnet.
   - A network fact read from another stack's outputs (`data.tfe_outputs.<name>` or
     `data.terraform_remote_state.<name>`) carries the stack: the first literal of `config.workspaces.name`,
     `config.key` less a trailing `.tfstate`, `terraform.tfstate`, `.terraform.tfstate` or `-terraform.tfstate`, and
-    the `workspace` of `tfe_outputs`, else `<name>`. The `workspace` of `terraform_remote_state` is an environment, so
-    it names no stack. Modules that read the same output of the same stack share one network fact; one data source
-    name read against two stacks gives two.
+    the `workspace` of `tfe_outputs`, else `<name>`. Each is a literal, or a `var.` or `local.` that resolves to one;
+    calls of one module that pass different values resolve to none. The `workspace` of `terraform_remote_state` is an
+    environment, so it names no stack. Modules that read the same output of the same stack share one network fact; one
+    data source name read against two stacks gives two.
+  - A network fact from a data source lookup (`data.aws_vpc.<name>`) carries no stack, and its address carries the
+    module that declares it, so two modules that look up a network under one name give two facts.
   - A remote subnet output places a resource in a remote VPC whose name prefixes the output name: one of its own stack
     first, else any other (a subnet lookup has no stack, so the longest name decides).
   - The report warns when a shared network sits in an account frame whose label has the same words as the stack's
-    name, less the words account, subscription and terraform, environment words (prod, dev, test and the like) and
-    account numbers, each word less a trailing `ing` or `s`, in any order. For example "Networking account" or "Network account"
-    around a VPC from `data.tfe_outputs.networking`, workspace `networking-prod` or state key
+    name, less the words account, subscription and terraform, cloud names (aws, azure), environment words (prod, dev,
+    test and the like), regions such as `us-east-1` and account numbers, each word less a trailing `ing` or `s`, in
+    any order. For example "Networking account" or "Network account" around a VPC from `data.tfe_outputs.networking`, workspace `networking-prod` or state key
     `prod/networking/terraform.tfstate`; "Prod account" around a VPC from `prod-networking` is no warning. The tool
     moves nothing, and the warning does not stop `build`; review rule 17 gets it fixed.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.

@@ -52,12 +52,12 @@ class AzureCloud(Cloud):
     def location(ex, res):
         """The literal location, or the literal location of the resource group it references."""
         expr = res.block.body.get("location")
-        found = ex.value(res.inst, expr)
+        found = res.inst.value(expr)
         if isinstance(found, str):
             return found
         for address in sorted(ex.refs(res.inst, expr)):
             group = ex.by_address.get(address)
-            literal = ex.value(group.inst, group.block.body.get("location")) if group and group.type == "azurerm_resource_group" else None
+            literal = group.inst.value(group.block.body.get("location")) if group and group.type == "azurerm_resource_group" else None
             if isinstance(literal, str):
                 return literal
         return None
@@ -79,7 +79,7 @@ class AzureCloud(Cloud):
             inst = inst.parent
         if not key:
             return None
-        found = ex.value(inst, inst.mod.providers[key].get("subscription_id")) if inst else None
+        found = inst.value(inst.mod.providers[key].get("subscription_id")) if inst else None
         return found if isinstance(found, str) else None
 
     def icon_style(self, name: str) -> str:

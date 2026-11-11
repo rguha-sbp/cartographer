@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 TIERS = ("isolated", "private", "public")
 CIDR = re.compile(r"\d{1,3}(\.\d{1,3}){3}/\d{1,2}")
-LITERAL = re.compile(r'"[\w./\-]+"')  # a quoted HCL string without interpolation
 
 if TYPE_CHECKING:
     from cartographer.tf_modules import Inst, Res
@@ -16,8 +15,9 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class Ref:
     """A local resource (`name` None) or a reference to another stack (`name` is its output or data source name).
-    `stack` names the stack whose outputs it reads: the workspace its remote state data source names literally, else
-    that data source's name (`networking` for `data.tfe_outputs.networking...`); a data source lookup has none."""
+    `stack` names the stack whose outputs it reads: the workspace its remote state data source names, else
+    that data source's name (`networking` for `data.tfe_outputs.networking...`). A data source lookup has none, and
+    its address carries the module that declares it: two modules can look up different networks under one name."""
 
     address: str
     name: str | None = None
@@ -52,8 +52,10 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
             continue
         seen.add(key)
         head, second, third = m["head"], m["second"], m["third"]
-        if m["remote"]:
-            out[Ref(m["remote"], m["out"] or m["ds"], stack(inst, m["kind"], m["state"]) if m["kind"] else None)] = None
+        if m["kind"]:
+            out[Ref(m["remote"], m["out"], stack(inst, m["kind"], m["state"]))] = None
+        elif m["ds"]:
+            out[Ref(f"{inst.prefix}{m['remote']}", m["ds"])] = None
         elif head == "var" and inst.parent is not None:
             for args in inst.args:
                 if second in args:
@@ -69,16 +71,17 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
 
 
 def stack(inst: Inst, kind: str, name: str) -> str:
-    """The workspace or state the remote state data source `kind`.`name` reads when its body names it literally
-    (`config.workspaces.name`, then `config.key` less its `terraform.tfstate` file or `.tfstate` suffix, then the
-    `workspace` of `tfe_outputs`; that of `terraform_remote_state` is an environment, not a stack), else `name`."""
+    """The workspace or state the remote state data source `kind`.`name` reads, else `name`. Its body names it as a
+    literal, directly or through `var.` and `local.`: `config.workspaces.name`, then `config.key` less its
+    `terraform.tfstate` file or `.tfstate` suffix, then the `workspace` of `tfe_outputs` (that of
+    `terraform_remote_state` is an environment, not a stack)."""
     block = inst.mod.data.get((kind, name))
     body = block.body if block else {}
     config = body.get("config") if isinstance(body.get("config"), dict) else {}
     workspaces = config.get("workspaces") if isinstance(config.get("workspaces"), dict) else {}
     for named in (workspaces.get("name"), config.get("key"), body.get("workspace") if kind == "tfe_outputs" else None):
-        if isinstance(named, str) and LITERAL.fullmatch(named):
-            return re.sub(r"([/._-]?terraform)?\.tfstate$", "", named.strip('"')) or name
+        if isinstance(found := inst.value(named), str):
+            return re.sub(r"([/._-]?terraform)?\.tfstate$", "", found) or name
     return name
 
 

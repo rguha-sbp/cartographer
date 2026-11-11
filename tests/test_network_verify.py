@@ -187,7 +187,8 @@ def test_a_shared_vpc_in_the_account_frame_named_after_its_stack_is_a_warning() 
     assert group_claims(curated) <= group_claims(verified)  # a warning, it does not stop the build
 
 
-@pytest.mark.parametrize("label", ["Network account", "Networking (123456789012)", "networking", "Networking accounts"])
+@pytest.mark.parametrize("label", ["Network account", "Networking (123456789012)", "networking", "Networking accounts",
+                                   "AWS Networking account", "Networking us-east-1"])
 def test_an_account_frame_with_a_variant_of_the_stack_name_is_a_warning(label: str) -> None:
     curated = _shared_vpc(_group("netacct", "account", None, label=label))
     _, report = _verify(curated)
@@ -420,5 +421,12 @@ def test_a_cited_remote_network_of_another_stack_does_not_join_the_title() -> No
     facts = {**FACTS, "networks": [*FACTS["networks"], other]}
     curated = _shared_vpc(vpc_parent="acct")
     _group_of(curated, "shared")["evidence"].append({"fact": "n98"})
-    verified, _ = _verify(curated, facts)
+    verified, report = _verify(curated, facts)
     assert _group_of(verified, "shared")["shared_from"] == "networking"
+    assert "group shared: evidence cites a network of platform, but its nodes are placed in a network of networking" in report
+
+
+def test_the_title_also_names_the_stack_a_nodes_subnet_output_comes_from() -> None:
+    placements = [{**p, "stack": "other"} if p["resource"] == SHARED_FN else p for p in FACTS["placements"]]
+    verified, _ = _verify(_shared_vpc(vpc_parent="acct"), {**FACTS, "placements": placements})
+    assert _group_of(verified, "shared")["shared_from"] == "networking, other"

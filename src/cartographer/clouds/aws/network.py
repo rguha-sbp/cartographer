@@ -42,7 +42,7 @@ class Network:
                 r.inst, r.block.body.get("vpc_id"), TOKEN
             ):
                 blocks.append((r.inst, r.block.body.get("cidr_block")))
-        found = [self.ex.value(inst, value) for inst, value in blocks]
+        found = [inst.value(value) for inst, value in blocks]
         if not all(isinstance(v, str) and CIDR.fullmatch(v) for v in found):
             return []
         return list(dict.fromkeys(found))  # type: ignore[arg-type]
@@ -69,16 +69,16 @@ class Network:
         return (vpc, tier, f"{ref.address} {how}") if vpc else None
 
     def placements(self) -> list[dict]:
-        found: dict[tuple[str, str, str], tuple[str, Res]] = {}
+        found: dict[tuple[str, str, str], tuple[str, Res, str | None]] = {}
         for r in self.ex.res:
             if r.type in NOT_PLACED:
                 continue
             for value in find(r.block.body, SUBNET_KEY):
                 for ref in sources(r.inst, value, TOKEN):
                     if placed := self.place(ref):
-                        found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
-        return [{"resource": address, "network": vpc, "tier": tier, "via": via, "file": r.block.file, "line": r.block.line}
-                for (address, vpc, tier), (via, r) in sorted(found.items())]
+                        found.setdefault((r.address, placed[0], placed[1]), (placed[2], r, ref.stack))
+        return [{"resource": address, "network": vpc, "tier": tier, "via": via, "stack": stack, "file": r.block.file,
+                 "line": r.block.line} for (address, vpc, tier), (via, r, stack) in sorted(found.items())]
 
 
 def network_facts(ex: Extractor) -> dict:
