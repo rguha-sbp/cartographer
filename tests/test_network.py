@@ -364,3 +364,14 @@ def test_a_remote_state_name_with_a_hyphen_is_a_remote_network(tmp_path: Path) -
         'data "tfe_outputs" "shared-net" {\n  workspace = "networking"\n}\n'
         'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.shared-net.values.shared_vpc_id }\n')
     assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == ["networking"]
+
+
+def test_one_output_of_one_stack_read_under_two_data_source_names_is_one_network(tmp_path: Path) -> None:
+    def module(data: str) -> str:
+        return (f'data "tfe_outputs" "{data}" {{\n  workspace = "networking"\n}}\n'
+                f'resource "aws_security_group" "sg" {{ vpc_id = data.tfe_outputs.{data}.values.shared_vpc_id }}\n'
+                'resource "aws_lambda_function" "fn" {\n'
+                f'  vpc_config {{ subnet_ids = data.tfe_outputs.{data}.values.shared_vpc_private_subnet_ids }}\n}}\n')
+    facts = _two_modules(tmp_path, module("net"), module("networking") + 'module "m" {\n  source = "./a"\n}\n')
+    assert [n["stack"] for n in facts["networks"]] == ["networking"]
+    assert len(facts["placements"]) == 2

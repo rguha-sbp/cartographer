@@ -71,7 +71,7 @@ Step 3: produce the curated JSON
   and order groups top to bottom within a column in list order. Frames (cloud, region, account) set column 0, and
   it is ignored. A group nested in another role group or in a network group gets its parent's column.
 - Network nesting: facts.json has `networks` (id like n1, `cloud`, name, cidrs, remote, stack) and `placements` (id like p1, a
-  resource, its network fact id and tier public, private or isolated). Put each network-attached node in a `subnet`
+  resource, its network fact id, tier public, private or isolated and, for a subnet that another stack gives, that `stack`). Put each network-attached node in a `subnet`
   group with that `tier`, whose parent is its `network` group (one subnet group per tier that holds a node, label "Public
   subnets", "Private subnets" or "Isolated subnets"). The subnet group cites a placement fact of that tier in `evidence`,
   and a node stays in it only when a placement fact of that tier exists for one of its `tf` addresses. Give a `network`

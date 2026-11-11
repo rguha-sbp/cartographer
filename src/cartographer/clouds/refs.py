@@ -32,9 +32,10 @@ class Ref:
 
     @property
     def key(self) -> str:
-        """The key of the network this reference is or reads: modules that read one output of one stack share it, and
-        the same data source name read against two workspaces gives two."""
-        return f"{self.address}@{self.stack}" if self.stack else self.address
+        """The key of the network this reference is or reads: the output and its stack for a remote output, whatever
+        the data source that reads it is called, so modules that read one output of one stack share it and one data
+        source name read against two workspaces gives two."""
+        return f"{self.name}@{self.stack}" if self.stack else self.address
 
 
 def token(heads: str, data: str) -> re.Pattern[str]:

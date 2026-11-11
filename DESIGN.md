@@ -231,7 +231,7 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     `terraform.tfstate`, `.terraform.tfstate` or `-terraform.tfstate` and a leading `./` or `../`) and
     the `workspace` of `tfe_outputs`, else `<name>`. Each is a literal, or a `var.` or `local.` that resolves to one;
     calls of one module that give different values resolve to none, and a call that leaves the variable out gives its default. The `workspace` of `terraform_remote_state` is an
-    environment, so it names no stack. Modules that read the same output of the same stack share one network fact; one
+    environment, so it names no stack. Modules that read the same output of the same stack share one network fact, whatever they call the data source; one
     data source name read against two stacks gives two.
   - A network fact from a data source lookup (`data.aws_vpc.<name>`) carries no stack, and its address carries the
     module that declares it, so two modules that look up a network under one name give two facts.
