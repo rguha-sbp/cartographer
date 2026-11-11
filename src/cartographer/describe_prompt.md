@@ -31,10 +31,9 @@ Fields for a described diagram
 - Tier: from what the engineer said. When they did not say, ask; propose gateways and public load balancers public, compute
   and data private (on Azure too). The tier is never marked on the diagram. A subnet group's `evidence` is a
   `stated` item when the engineer named the tier.
-- Shared network: when another account owns the VPC (AWS VPC sharing), its `network` group still sits in the account of
-  the services that run in it. When the engineer names the owner, end the `network` group's label with it after a comma, for
-  example "shared-vpc, shared from Networking account". Never use parentheses there: the title adds the cidrs in them.
-  Never draw an account frame for the owner or name it in another group label.
+- Shared network: when another account owns the network (AWS VPC sharing), its `network` group still sits in the account
+  of the services that run in it and is named after the network itself, for example "shared-vpc". Never draw an account
+  frame for the owner or name it in a group label. Never set `external`: only verify sets it, from Terraform facts.
 - CIDR: set `cidrs` on the `network` group only when the engineer stated the address range, with a `stated` or `file`
   item in the group's `evidence`. Never guess or invent an address range; leave `cidrs` out instead.
 - Workloads: role groups (`kind` null, for example "Storefront" or "Orders") are the application or service

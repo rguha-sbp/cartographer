@@ -96,9 +96,9 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
      "multi": false, "file": "infra/orders_api.tf", "line": 12}
   ],
   "networks": [{"id": "n1", "cloud": "aws", "name": "main", "cidrs": ["10.0.0.0/16"], "remote": false,
-                "stack": null, "address": "aws_vpc.main"}],
+                "address": "aws_vpc.main"}],
   "placements": [{"id": "p1", "resource": "aws_lambda_function.orders_api", "network": "n1", "tier": "private",
-                  "stack": null, "cloud": "aws"}],
+                  "cloud": "aws"}],
   "edges": [
     {"id": "f12", "src": "aws_lambda_function.orders_api", "dst": "aws_dynamodb_table.orders",
      "kind": "iam", "detail": "dynamodb:Query,dynamodb:GetItem", "file": "infra/orders_api.tf", "line": 40}
@@ -177,9 +177,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   prompt, schema and facts, so build refuses it as stale and it needs a new curation.
 - `kind` in groups: `cloud | region | account | network | subnet | null`. Frame kinds carry `cloud`. A null kind is a plain
   dashed role group. There is one top-level `cloud` frame per cloud present, side by side. The tool never draws resource groups.
-- `shared_from` in groups: set by verify, never by the curator. On a network frame that another stack creates, it
-  names that stack, and the frame title shows it as `<label> (shared from <stack>)`. The frame stays in the stack's
-  account.
+- `external` in groups: set by verify, never by the curator. On a network frame whose nodes run only in networks this
+  stack does not create, the frame title shows it as `<label> (external)`. The frame stays in the stack's account.
 - `column` in groups: integer 0 to 3, required. It places the role groups that are directly in the account from left to right.
   The tool ignores it for frames and for groups nested in another group, which follow their parent.
 - Node `icon`: a qualified name. Set it only when no resource of the node resolves to one (a non-cloud provider) or for a
@@ -217,35 +216,22 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - dropped edges with reason
   - `unshown` facts of kind iam/trigger/route between two shown nodes that no curated edge covers (recall hints)
   - IAM-only vs code-only mismatches for code-cited edges
-- Shared networks (`tf_network_check`): verify sets `shared_from` on a network group that another stack creates. The
-  group must hold a placed node, and the networks its nodes are placed in (placement facts) must all carry a `stack`.
-  `shared_from` joins those stacks and the stacks of the remote subnet outputs that placed the nodes, which can differ
-  when a subnet output of one stack goes to a VPC of another. Curated evidence adds no stack, but a cited network
-  without one (a local VPC or a data source lookup) keeps the group unshared, and the report warns when the evidence
-  cites a network of a stack that none of the group's nodes is placed in. Terraform does not say which account owns a shared VPC, so the title
-  names the stack, not an account. Verify drops any curated `shared_from` first, in both modes, with a note. This check
-  runs after nodes without a matching placement leave their subnet.
-  - A network fact read from another stack's outputs (`data.tfe_outputs.<name>` or
-    `data.terraform_remote_state.<name>`) carries the stack: the first literal that leaves a name of `config.workspaces.name`,
-    `config.workspaces.prefix`, `config.key`, `config.workspace_key_prefix`, `config.path`, `config.prefix` (each less a trailing `.tfstate`,
-    `terraform.tfstate`, `.terraform.tfstate` or `-terraform.tfstate` and a leading `/`, `./` or `../`; an absolute local `path` keeps its last directory) and
-    the `workspace` of `tfe_outputs`, else `<name>` and the first of them, as in `net/prod`, else `<name>`. Each is a literal, or a `var.` or `local.` that resolves to one;
-    calls of one module that give different values resolve to none, and a call that leaves the variable out gives its default. The `workspace` of `terraform_remote_state` is an
-    environment, so it names no stack. Modules that read the same output of the same stack share one network fact, whatever they call the data source; one
-    data source name read against two stacks gives two.
-  - A network fact from a data source lookup (`data.aws_vpc.<name>`) carries no stack, and its address carries the
-    module that declares it, so two modules that look up a network under one name give two facts.
-  - A remote subnet output places a resource in a remote VPC whose name prefixes the output name: one of its own stack
-    first, else any other. The longest name comes next. A subnet lookup has no stack: between equal names, a network its
-    own module looks up comes first. A network of another stack comes before any other lookup.
-  - A resource can have placements in several networks. A network group is shared by the placements in the
-    networks its evidence cites, when its nodes have any; else by all placements of its nodes.
-  - The report warns when a shared network sits in an account frame whose label has the same words as the stack's
-    name, less the words account, subscription and terraform, cloud names (aws, azure), environment words (prod, dev,
-    test and the like), AWS regions such as `us-east-1` or `us_east_1` and account numbers, each word less a plural `s` or `es`, an `ing` after four letters or more and one of a doubled last consonant (`stack_names`), in
-    any order. For example "Networking account" or "Network account" around a VPC from `data.tfe_outputs.networking`, workspace `networking-prod` or state key
-    `prod/networking/terraform.tfstate`; "Prod account" around a VPC from `prod-networking` is no warning. The tool
-    moves nothing, and the warning does not stop `build`; review rule 17 gets it fixed.
+- Networks (`tf_network_check.check_boxes`): a network group stands for the network facts its evidence cites. In a
+  Terraform diagram a network group that cites none gets a note, and its nodes are not checked. A node with placement
+  facts inside a network group that stands for networks must be placed in one of them (any tier); otherwise verify
+  moves it to the nearest ancestor that is not a network or subnet group, with a note. A placed node outside every
+  network group gets a note only. Nodes without placement facts (security groups, gateways) are not checked. After the
+  moves, a group that stands only for remote networks and still holds a node gets `external`. Verify drops any curated
+  `external` or `shared_from` first, in both modes, with a note. Dropping a wrong `cidrs` claim keeps the citation.
+  - Extract reads only `.tf` text. A remote output's network is identified by the state its data block names plus the
+    network name derived from the output. The state is a `State(kind, settings, index)` value: `backend`,
+    `workspace` (dropped when `"default"` on `terraform_remote_state`), `organization` and every `config` leaf as a
+    dotted path, resolved to literals through `var.` and `local.` and compared exactly as written. A setting that does
+    not resolve, calls of one module instance that disagree, a non-literal index or a data block without settings
+    make the identity the data source's full address, so those modules get separate networks.
+  - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module.
+  - A remote subnet output places a resource in a remote network whose name prefixes the output name: one of the same
+    state first, then the longest name, then for a lookup one of the same module, then the network key.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.
 
 ## tf_layout.py (stage 4)

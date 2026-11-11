@@ -47,10 +47,10 @@ def box_size(n: dict[str, Any]) -> Size:
 
 
 def group_label(g: dict[str, Any]) -> str:
-    """A group's title: a VPC also names its address ranges and, when another stack creates it, that stack."""
+    """A group's title: a VPC also names its address ranges and, when this stack does not create it, `external`."""
     notes = list(g.get("cidrs") or [])
-    if g.get("shared_from"):
-        notes.append(f"shared from {g['shared_from']}")
+    if g.get("external"):
+        notes.append("external")
     return f"{g['label']} ({', '.join(notes)})" if notes else g["label"]
 
 

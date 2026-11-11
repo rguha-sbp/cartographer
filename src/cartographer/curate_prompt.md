@@ -77,12 +77,14 @@ Step 3: produce the curated JSON
   and a node stays in it only when a placement fact of that tier exists for one of its `tf` addresses. Give a `network`
   group `cidrs` only copied from a `networks` fact (the same list), and cite that fact in the group's `evidence`; with no
   cidrs in the fact, leave `cidrs` out. A network group that comes from a remote fact is named after it, without cidrs.
-- Shared networks: a `networks` fact with `remote` true is a VPC this stack does not create. Often another account
-  owns it and shares it (AWS VPC sharing), but it can also be a VPC of the same account that another stack creates.
-  The stack's resources in its subnets still belong to the stack's account. Put its `network` group inside the
-  stack's account frame, never in an account frame of its own. Cite the remote fact in
-  the group's `evidence`. The tool adds the stack it comes from to the frame title (for example `shared-vpc (shared
-  from networking)`). Never name the owning account or stack in any group label.
+- Every `network` group cites the `networks` fact it stands for in its `evidence`. Verify checks that each node with a
+  placement fact runs in a network its group cites, and moves it out of the group when it does not.
+- External networks: a `networks` fact with `remote` true is a VPC or VNet this stack does not create. Often another
+  account owns it and shares it (AWS VPC sharing), but it can also be a network of the same account that another stack
+  creates. The stack's resources in its subnets still belong to the stack's account. Put its `network` group inside the
+  stack's account frame, never in an account frame of its own, and name it after the fact. Verify adds `external` to
+  the frame title (for example `shared-vpc (external)`). Never set `external` yourself, and never name the owning
+  account or stack in any group label.
 - Azure placement: a Function or Web App with VNet integration (`virtual_network_subnet_id`) stays outside the subnets
   and draws an outbound arrow to the integration subnet. A private endpoint sits in its subnet with an arrow to the
   service it exposes, and that service stays in the region outside the subnets. PaaS services without a subnet fact

@@ -212,6 +212,10 @@
           "id": {
             "type": "string"
           },
+          "external": {
+            "description": "Set by verify on a network frame whose nodes run only in networks this stack does not create. The frame title shows it; a curated value is dropped.",
+            "type": "boolean"
+          },
           "kind": {
             "enum": [
               "cloud",
@@ -230,10 +234,6 @@
               "string",
               "null"
             ]
-          },
-          "shared_from": {
-            "description": "Set by verify on a network frame that another stack creates: the stack it is read from. The frame title shows it; a curated value is dropped.",
-            "type": "string"
           },
           "tier": {
             "description": "Subnet frame only: the tier of the subnets it stands for.",
