@@ -43,9 +43,9 @@ def cloud_group(g: Group) -> Cell:
             raise ValueError(f"group {g.id}: {g.kind} frame has cloud {g.cloud!r}, which is not a known cloud")
         return html_value(g.label), CLOUDS[g.cloud].frame_styles[key]
     return html_value(g.label), (
-        f"rounded=0;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;fillColor={g.stroke};"
-        f"fillOpacity={GROUP_TINT};strokeColor={g.stroke};verticalAlign=top;align=left;spacingLeft={GROUP_TITLE_LEFT};fontSize=12;"
-        f"fontStyle=1;fontColor=#232F3E;")
+        f"rounded=0;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;"
+        f"fillColor={g.colour};fillOpacity={GROUP_TINT};strokeColor={g.colour};"
+        f"verticalAlign=top;align=left;spacingLeft={GROUP_TITLE_LEFT};fontSize=12;fontStyle=1;fontColor=#232F3E;")
 
 
 def _layer7_box(b: Box) -> Cell:

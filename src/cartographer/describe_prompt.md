@@ -37,7 +37,7 @@ Fields for a described diagram
   boundaries the engineer named. Each has `parent` set to the subnet group where its network-attached services run, or to
   the account for its regional services. A workload that has both gets one frame in each place, with the same label.
   Without a workload split, use plain role groups ("Edge", "Data stores") under the same parents.
-- Label: short name, a newline, then a 2 to 4 word role. The name starts with a capital letter and the role is lower case. Group labels start with a capital letter. Edge labels start lower case. A product or identifier keeps its own spelling (`npm`, `eu-west-1`). Plain ASCII, no em dashes, en dashes or smart quotes.
+- Label: short name, a newline, then a 2 to 4 word role. The name starts with a capital letter and the role starts lower case. Group labels start with a capital letter. Edge labels start lower case. A product or identifier keeps its own spelling (`npm`, `eu-west-1`). Plain ASCII, no em dashes, en dashes or smart quotes.
 
 Evidence
 - Every edge and every external needs at least one evidence item. Two forms are allowed:

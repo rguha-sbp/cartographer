@@ -112,7 +112,7 @@ class Blocks:
         g = self.groups[bid]
         _, h = self.measure(bid)
         self.out_groups.append(Group(bid, group_label(g), x, y, w, h, g["parent"], g["kind"], g.get("tier"),
-                                     stroke=self.colours.group(bid) or GREY, cloud=g.get("cloud")))
+                                     colour=self.colours.group(bid) or GREY, cloud=g.get("cloud")))
         top = y + GROUP_PAD_TOP
         for c in self.children[bid]:
             top += self.place(c, x + GROUP_PAD_X, top, self.measure(c)[0]) + self.row_gap
