@@ -52,7 +52,7 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
 ENVIRONMENTS = {"prod", "production", "prd", "dev", "development", "develop", "test", "tst", "acc", "acceptance", "stag",
                 "stage", "qa", "uat", "sandbox", "nonprod"}
 IGNORED = {"account", "subscription", "terraform", "aws", "azure", "amazon", "microsoft", *ENVIRONMENTS}
-REGION = re.compile(r"[a-z]{2}(-[a-z]+)+-\d+")  # us-east-1, eu-central-2
+REGION = re.compile(r"\b[a-z]{2}(-[a-z]+)?-(north|south|east|west|central)[a-z]*-\d+\b")  # us-east-1, us-gov-west-1
 
 
 def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], cited: dict[str, set], notes: list[str]) -> None:
@@ -62,19 +62,19 @@ def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], cited: dict[st
     stack none of its nodes is placed in, and when it sits in an account frame named after its stack: the stack's
     nodes run in the stack's account."""
     networks = {n["id"]: n for n in facts.get("networks", [])}
-    stacks_of: dict[str, set[str | None]] = defaultdict(set)  # a resource -> the stacks its networks and subnets come from
+    placed: dict[str, list[dict]] = defaultdict(list)  # a resource -> its placements
     for p in facts.get("placements", []):
-        stacks_of[p["resource"]].add(networks[p["network"]].get("stack"))
-        if p.get("stack"):  # a remote subnet output names its stack, which can differ from the VPC's
-            stacks_of[p["resource"]].add(p["stack"])
-    placed: dict[str, set[str | None]] = defaultdict(set)
+        placed[p["resource"]].append(p)
+    inside: dict[str, list[dict]] = defaultdict(list)  # a network group -> the placements of its nodes
     for n in out["nodes"]:
         if network := enclosing(groups, n["group"], "network"):
-            placed[network["id"]] |= {s for address in n["tf"] for s in stacks_of[address]}
+            inside[network["id"]] += [p for address in n["tf"] for p in placed[address]]
     for g in groups.values():
         if g["kind"] != "network":
             continue
-        stacks = placed[g["id"]]
+        # a resource can sit in several networks: the group stands for the ones it cites, when its nodes are in any
+        own = [p for p in inside[g["id"]] if p["network"] in cited[g["id"]]] or inside[g["id"]]
+        stacks = {s for p in own for s in _stacks(p, networks)}
         cites_local = any(networks[fact].get("stack") is None for fact in cited[g["id"]] if fact in networks)
         if not stacks or None in stacks or cites_local:
             continue
@@ -86,6 +86,12 @@ def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], cited: dict[st
         if account and any(named_after(account["label"], s) for s in stacks):
             notes.append(f"group {g['id']}: shared network sits in account {account['id']} ({account['label']}), "
                          f"named after the stack it comes from; if the stack's nodes run in another account, draw it there")
+
+
+def _stacks(placement: dict, networks: dict[str, dict]) -> set[str | None]:
+    """The stacks a placement's network and subnet come from, None for this one: a remote subnet output names its
+    stack, which can differ from the VPC's."""
+    return {networks[placement["network"]].get("stack")} | ({placement["stack"]} if placement.get("stack") else set())
 
 
 def named_after(label: str, stack: str) -> bool:
@@ -100,5 +106,11 @@ def named_after(label: str, stack: str) -> bool:
 def _stems(name: str) -> list[str]:
     """The words of `name` that are not IGNORED, regions or numbers, each less a trailing `ing` or `s`, sorted."""
     words = re.findall(r"[a-z0-9]+", REGION.sub(" ", name.lower()))
-    stems = (re.sub(r"(ing|s)$", "", w) for w in words if not w.isdigit() and w not in IGNORED)
-    return sorted(w for w in stems if w not in IGNORED)
+    return sorted(s for w in words if not w.isdigit() and (s := _stem(w)) and s not in IGNORED_STEMS)
+
+
+def _stem(word: str) -> str:
+    return re.sub(r"(ing|s)$", "", word)
+
+
+IGNORED_STEMS = {_stem(w) for w in IGNORED}

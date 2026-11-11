@@ -411,6 +411,10 @@ def test_described_mode_drops_a_curated_shared_from() -> None:
     ("Networking account", "prod/networking", True),
     ("Prod account", "prod-networking", False),
     ("Shared networking account", "networking-shared", True),
+    ("Networking EU account", "networking-eu-1", True),
+    ("Core network account", "core-network-2", True),
+    ("Networking account", "networking-us-gov-west-1", True),
+    ("Network account", "network-s", True),
 ])
 def test_an_account_label_is_named_after_a_stack_with_the_same_words_less_environments(label: str, stack: str, named: bool) -> None:
     assert named_after(label, stack) is named
@@ -430,3 +434,9 @@ def test_the_title_also_names_the_stack_a_nodes_subnet_output_comes_from() -> No
     placements = [{**p, "stack": "other"} if p["resource"] == SHARED_FN else p for p in FACTS["placements"]]
     verified, _ = _verify(_shared_vpc(vpc_parent="acct"), {**FACTS, "placements": placements})
     assert _group_of(verified, "shared")["shared_from"] == "networking, other"
+
+
+def test_a_node_also_placed_in_a_local_network_leaves_the_remote_one_it_cites_shared() -> None:
+    also_local = {**next(p for p in FACTS["placements"] if p["resource"] == SHARED_FN), "network": VPC["id"]}
+    verified, _ = _verify(_shared_vpc(vpc_parent="acct"), {**FACTS, "placements": [*FACTS["placements"], also_local]})
+    assert _group_of(verified, "shared")["shared_from"] == "networking"

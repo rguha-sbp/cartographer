@@ -105,10 +105,10 @@ class Inst:
         kind, name = m.groups()
         if depth >= MAX_DEPTH:
             return UNRESOLVED
-        where, targets = self, [self.mod.locals.get(name) if kind == "local" else self.mod.variables.get(name)]
-        if kind == "var" and (passed := [a[name] for a in self.args if name in a]) and self.parent is not None:
-            where, targets = self.parent, passed
-        found = {where.value(target, depth + 1) for target in targets}
+        calls = self.args if kind == "var" and self.parent is not None else []
+        found = {self.parent.value(a[name], depth + 1) for a in calls if name in a}
+        if not calls or any(name not in a for a in calls):  # a call that leaves the variable out reads its default
+            found.add(self.value((self.mod.locals if kind == "local" else self.mod.variables).get(name), depth + 1))
         return found.pop() if len(found) == 1 and None not in found else UNRESOLVED
 
 

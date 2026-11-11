@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from cartographer import tf_extract
 
 REPO = Path(__file__).parent / "fixtures" / "network"
@@ -262,3 +264,24 @@ def test_two_modules_that_look_up_a_vpc_under_one_name_give_two_networks(tmp_pat
         'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.main.id }\n',
         'module "a" {\n  source = "./a"\n  name = "shop"\n}\nmodule "b" {\n  source = "./b"\n  name = "bank"\n}\n')
     assert [n["address"] for n in facts["networks"]] == ["module.a.data.aws_vpc.main", "module.b.data.aws_vpc.main"]
+
+
+def test_a_subnet_lookup_stays_with_the_vpc_its_own_module_looks_up(tmp_path: Path) -> None:
+    facts = _two_modules(
+        tmp_path,
+        'data "aws_vpc" "main" {}\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.main.id }\n'
+        'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = data.aws_subnets.main_private.ids }\n}\n',
+        'module "a" {\n  source = "./a"\n}\nmodule "b" {\n  source = "./b"\n}\n')
+    address = {n["id"]: n["address"] for n in facts["networks"]}
+    assert {p["resource"]: address[p["network"]] for p in facts["placements"]} == {
+        "module.a.aws_lambda_function.fn": "module.a.data.aws_vpc.main",
+        "module.b.aws_lambda_function.fn": "module.b.data.aws_vpc.main"}
+
+
+@pytest.mark.parametrize(("passed", "stack"), [("networking-prod", "this"), ("platform-prod", "platform-prod")])
+def test_a_call_without_the_workspace_reads_the_default(tmp_path: Path, passed: str, stack: str) -> None:
+    facts = _two_modules(
+        tmp_path, WORKSPACE_FROM_A_VARIABLE.replace('"net_ws" {}', '"net_ws" {\n  default = "platform-prod"\n}'),
+        f'module "x" {{\n  source = "./a"\n  net_ws = "{passed}"\n}}\nmodule "y" {{\n  source = "./a"\n}}\n')
+    assert [n["stack"] for n in facts["networks"]] == [stack]

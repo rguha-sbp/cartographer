@@ -4,7 +4,17 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from cartographer.clouds.refs import CIDR, Ref, add_remote, network_fact, place_remote, sources, tier_in, token
+from cartographer.clouds.refs import (
+    CIDR,
+    Ref,
+    add_remote,
+    network_fact,
+    place_remote,
+    placement_facts,
+    sources,
+    tier_in,
+    token,
+)
 from cartographer.tf_policies import unq
 from cartographer.tf_values import find
 
@@ -77,8 +87,7 @@ class Network:
                 for ref in sources(r.inst, value, TOKEN):
                     if placed := self.place(ref):
                         found.setdefault((r.address, placed[0], placed[1]), (placed[2], r, ref.stack))
-        return [{"resource": address, "network": vpc, "tier": tier, "via": via, "stack": stack, "file": r.block.file,
-                 "line": r.block.line} for (address, vpc, tier), (via, r, stack) in sorted(found.items())]
+        return placement_facts(found)
 
 
 def network_facts(ex: Extractor) -> dict:

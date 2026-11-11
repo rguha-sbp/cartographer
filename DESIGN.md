@@ -229,13 +229,16 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     `data.terraform_remote_state.<name>`) carries the stack: the first literal of `config.workspaces.name`,
     `config.key` less a trailing `.tfstate`, `terraform.tfstate`, `.terraform.tfstate` or `-terraform.tfstate`, and
     the `workspace` of `tfe_outputs`, else `<name>`. Each is a literal, or a `var.` or `local.` that resolves to one;
-    calls of one module that pass different values resolve to none. The `workspace` of `terraform_remote_state` is an
+    calls of one module that give different values resolve to none, and a call that leaves the variable out gives its default. The `workspace` of `terraform_remote_state` is an
     environment, so it names no stack. Modules that read the same output of the same stack share one network fact; one
     data source name read against two stacks gives two.
   - A network fact from a data source lookup (`data.aws_vpc.<name>`) carries no stack, and its address carries the
     module that declares it, so two modules that look up a network under one name give two facts.
   - A remote subnet output places a resource in a remote VPC whose name prefixes the output name: one of its own stack
-    first, else any other (a subnet lookup has no stack, so the longest name decides).
+    first, else any other. A subnet lookup has no stack: a network its own module looks up comes first. The longest
+    name breaks a tie.
+  - A resource can have placements in several networks. A network group is shared by the placements in the
+    networks its evidence cites, when its nodes have any; else by all placements of its nodes.
   - The report warns when a shared network sits in an account frame whose label has the same words as the stack's
     name, less the words account, subscription and terraform, cloud names (aws, azure), environment words (prod, dev,
     test and the like), regions such as `us-east-1` and account numbers, each word less a trailing `ing` or `s`, in
