@@ -162,7 +162,7 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   "view": "l7",
   "groups": [{"id": "g_api", "label": "Shop APIs", "kind": null, "parent": "acct", "column": 1},
              {"id": "acct", "label": "Account", "kind": "account", "cloud": "aws", "parent": "region", "column": 0}],
-  "nodes": [{"id": "api_orders", "label": "orders API\norder handling", "group": "g_api",
+  "nodes": [{"id": "api_orders", "label": "Orders API\norder handling", "group": "g_api",
              "tf": ["aws_lambda_function.orders_api"], "multi": false}],
   "externals": [{"id": "stripe", "label": "Stripe\n(payments)", "icon": "generic:internet",
                  "evidence": [{"file": "infra/orders_api.tf", "line": 30, "contains": "stripe"}]}],
@@ -175,8 +175,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
 - `format` is 2. A file without it is legacy (`vpc` groups, node and external `service`, bare icons), and `curated_format.py` converts it on
   load. A described solution still builds from it. A Terraform one was keyed to the older
   prompt, schema and facts, so build refuses it as stale and it needs a new curation.
-- `kind` in groups: `cloud | region | account | network | subnet | null`. Frame kinds carry `cloud`. A null kind is a plain
-  dashed role group. There is one top-level `cloud` frame per cloud present, side by side. The tool never draws resource groups.
+- `kind` in groups: `cloud | region | account | network | subnet | null`. Frame kinds carry `cloud`. A null kind is a role group:
+  a solid outline and a faint tint in its colour. There is one top-level `cloud` frame per cloud present, side by side. The tool never draws resource groups.
 - `column` in groups: integer 0 to 3, required. It places the role groups that are directly in the account from left to right.
   The tool ignores it for frames and for groups nested in another group, which follow their parent.
 - Node `icon`: a qualified name. Set it only when no resource of the node resolves to one (a non-cloud provider) or for a

@@ -85,7 +85,9 @@ Step 3: produce the curated JSON
   the workload does ("Order processing", not the module name). A workload that has network-attached nodes sits inside
   the subnet group of their tier. Regional services (S3, DynamoDB, SQS, Bedrock, Azure Storage, Key Vault) have no subnet: put them in a
   workload group directly under the account. A workload spanning both gets one group per place with the same label.
-- Labels: short name, then a newline, then a 2 to 4 word role, for example "sessions API\nchat history".
+- Labels: short name, then a newline, then a 2 to 4 word role, for example "Sessions API\nchat history".
+  The name starts with a capital letter and the role starts lower case. Group labels start
+  with a capital letter. Edge labels start lower case. A product or identifier keeps its own spelling (`npm`, `eu-west-1`).
   Plain ASCII only. No em dashes, en dashes, or smart quotes. Use a comma or colon instead.
 
 Step 4: edges

@@ -12,6 +12,8 @@ from cartographer.diagram_model import EDGE_DEFAULT, GROUP_TITLE_LEFT, ORIGIN, B
 from cartographer.tf_blocks import GAP
 from cartographer.tf_colors import Colours
 
+GROUP_TINT = 8  # percent opacity of a group's fill in its own colour: visible, yet quiet behind icons and lines
+
 LEGEND_W, LEGEND_LINE = 440, 18
 Curated = dict[str, Any]
 Cell = tuple[str, str]  # a vertex's draw.io value (HTML) and style
@@ -31,16 +33,21 @@ def html_value(text: str) -> str:
 
 
 def cloud_group(g: Group) -> Cell:
-    """A frame in the style its cloud draws it, else a plain group in its purpose colour."""
+    """A frame in the style its cloud draws it, else a group tinted faintly in its purpose colour.
+
+    The tint sits behind the icons and lines, so the group reads as a background area. A nested group's tint
+    stacks on its parent's (about 15 % at two levels), so a nested group reads a shade darker: the shade shows the
+    nesting.
+    """
     if g.kind:
         key = f"subnet-{g.tier}" if g.kind == "subnet" else g.kind
         if g.cloud not in CLOUDS:
             raise ValueError(f"group {g.id}: {g.kind} frame has cloud {g.cloud!r}, which is not a known cloud")
         return html_value(g.label), CLOUDS[g.cloud].frame_styles[key]
     return html_value(g.label), (
-        f"rounded=0;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;fillColor={g.fill};"
-        f"strokeColor={g.stroke};dashed=1;verticalAlign=top;align=left;spacingLeft={GROUP_TITLE_LEFT};fontSize=12;"
-        f"fontStyle=1;fontColor=#232F3E;")
+        f"rounded=0;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;"
+        f"fillColor={g.color};fillOpacity={GROUP_TINT};strokeColor={g.color};"
+        f"verticalAlign=top;align=left;spacingLeft={GROUP_TITLE_LEFT};fontSize=12;fontStyle=1;fontColor=#232F3E;")
 
 
 def _layer7_box(b: Box) -> Cell:

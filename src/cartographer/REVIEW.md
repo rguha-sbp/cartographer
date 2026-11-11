@@ -46,6 +46,7 @@ The numbers of the Layer 7 rules did not change when the list was split, so a fi
 12. [curation] Workloads are visually separate: each application or service boundary has its own frame, and unrelated services do not share one. Fix: split or merge role groups.
 13. [curation] No frame holds a single node only because nesting allows it. Fix: drop the frame and put the node in its parent.
 14. [curation] No Availability Zone is drawn on L7: one icon per service, never one per AZ or subnet.
+18. [curation] Capital letters are consistent: a node or external name and a group label start with a capital letter, a node role line and an edge label start lower case. A product or identifier keeps its own spelling (`npm`, `eu-west-1`). Fix: correct the label in the curated file.
 
 ## C4: every view
 
