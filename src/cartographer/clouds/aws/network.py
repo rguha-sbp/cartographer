@@ -68,7 +68,7 @@ class Network:
                         add_remote(self.vpcs, ref, r)
 
     def place(self, ref: Ref) -> tuple[str, str, str] | None:
-        """(vpc address, tier, what decided the tier) for a subnet reference, None when either is unknown."""
+        """(network key, tier, what decided the tier) for a subnet reference, None when either is unknown."""
         if ref.remote:
             return place_remote(self.vpcs, ref)
         subnet = self.by_address[ref.address]

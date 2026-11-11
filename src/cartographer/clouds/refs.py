@@ -100,13 +100,18 @@ def add_remote(networks: dict[str, dict], ref: Ref, res: Res, suffixes: str = "i
 def place_remote(networks: dict[str, dict], ref: Ref, suffixes: str = "ids?") -> tuple[str, str, str] | None:
     """(network key, tier, what decided the tier) for a subnet another stack or a lookup gives, None when either
     is unknown. The network is a remote one whose name prefixes the output name (`shared-vpc` for
-    `shared_vpc_private_subnet_ids`): one of the reference's own stack before any other, for a lookup one its own
-    module looks up, then the longest name."""
+    `shared_vpc_private_subnet_ids`): one of the reference's own stack before any other, then the longest name, then
+    for a lookup a network its own module looks up."""
     name, tier = derive(ref.name or "", suffixes), tier_in(ref.name or "")
-    lookup = ref.stack is None  # only a lookup's address carries its module
-    named = [(not lookup and n["stack"] == ref.stack, lookup and _module(a) == _module(ref.address), len(n["name"]), a)
-             for a, n in networks.items() if n["remote"] and name.startswith(n["name"] + "-")]
-    return (max(named)[3], tier, ref.name or "") if named and tier else None
+
+    def rank(key: str) -> tuple[bool, int, bool, str]:
+        n = networks[key]
+        same_stack = ref.stack is not None and n["stack"] == ref.stack
+        same_module = ref.stack is None and n["stack"] is None and _module(key) == _module(ref.address)  # both lookups
+        return same_stack, len(n["name"]), same_module, key
+
+    named = [key for key, n in networks.items() if n["remote"] and name.startswith(n["name"] + "-")]
+    return (max(named, key=rank), tier, ref.name or "") if named and tier else None
 
 
 def _module(address: str) -> str:

@@ -235,8 +235,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - A network fact from a data source lookup (`data.aws_vpc.<name>`) carries no stack, and its address carries the
     module that declares it, so two modules that look up a network under one name give two facts.
   - A remote subnet output places a resource in a remote VPC whose name prefixes the output name: one of its own stack
-    first, else any other. A subnet lookup has no stack: a network its own module looks up comes first. The longest
-    name breaks a tie.
+    first, else any other. The longest name comes next. A subnet lookup has no stack: between equal names, a network its
+    own module looks up comes first.
   - A resource can have placements in several networks. A network group is shared by the placements in the
     networks its evidence cites, when its nodes have any; else by all placements of its nodes.
   - The report warns when a shared network sits in an account frame whose label has the same words as the stack's

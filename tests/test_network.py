@@ -312,3 +312,13 @@ def test_a_module_named_data_keeps_the_lookups_of_its_submodules_apart(tmp_path:
     address = {n["id"]: n["address"] for n in facts["networks"]}
     assert all(address[p["network"]].startswith(p["resource"].removesuffix("aws_lambda_function.fn"))
                for p in facts["placements"]) and len(facts["placements"]) == 2
+
+
+def test_a_root_subnet_lookup_stays_with_the_root_vpc_lookup_of_the_same_name(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_security_group" "a" { vpc_id = data.aws_vpc.shared_vpc.id }\n'
+        'resource "aws_security_group" "b" { vpc_id = data.tfe_outputs.networking.values.shared_vpc_id }\n'
+        'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = data.aws_subnets.shared_vpc_private.ids }\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    address = {n["id"]: n["address"] for n in facts["networks"]}
+    assert [address[p["network"]] for p in facts["placements"]] == ["data.aws_vpc.shared_vpc"]
