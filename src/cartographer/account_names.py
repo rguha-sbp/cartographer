@@ -3,7 +3,7 @@
 import re
 
 ENVIRONMENTS = {"prod", "production", "prd", "dev", "development", "develop", "test", "tst", "acc", "acceptance", "stag",
-                "stage", "stg", "preprod", "qa", "uat", "sandbox", "nonprod", "env"}
+                "stage", "stg", "preprod", "qa", "uat", "sandbox", "nonprod", "non", "pre", "env"}
 IGNORED = {"account", "subscription", "terraform", "aws", "azure", "amazon", "microsoft", *ENVIRONMENTS}
 REGION = re.compile(r"\b(us|eu|ap|sa|ca|me|af|il|mx|cn)(-gov|-iso[a-z]?)?-(north|south|east|west|central)[a-z]*-\d+[a-z]?\b")  # us-east-1, us-gov-west-1
 

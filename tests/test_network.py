@@ -349,6 +349,8 @@ def test_a_remote_subnet_goes_to_a_remote_vpc_before_a_lookup_of_the_same_name_i
     ('{ path = "../.terraform/terraform.tfstate" }', "n/.terraform"),
     ('{ path = "../.state/networking.tfstate" }', ".state/networking"),
     ('{ key = "staging/terraform.tfstate" }', "n/staging"),
+    ('{ key = "pre-prod/terraform.tfstate" }', "n/pre-prod"),
+    ('{ key = "envs/non-prod/terraform.tfstate" }', "n/envs/non-prod"),
     ('{ key = "envs/prod/terraform.tfstate" }', "n/envs/prod"),
     ('{ key = "us-east-1/123456789012/prod.tfstate" }', "n/us-east-1/123456789012/prod"),
     ('{ path = "./terraform.tfstate" }', "n"),
