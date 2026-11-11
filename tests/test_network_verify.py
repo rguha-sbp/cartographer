@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 from cartographer import tf_extract, tf_verify, verify_description
+from cartographer.account_names import named_after
 from cartographer.curated_format import FRAME_KINDS
-from cartographer.tf_network_check import named_after
 from cartographer.verify_shared import cloud_warnings, group_claims
 
 REPO = Path(__file__).parent / "fixtures" / "network"
@@ -417,6 +417,8 @@ def test_described_mode_drops_a_curated_shared_from() -> None:
     ("Network account", "network-s", True),
     ("Networking", "networking_us_east_1", True),
     ("Network us-east-1a", "networking-stg", True),
+    ("Logs account", "logging", True),
+    ("Shared settings", "shared-setting", True),
     ("Networking", "env:/preprod/networking", True),
 ])
 def test_an_account_label_is_named_after_a_stack_with_the_same_words_less_environments(label: str, stack: str, named: bool) -> None:

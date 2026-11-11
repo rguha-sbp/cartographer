@@ -226,8 +226,9 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   names the stack, not an account. Verify drops any curated `shared_from` first, in both modes, with a note. This check
   runs after nodes without a matching placement leave their subnet.
   - A network fact read from another stack's outputs (`data.tfe_outputs.<name>` or
-    `data.terraform_remote_state.<name>`) carries the stack: the first literal of `config.workspaces.name`,
-    `config.key` less a trailing `.tfstate`, `terraform.tfstate`, `.terraform.tfstate` or `-terraform.tfstate`, and
+    `data.terraform_remote_state.<name>`) carries the stack: the first literal that leaves a name of `config.workspaces.name`,
+    `config.key`, `config.workspace_key_prefix`, `config.path`, `config.prefix` (each less a trailing `.tfstate`,
+    `terraform.tfstate`, `.terraform.tfstate` or `-terraform.tfstate` and a leading `./` or `../`) and
     the `workspace` of `tfe_outputs`, else `<name>`. Each is a literal, or a `var.` or `local.` that resolves to one;
     calls of one module that give different values resolve to none, and a call that leaves the variable out gives its default. The `workspace` of `terraform_remote_state` is an
     environment, so it names no stack. Modules that read the same output of the same stack share one network fact; one
@@ -241,7 +242,7 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     networks its evidence cites, when its nodes have any; else by all placements of its nodes.
   - The report warns when a shared network sits in an account frame whose label has the same words as the stack's
     name, less the words account, subscription and terraform, cloud names (aws, azure), environment words (prod, dev,
-    test and the like), AWS regions such as `us-east-1` or `us_east_1` and account numbers, each word less a trailing `ing` or `s`, in
+    test and the like), AWS regions such as `us-east-1` or `us_east_1` and account numbers, each word less a plural `s`, an `ing` and one of a doubled last consonant (`account_names`), in
     any order. For example "Networking account" or "Network account" around a VPC from `data.tfe_outputs.networking`, workspace `networking-prod` or state key
     `prod/networking/terraform.tfstate`; "Prod account" around a VPC from `prod-networking` is no warning. The tool
     moves nothing, and the warning does not stop `build`; review rule 17 gets it fixed.

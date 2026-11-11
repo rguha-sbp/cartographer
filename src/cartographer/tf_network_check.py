@@ -1,9 +1,9 @@
 """Check a curated diagram's network claims against the `networks` and `placements` facts."""
 
-import re
 from collections import defaultdict
 from pathlib import Path
 
+from cartographer.account_names import named_after
 from cartographer.verify_shared import (
     check_claims,
     code_hit,
@@ -51,12 +51,6 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
     _mark_shared(out, facts, groups, cited, placed, notes)
 
 
-ENVIRONMENTS = {"prod", "production", "prd", "dev", "development", "develop", "test", "tst", "acc", "acceptance", "stag",
-                "stage", "stg", "preprod", "qa", "uat", "sandbox", "nonprod", "env"}
-IGNORED = {"account", "subscription", "terraform", "aws", "azure", "amazon", "microsoft", *ENVIRONMENTS}
-REGION = re.compile(r"\b[a-z]{2}(-[a-z]+)?-(north|south|east|west|central)[a-z]*-\d+[a-z]?\b")  # us-east-1, us-gov-west-1
-
-
 def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], cited: dict[str, set], placed: dict[str, list[dict]],
                  notes: list[str]) -> None:
     """Set `shared_from` on each network group that another stack creates: it holds a placed node, and the networks its
@@ -92,25 +86,3 @@ def _stacks(placement: dict, networks: dict[str, dict]) -> set[str | None]:
     """The stacks a placement's network and subnet come from, None for this one: a remote subnet output names its
     stack, which can differ from the VPC's."""
     return {networks[placement["network"]].get("stack")} | ({placement["stack"]} if placement.get("stack") else set())
-
-
-def named_after(label: str, stack: str) -> bool:
-    """Whether an account label and the stack name have the same words in any order, less IGNORED words, regions and
-    account numbers, each word with a trailing `ing` or `s` dropped: `networking`, `networking-prod` and
-    `prod/networking` name `Networking account`, `Network account`, `AWS networking us-east-1` and
-    `Networking (123456789012)`; none names `Shop network account`, `Prod account` or `Net`."""
-    words = _stems(label)
-    return bool(words) and words == _stems(stack)
-
-
-def _stems(name: str) -> list[str]:
-    """The words of `name` that are not IGNORED, AWS regions or numbers, each less a trailing `ing` or `s`, sorted."""
-    words = re.findall(r"[a-z0-9]+", REGION.sub(" ", name.lower().replace("_", "-")))
-    return sorted(s for w in words if not w.isdigit() and (s := _stem(w)) and s not in IGNORED_STEMS)
-
-
-def _stem(word: str) -> str:
-    return re.sub(r"(ing|s)$", "", word)
-
-
-IGNORED_STEMS = {_stem(w) for w in IGNORED}

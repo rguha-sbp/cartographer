@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from cartographer.tf_policies import unq
+from cartographer.tf_policies import norm_keys
 
 TIERS = ("isolated", "private", "public")
 CIDR = re.compile(r"\d{1,3}(\.\d{1,3}){3}/\d{1,2}")
@@ -74,22 +74,20 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
 
 def stack(inst: Inst, kind: str, name: str) -> str:
     """The workspace or state the remote state data source `kind`.`name` reads, else `name`. Its body names it as a
-    literal, directly or through `var.` and `local.`: `config.workspaces.name`, then `config.key` less its
-    `terraform.tfstate` file or `.tfstate` suffix, then the `workspace` of `tfe_outputs` (that of
+    literal, directly or through `var.` and `local.`. The first of these that leaves a name counts, less its
+    `terraform.tfstate` file or `.tfstate` suffix and any leading `./` or `../`: `config.workspaces.name`, `config.key`,
+    `config.workspace_key_prefix`, `config.path`, `config.prefix`, then the `workspace` of `tfe_outputs` (that of
     `terraform_remote_state` is an environment, not a stack)."""
     block = inst.mod.data.get((kind, name))
-    body = block.body if block else {}
-    config = _object(body.get("config"))
-    workspaces = _object(config.get("workspaces"))
-    for named in (workspaces.get("name"), config.get("key"), body.get("workspace") if kind == "tfe_outputs" else None):
-        if isinstance(found := inst.value(named), str):
-            return re.sub(r"((^|[/._-])terraform)?\.tfstate$", "", found) or name
+    body = norm_keys(block.body) if block else {}
+    config = body["config"] if isinstance(body.get("config"), dict) else {}
+    workspaces = config["workspaces"] if isinstance(config.get("workspaces"), dict) else {}
+    named = [workspaces.get("name"), *(config.get(k) for k in ("key", "workspace_key_prefix", "path", "prefix")),
+             body.get("workspace") if kind == "tfe_outputs" else None]
+    for found in map(inst.value, named):
+        if isinstance(found, str) and (state := re.sub(r"((^|[/._-])terraform)?\.tfstate$", "", found).strip("./")):
+            return state
     return name
-
-
-def _object(value: Any) -> dict:
-    """An object expression with its keys unquoted (`{ "key" = ... }` is `{ key = ... }`), empty for anything else."""
-    return {unq(k): v for k, v in value.items()} if isinstance(value, dict) else {}
 
 
 def network_fact(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
