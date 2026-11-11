@@ -111,7 +111,7 @@ def test_a_frame_without_a_known_cloud_fails_to_render_with_a_clear_error() -> N
 def test_a_role_group_is_a_faint_tint_of_its_colour_with_a_solid_outline() -> None:
     from cartographer.diagram_model import Group
 
-    _, style = notation.cloud_group(Group("g_x", "X", 0, 0, 10, 10, colour="#D62728"))
+    _, style = notation.cloud_group(Group("g_x", "X", 0, 0, 10, 10, color="#D62728"))
     assert f"fillColor=#D62728;fillOpacity={notation.GROUP_TINT};strokeColor=#D62728;" in style
     assert "dashed" not in style
 

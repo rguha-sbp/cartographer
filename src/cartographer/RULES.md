@@ -18,7 +18,7 @@ Each rule, where it is enforced, and where it comes from.
 | Where a gap is too short for its lines, the diagram is widened by tracks x 12 + 2 x NODE_CLEAR (at most 3 rounds) | `tf_space` | Purchase graph readability studies |
 | A caption's position is draw.io's `mxGraphView.getPoint` of `at`, plus a small perpendicular nudge; one function for placing and checking | `tf_geom` point_at | draw.io |
 | An arrow takes the colour of its destination group (or external); the group border has the same colour | `tf_colors`; legend `tf_layout` | C4 model notation |
-| A role group is a solid outline in its colour over a fill of that colour at GROUP_TINT (8 %) opacity, so it reads as a background area | `notation.cloud_group` | AWS Architecture Icons guidance |
+| A role group is a solid outline in its colour over a fill of that colour at GROUP_TINT (8 %) opacity, so it reads as a background area | `notation.cloud_group` | Cartographer design |
 | Managed services Terraform does not create are externals with a cloud `tf_type`, drawn in "<Cloud> managed services" inside that cloud's region | `tf_externals` | AWS and Azure Architecture Icons |
 | Brand logos (GitHub, Okta, Atlassian family) come from draw.io's own libraries | `brand_icons.json`, `gen_drawio` | draw.io |
 | Fewest crossings, then fewest bends, then shortest | `tf_check` crossings and bends; `tf_grid` cost order | Purchase graph readability studies |

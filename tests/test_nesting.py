@@ -134,7 +134,7 @@ def test_palette_goes_to_outermost_workloads_only() -> None:
 
 def test_vpc_and_subnet_frames_use_the_aws_colour_not_a_palette_stroke() -> None:
     diagram = tf_layout.layout(_shop())
-    assert all(g.colour == GREY for g in diagram.nodes if getattr(g, "kind", None) in ("network", "subnet"))
+    assert all(g.color == GREY for g in diagram.nodes if getattr(g, "kind", None) in ("network", "subnet"))
 
 
 def test_a_workload_split_across_frames_shares_one_colour() -> None:

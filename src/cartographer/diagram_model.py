@@ -39,7 +39,7 @@ class Group:
     parent: str | None = None
     kind: Kind | None = None
     tier: str | None = None
-    colour: str = GREY
+    color: str = GREY
     cloud: str | None = None
 
 

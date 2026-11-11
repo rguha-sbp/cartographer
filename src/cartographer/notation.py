@@ -35,7 +35,8 @@ def html_value(text: str) -> str:
 def cloud_group(g: Group) -> Cell:
     """A frame in the style its cloud draws it, else a group tinted faintly in its purpose colour.
 
-    The tint sits behind the icons and lines, so the group reads as a background area; nested groups darken a little.
+    The tint sits behind the icons and lines, so the group reads as a background area. A nested group's tint
+    stacks on its parent's (about 15 % at two levels): the layers carry no meaning of their own.
     """
     if g.kind:
         key = f"subnet-{g.tier}" if g.kind == "subnet" else g.kind
@@ -44,7 +45,7 @@ def cloud_group(g: Group) -> Cell:
         return html_value(g.label), CLOUDS[g.cloud].frame_styles[key]
     return html_value(g.label), (
         f"rounded=0;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;"
-        f"fillColor={g.colour};fillOpacity={GROUP_TINT};strokeColor={g.colour};"
+        f"fillColor={g.color};fillOpacity={GROUP_TINT};strokeColor={g.color};"
         f"verticalAlign=top;align=left;spacingLeft={GROUP_TITLE_LEFT};fontSize=12;fontStyle=1;fontColor=#232F3E;")
 
 
