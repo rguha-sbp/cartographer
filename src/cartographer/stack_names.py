@@ -10,10 +10,10 @@ REGION = re.compile(r"\b(us|eu|ap|sa|ca|me|af|il|mx|cn)(-gov|-iso[a-z]?)?-(north
 
 
 def _stem(word: str) -> str:
-    """`word` less a plural `s` or `es`, then `ing`, then one of a doubled last consonant: `logs` and `logging` are
-    `log`, `addresses` is `address`."""
+    """`word` less a plural `s` or `es`, then an `ing` after four letters or more, then one of a doubled last
+    consonant: `logs` and `logging` are `log`, `addresses` and `address` are `addres`, `string` stays."""
     singular = re.sub(r"(ss|x)es$", r"\1", re.sub(r"ies$", "y", word))
-    return re.sub(r"([b-df-hj-np-tv-z])\1$", r"\1", re.sub(r"(ing)?s?$", "", singular))
+    return re.sub(r"([b-df-hj-np-tv-z])\1$", r"\1", re.sub(r"((?<=\w{4})ing)?s?$", "", singular))
 
 
 ENVIRONMENT_STEMS = {_stem(w) for w in ENVIRONMENTS}

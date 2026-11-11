@@ -443,6 +443,13 @@ def test_two_instances_of_one_remote_state_are_two_networks(tmp_path: Path) -> N
     assert len(facts["networks"]) == 2 and len({p["network"] for p in facts["placements"]}) == 2
 
 
+def test_an_empty_index_of_a_remote_state_is_a_remote_network(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'data "terraform_remote_state" "net" {\n  for_each = toset([""])\n  backend = "s3"\n  config = { key = "networking.tfstate" }\n}\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.net[""].outputs.hub_vpc_id }\n')
+    assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == ["networking"]
+
+
 def test_an_indexed_remote_state_is_a_remote_network(tmp_path: Path) -> None:
     (tmp_path / "main.tf").write_text(
         'data "terraform_remote_state" "c" {\n  count = 1\n  backend = "s3"\n  config = { key = "networking.tfstate" }\n}\n'

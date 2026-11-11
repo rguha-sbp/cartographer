@@ -120,8 +120,8 @@ def store(inst: Inst, kind: str, name: str, index: str | None) -> str:
     places = [None if workspace == "default" else workspace, body.get("organization") if kind == "tfe_outputs" else None,
               *(config.get(k) for k in ("organization", "bucket", "storage_account_name", "container_name"))]
     found = [v for v in map(inst.value, places) if isinstance(v, str)]
-    literal = re.fullmatch(r'"([^"]*)"|(\d+)', index or "")
-    return "/".join([*found, literal[1] or literal[2]] if literal else found)
+    literal = re.fullmatch(r'"[^"]*"|\d+', index or "")
+    return "/".join([*found, literal[0].strip('"')] if literal else found)
 
 
 def _remote_state(inst: Inst, kind: str, name: str) -> tuple[dict, dict]:
