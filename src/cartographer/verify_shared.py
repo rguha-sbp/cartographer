@@ -152,28 +152,29 @@ def fix_network_groups(curated: dict, notes: list[str]) -> None:
 
 
 Supported = Callable[[dict, list[dict]], tuple[list[dict], list[str]]]
+BacksCidrs = Callable[[dict, list[dict]], bool]
 
 
-def check_claims(curated: dict, notes: list[str], supported: Supported) -> None:
-    """Keep a network group's `cidrs` and a subnet group's tier only while `supported(group, evidence)` finds evidence.
-    A network group keeps its evidence when its cidrs drop: it still names the network the group stands for."""
+def check_claims(curated: dict, notes: list[str], supported: Supported,
+                 backs_cidrs: BacksCidrs = lambda group, good: bool(good)) -> None:
+    """Keep only the evidence `supported(group, evidence)` accepts on network and subnet groups. A network group keeps
+    its `cidrs` only while `backs_cidrs(group, kept evidence)`, and its evidence when they drop: that evidence still
+    names the network the group stands for. A subnet group keeps its tier only while it keeps evidence."""
     for g in curated["groups"]:
-        if g["kind"] == "network" and not g.get("cidrs") or g["kind"] not in NETWORK_KINDS:
+        if g["kind"] not in NETWORK_KINDS:
             continue
         good, why = supported(g, g.get("evidence", []))
-        if secret := contains_secret(g):
+        if contains_secret(g):
             good, why = [], [SECRET_REASON]
-        if g["kind"] == "network":
-            if not good:
-                notes.append(f"group {g['id']}: cidrs dropped, {'; '.join(why) or 'no evidence'}")
-                del g["cidrs"]
-            if secret:
-                g.pop("evidence", None)
-        elif good:
-            g["evidence"] = good
-        else:
+        if g["kind"] == "network" and g.get("cidrs") and not backs_cidrs(g, good):
+            notes.append(f"group {g['id']}: cidrs dropped, {'; '.join(why) or 'no evidence has these cidrs'}")
+            del g["cidrs"]
+        elif g["kind"] == "subnet" and not good:
             notes.append(f"group {g['id']}: tier {g['tier']} dropped, {'; '.join(why) or 'no evidence'}")
             _demote(g)
+        if good:
+            g["evidence"] = good
+        else:
             g.pop("evidence", None)
 
 

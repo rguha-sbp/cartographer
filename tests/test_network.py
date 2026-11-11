@@ -361,15 +361,35 @@ def test_a_lookup_of_a_vpc_this_stack_creates_is_that_local_vpc(tmp_path: Path, 
 
 
 QUOTED_KEYS = ('locals {\n  nets = {\n    "blue" = { vpc = data.tfe_outputs.blue.values.blue_vpc_id }\n'
-               '    "green" = { vpc = data.tfe_outputs.green.values.green_vpc_id }\n  }\n}\n'
-               'resource "aws_security_group" "sg" { vpc_id = local.nets.KEY.vpc }\n')
+               '    "green" = { vpc = data.tfe_outputs.green.values.green_vpc_id }\n  }\n'
+               '  list = [{ vpc = data.tfe_outputs.blue.values.blue_vpc_id }, { vpc = data.tfe_outputs.green.values.green_vpc_id }]\n}\n'
+               'resource "aws_security_group" "sg" { vpc_id = local.PATH.vpc }\n')
 
 
-@pytest.mark.parametrize(("key", "names"), [("blue", ["blue-vpc"]), ("red", [])])
-def test_an_attribute_path_reads_a_quoted_key_and_a_missing_key_reads_nothing(tmp_path: Path, key: str,
-                                                                              names: list[str]) -> None:
-    (tmp_path / "main.tf").write_text(QUOTED_KEYS.replace("KEY", key))
-    assert [n["name"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == names
+@pytest.mark.parametrize(("path", "names"), [
+    ("nets.blue", ["blue-vpc"]), ('nets["blue"]', ["blue-vpc"]), ("list[1]", ["green-vpc"]), ("nets.red", []),
+    ("list[5]", []), ("nets[each.key]", ["blue-vpc", "green-vpc"])])
+def test_an_attribute_path_reads_a_key_or_index_and_a_missing_one_reads_nothing(tmp_path: Path, path: str,
+                                                                                names: list[str]) -> None:
+    (tmp_path / "main.tf").write_text(QUOTED_KEYS.replace("PATH", path))
+    assert sorted(n["name"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]) == names
+
+
+def test_each_key_or_index_of_a_remote_output_is_its_own_network(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(_tfe("net").replace("shared_vpc_id", 'vpcs["blue"]') + "".join(
+        f'resource "aws_security_group" "{n}" {{ vpc_id = data.tfe_outputs.net.values.{ref} }}\n'
+        for n, ref in (("g", 'vpcs["green"]'), ("x", "vpc_ids[0]"), ("y", "vpc_ids[1]"))))
+    names = sorted(n["name"] for n in tf_extract.extract(Path("."), tmp_path)["networks"])
+    assert names == ["vpc-ids-0", "vpc-ids-1", "vpcs-blue", "vpcs-green"]
+
+
+def test_a_remote_subnet_goes_to_its_own_state_before_a_lookup_of_the_same_name(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        _tfe("net").replace("shared_vpc_id", "core_id")
+        + 'resource "aws_security_group" "sg2" { vpc_id = data.aws_vpc.core.id }\n'
+        'resource "aws_lambda_function" "a" {\n'
+        '  vpc_config { subnet_ids = data.tfe_outputs.net.values.core_private_subnet_ids }\n}\n')
+    assert _placed(tf_extract.extract(Path("."), tmp_path)) == {"aws_lambda_function.a": "data.tfe_outputs.net.values.core_id"}
 
 
 def test_a_local_that_reads_itself_gives_no_network_and_no_crash(tmp_path: Path) -> None:

@@ -11,7 +11,8 @@ from cartographer.verify_shared import (
 )
 
 
-def _problem(group: dict, ev: dict, facts_by_id: dict, repo_root: Path) -> str | None:
+def _problem(group: dict, ev: dict, facts_by_id: dict, networks: dict[str, dict], repo_root: Path) -> str | None:
+    """Why `ev` is no evidence for `group`: a network group cites network facts, a subnet group placements of its tier."""
     if "stated" in ev:
         return "stated evidence is for described diagrams"
     if "file" in ev:
@@ -20,12 +21,16 @@ def _problem(group: dict, ev: dict, facts_by_id: dict, repo_root: Path) -> str |
     if fact is None:
         return f"unknown fact {ev['fact']}"
     if group["kind"] == "network":
-        if set(fact.get("cidrs", [])) == set(group["cidrs"]) and fact.get("cidrs"):
-            return None
-        return f"fact {ev['fact']} is not a network fact with the group's cidrs"
+        return None if ev["fact"] in networks else f"fact {ev['fact']} is not a network fact"
     if fact.get("tier") == group["tier"]:
         return None
     return f"fact {ev['fact']} is not a placement with tier {group['tier']}"
+
+
+def _backs_cidrs(group: dict, good: list[dict], networks: dict[str, dict]) -> bool:
+    """A code citation, or a cited network fact with exactly the group's cidrs."""
+    return any("file" in ev or (cidrs := networks[ev["fact"]]["cidrs"]) and set(cidrs) == set(group["cidrs"])
+               for ev in good)
 
 
 def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, notes: list[str]) -> None:
@@ -33,12 +38,14 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
     only when it has a placement fact of that tier, and inside a network group only when it runs in a network the group
     cites; then mark the network groups that stand only for external networks."""
 
+    networks = {n["id"]: n for n in facts.get("networks", [])}
+
     def supported(group: dict, evidence: list[dict]) -> tuple[list[dict], list[str]]:
-        problems = [(ev, _problem(group, ev, facts_by_id, repo_root)) for ev in evidence]
+        problems = [(ev, _problem(group, ev, facts_by_id, networks, repo_root)) for ev in evidence]
         return [ev for ev, p in problems if p is None], [p for _, p in problems if p]
 
     groups = {g["id"]: g for g in out["groups"]}
-    check_claims(out, notes, supported)
+    check_claims(out, notes, supported, lambda group, good: _backs_cidrs(group, good, networks))
     placed: dict[str, list[dict]] = defaultdict(list)  # a resource -> its placements
     for p in facts.get("placements", []):
         placed[p["resource"]].append(p)
@@ -47,7 +54,7 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
         if subnet and not any(p["tier"] == subnet["tier"] for address in n["tf"] for p in placed[address]):
             notes.append(f"{n['id']}: no {subnet['tier']} placement fact, moved out of subnet group {subnet['id']}")
             n["group"] = outside_network(groups, subnet)
-    check_boxes(out, {n["id"]: n for n in facts.get("networks", [])}, groups, placed, notes)
+    check_boxes(out, networks, groups, placed, notes)
 
 
 def check_boxes(out: dict, networks: dict[str, dict], groups: dict[str, dict], placed: dict[str, list[dict]],

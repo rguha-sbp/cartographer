@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from cartographer.tf_policies import norm_keys
+from cartographer.tf_policies import norm_keys, unq
 
 TIERS = ("isolated", "private", "public")
 CIDR = re.compile(r"\d{1,3}(\.\d{1,3}){3}/\d{1,2}")
@@ -32,7 +32,7 @@ class Ref:
     settings are not all literals). A lookup's address carries the module that declares it."""
 
     address: str
-    name: str | None = None
+    name: str | None = None  # a remote output's name, plus each index or attribute it reads (`vpcs["blue"]`: `vpcs_blue`)
     state: State | str | None = None
 
     @property
@@ -49,12 +49,21 @@ def remote_key(state: State | str, name: str) -> str:
     return f"{name}@{state!r}"
 
 
+PATH = r"(?:\.[\w-]+|\[[^\]]*\])*"  # the attributes and indexes after a reference: `.vpc`, `["blue"]`, `[0]`
+SEGMENT = re.compile(r'\.([\w-]+)|\[\s*(?:"([^"]*)"|(\d+)|([^\]]*))\s*\]')
+
+
+def segments(path: str) -> tuple[str | None, ...]:
+    """The attributes and literal indexes of a reference's path; None for an index that is no literal (`[each.key]`)."""
+    return tuple(next((g for g in m.groups()[:3] if g is not None), None) for m in SEGMENT.finditer(path))
+
+
 def token(heads: str, data: str) -> re.Pattern[str]:
     """A reference to a local resource whose type matches `heads`, a data source matching `data`, or a remote output."""
     return re.compile(
         r"(?<![\w.\-])(?:(?P<remote>data\.(?P<kind>tfe_outputs|terraform_remote_state)\.(?P<state>[\w-]+)(?:\[(?P<index>[^\]]*)\])?"
-        rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.(?P<ds_type>{data})\.(?P<ds>[\w-]+))"
-        rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?:\[[^\]]*\])?(?P<path>(?:\.[\w-]+)*))"
+        rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)(?P<outpath>{PATH})|data\.(?P<ds_type>{data})\.(?P<ds>[\w-]+))"
+        rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?P<path>{PATH}))"
     )
 
 
@@ -64,19 +73,20 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str]) -> dict[Ref, None]:
     return _follow(inst, obj, (), pattern, set())
 
 
-def _follow(inst: Inst, obj: Any, unread: tuple[str, ...], pattern: re.Pattern[str], seen: set) -> dict[Ref, None]:
+def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], pattern: re.Pattern[str], seen: set) -> dict[Ref, None]:
     """`sources`, where `unread` is the attribute path a reference that is all of `obj` still has to read."""
     text = obj if isinstance(obj, str) else str(obj)
     whole = pattern.fullmatch(text.removeprefix("${").removesuffix("}"))
     out: dict[Ref, None] = {}
     for m in pattern.finditer(text):
-        path = (*(m["path"] or "").split(".")[1:], *(unread if whole else ()))
+        path = (*segments(m["path"] or m["outpath"] or ""), *(unread if whole else ()))
         if len(path) > MAX_PATH or (key := (id(inst), m[0], path)) in seen:
             continue
         seen.add(key)
         head, second = m["head"], m["second"]
         if m["kind"]:
-            out[Ref(m["remote"], m["out"], state_of(inst, m["kind"], m["state"], m["index"]))] = None
+            name = "_".join([m["out"], *(s if s is not None else "any" for s in path)])
+            out[Ref(m["remote"], name, state_of(inst, m["kind"], m["state"], m["index"]))] = None
         elif m["ds"]:
             out |= _looked_up(inst, m["ds_type"], m["ds"], pattern, seen) or {Ref(f"{inst.prefix}{m['remote']}", m["ds"]): None}
         elif head == "var" and inst.parent is not None:
@@ -101,13 +111,18 @@ def _looked_up(inst: Inst, ds_type: str, name: str, pattern: re.Pattern[str], se
     return {r: None for r in found if not r.remote and r.address.split(".")[-2] == ds_type}
 
 
-def _dig(value: Any, path: tuple[str, ...]) -> tuple[Any, tuple[str, ...]]:
-    """The part of an object literal an attribute path reads, and the rest of the path where the literal ends. A key
-    the literal does not have reads nothing."""
+def _dig(value: Any, path: tuple[str | None, ...]) -> tuple[Any, tuple[str | None, ...]]:
+    """The part of an object or list literal a path reads, and the rest of the path where the literal ends. A key or
+    index the literal does not have reads nothing; an index that is no literal reads all of the literal."""
     for i, attr in enumerate(path):
-        if not isinstance(value, dict):
+        if attr is None:
+            return value, ()
+        if isinstance(value, list) and attr.isdigit():
+            value = value[int(attr)] if int(attr) < len(value) else ""
+        elif isinstance(value, dict):
+            value = next((v for k, v in value.items() if unq(k) == attr), "")
+        else:
             return value, path[i:]
-        value = {k.strip('"'): v for k, v in value.items()}.get(attr, "")
     return value, ()
 
 
@@ -169,13 +184,15 @@ def place_remote(networks: dict[str, dict], ref: Ref, suffixes: str = "ids?") ->
     is unknown. The network is a remote one whose name prefixes the output name (`shared-vpc` for
     `shared_vpc_private_subnet_ids`). A remote output's subnet goes to a network of its own state or a lookup,
     never to a network of another state; among the
-    candidates, the longest name wins, then for a lookup one its own module looks up, then the key."""
+    candidates, a network of its own state wins, then the longest name, then for a lookup one its own module looks
+    up, then the key."""
     name, tier = derive(ref.name or "", suffixes), tier_in(ref.name or "")
 
-    def rank(key: str) -> tuple[int, bool, str]:
+    def rank(key: str) -> tuple[bool, int, bool, str]:
         n = networks[key]
+        own_state = ref.state is not None and key == remote_key(ref.state, n["name"])
         same_module = ref.state is None and key == n["address"] and _module(key) == _module(ref.address)  # both lookups
-        return len(n["name"]), same_module, key
+        return own_state, len(n["name"]), same_module, key
 
     named = [key for key, n in networks.items() if n["remote"] and name.startswith(n["name"] + "-")
              and (ref.state is None or key in (n["address"], remote_key(ref.state, n["name"])))]
