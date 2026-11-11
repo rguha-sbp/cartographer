@@ -94,6 +94,13 @@ def test_chrome_argv_is_its_own_instance_without_unsupported_flags() -> None:
     assert not any("headless" in a for a in argv)
 
 
+def test_chrome_argv_keeps_the_sandbox_unless_turned_off(monkeypatch) -> None:
+    monkeypatch.delenv("CARTOGRAPHER_CHROME_NO_SANDBOX", raising=False)
+    assert "--no-sandbox" not in view_browser.chrome_argv("/c/chrome", Path("/tmp/p"), "http://127.0.0.1:9/")
+    monkeypatch.setenv("CARTOGRAPHER_CHROME_NO_SANDBOX", "1")
+    assert "--no-sandbox" in view_browser.chrome_argv("/c/chrome", Path("/tmp/p"), "http://127.0.0.1:9/")
+
+
 def test_launch_without_chrome_falls_back_to_the_default_browser(monkeypatch) -> None:
     opened = []
 

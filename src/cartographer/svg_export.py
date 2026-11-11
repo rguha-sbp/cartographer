@@ -112,7 +112,7 @@ def export_svg(mxfile: str, source_sha256: str, drawio_url: str, fetch: Fetch = 
     cmd = snapshot.headless_cmd(snapshot.find_chrome(), size, "--dump-dom", snapshot.viewer_url(drawio_url, mxfile))
     proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if proc.returncode != 0:
-        raise SvgError(f"Chrome failed: {proc.stderr.strip()[-300:]}")
+        raise SvgError(f"Chrome failed: {snapshot.chrome_failure(proc.stderr)}")
     return svg_from_dom(proc.stdout, source_sha256, size, drawio_url, fetch)
 
 

@@ -40,7 +40,9 @@ Ask the user, or derive from the repo, the diagram name (lowercase kebab-case `<
 - Nothing else runs: cartographer serves its own pinned draw.io on 127.0.0.1 while a command needs it. The first
   command downloads it once (about 49 MB, checked against a pinned sha256). If that download is blocked, tell the
   user and stop. Never use a public draw.io host: the diagram must not leave the machine.
-- Chrome or Chromium is installed.
+- Chrome or Chromium is installed. Without one, and without admin rights (a dev container), a Chromium installed by
+  Playwright (`playwright install chromium`) is found by itself. If Chrome then fails with "No usable sandbox", tell the
+  user; only they decide to set `CARTOGRAPHER_CHROME_NO_SANDBOX=1`, which runs Chrome without its sandbox.
 
 ## 3. Extract
 
@@ -119,6 +121,9 @@ C4 runs differ from the Layer 7 flow:
   `<name>-c4-2-container.svg`, `<name>-c4-3-component-<id>.svg`, `<name>-c4-4-code-<id>.svg`,
   `<name>-c4-5-deployment.svg`, `<name>-c4-6-dynamic-<id>.svg`) and the per-view `<name>-<view>.drawio` and `.svg`
   files of earlier builds; no other file. It rewrites the folder `README.md` index (one row per view).
+- Each run also overwrites `docs/architecture/diagrams/<name>-c4.dsl`, the model as a Structurizr workspace for
+  interactive drill-down. Do not edit it by hand either. The README's "Explore a C4 set interactively" says how to turn
+  it into a static site.
 - No curated file is kept in the repo. `model.json` stays in the cache folder.
 
 ## Describe flow (instead of steps 3 to 5)
@@ -157,7 +162,7 @@ Run `"${CLAUDE_PLUGIN_ROOT}/scripts/cartographer" "${CLAUDE_PLUGIN_DATA}" view d
 - Never commit or push. Tell the user exactly which files to review and commit:
   `docs/architecture/diagrams/<name>.drawio`, `docs/architecture/diagrams/<name>.svg`,
   `docs/architecture/diagrams/<name>.curated.json`, `docs/architecture/diagrams/icons.json` when overrides were written, and the regenerated `docs/architecture/diagrams/README.md`.
-- For a C4 set, tell the user to commit `<name>-c4.drawio`, every `<name>-c4-<view>.svg` and the regenerated `README.md`. There is no curated file to commit.
+- For a C4 set, tell the user to commit `<name>-c4.drawio`, every `<name>-c4-<view>.svg`, `<name>-c4.dsl` and the regenerated `README.md`. There is no curated file to commit.
 - For a described diagram the final message also lists every assumption, one line each.
 - The final message lists: rounds run, curation fixes made, remaining findings (tool defects and any unfixed curation
   findings), and the files: for a C4 set, the .drawio and every view image.
