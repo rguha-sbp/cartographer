@@ -237,7 +237,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     `vpc_ids[0]` is `vpc-ids-0`. An attribute path through locals, variables and module outputs reads object keys and
     list indexes; an index that is no literal reads the whole value. After a remote output it is named `any`, so
     every key of `vpcs[each.key]` reads one network `vpcs-any`. The index of a module call (`module.net[0]`) is
-    skipped: every instance has the same outputs.
+    skipped: every instance has the same outputs. A remote subnet's tier comes only from the last name of its path
+    (`vpcs["private-net"].public_subnet_ids` is public); a key or object name before it never sets the tier.
   - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module and a
     literal index (`data.aws_vpc.x[0]` is network `x-0`). A lookup whose `id`, `name`, `filter` or `tags` reads a
     network this stack creates is that local network; `depends_on`, `resource_group_name` and other arguments do not

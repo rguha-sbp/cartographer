@@ -463,3 +463,30 @@ def test_a_quoted_local_keeps_the_attribute_path(tmp_path: Path) -> None:
         'resource "aws_subnet" "private" {\n  vpc_id = local.alias.b\n  cidr_block = "10.1.1.0/24"\n}\n'
         'resource "aws_instance" "i" { subnet_id = aws_subnet.private.id }\n')
     assert _placed(tf_extract.extract(Path("."), tmp_path)) == {"aws_instance.i": "aws_vpc.b"}
+
+
+@pytest.mark.parametrize(("vpc", "path", "tier"), [
+    ('vpcs["private-net"].id', 'vpcs["private-net"].public_subnet_ids', "public"),
+    ("private_vpc.id", "private_vpc.public_subnet_ids", "public"),
+    ("vpc_id", 'vpc_subnets["private"]', "private"),
+    ("vpc_id", "vpc_private_subnet_ids[0]", "private"),
+    ("private_vpc.id", "private_vpc.subnet_ids", None),
+])
+def test_only_the_last_name_of_a_remote_path_sets_the_tier(tmp_path: Path, vpc: str, path: str, tier: str | None) -> None:
+    (tmp_path / "main.tf").write_text(
+        'data "terraform_remote_state" "n" {\n  backend = "s3"\n  config = { bucket = "b", key = "k" }\n}\n'
+        f'resource "aws_security_group" "s" {{ vpc_id = data.terraform_remote_state.n.outputs.{vpc} }}\n'
+        f'resource "aws_lb" "l" {{ subnets = data.terraform_remote_state.n.outputs.{path} }}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [p["tier"] for p in facts["placements"]] == ([tier] if tier else [])
+
+
+@pytest.mark.parametrize(("address", "module"), [
+    ("data.aws_vpc.v", ""),
+    ("module.a.data.aws_vpc.v", "module.a."),
+    ('module.m.data.aws_vpc.v["data.core"]', "module.m."),
+    ('module.a["k.data"].module.b.data.aws_vpc.v', 'module.a["k.data"].module.b.'),
+])
+def test_the_module_of_a_lookup_address_ignores_keys(address: str, module: str) -> None:
+    from cartographer.clouds.refs import _module
+    assert _module(address) == module

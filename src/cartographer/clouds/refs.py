@@ -36,6 +36,7 @@ class Ref:
     address: str
     name: str | None = None  # a remote output's name, plus each index or attribute it reads (`vpcs["blue"]`: `vpcs_blue`)
     state: State | str | None = None
+    tier: str | None = None  # the subnet tier the last name in the path gives (`vpcs["private-net"].public_subnet_ids`: public)
 
     @property
     def remote(self) -> bool:
@@ -92,7 +93,8 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], pattern: re.Pa
         head, second = m["head"], m["second"]
         if m["kind"]:
             name = "_".join([m["out"], *(s if s is not None else "any" for s in path)])
-            out[Ref(f"{inst.prefix}{m['remote']}", name, state_of(inst, m["kind"], m["state"], m["index"]))] = None
+            out[Ref(f"{inst.prefix}{m['remote']}", name, state_of(inst, m["kind"], m["state"], m["index"]),
+                    _tier((m["out"], *path)))] = None
         elif m["ds"]:
             out |= _looked_up(inst, m["ds_type"], m["ds"], pattern, seen) or {_lookup(inst, m): None}
         elif head == "var" and inst.parent is not None:
@@ -126,7 +128,14 @@ def _lookup(inst: Inst, m: re.Match[str]) -> Ref:
     of a `count` or `for_each` lookup, named like a remote output that reads that index."""
     index = LITERAL_INDEX.fullmatch(m["ds_index"] or "")
     suffix = f"[{index[0]}]" if index else ""
-    return Ref(f"{inst.prefix}{m['lookup']}{suffix}", "_".join([m["ds"], index[0].strip('"')]) if index else m["ds"])
+    key = index[0].strip('"') if index else None
+    return Ref(f"{inst.prefix}{m['lookup']}{suffix}", "_".join([m["ds"], key]) if key else m["ds"], tier=_tier((m["ds"], key)))
+
+
+def _tier(path: tuple[str | None, ...]) -> str | None:
+    """The tier the last name of a path gives; a key or object name before it never sets the tier, and a list index
+    or a non-literal index is no name."""
+    return tier_in(next((p for p in reversed(path) if p is not None and not p.isdigit()), ""))
 
 
 def _dig(value: Any, path: tuple[str | None, ...]) -> tuple[Any, tuple[str | None, ...]]:
@@ -145,6 +154,7 @@ def _dig(value: Any, path: tuple[str | None, ...]) -> tuple[Any, tuple[str | Non
 
 
 INSTANCE = re.compile(r"^(?:\[[^\]]*\])+")  # the index of a module call with `count` or `for_each`
+MODULE_PREFIX = re.compile(r'(?:module\.[\w-]+(?:\[(?:"[^"]*"|[^\]"]*)\])?\.)*')  # `module.a["k"].module.b.`
 SELECTORS = ("id", "name", "filter", "tags")  # the arguments by which a lookup selects its network or subnet
 MAX_PATH = 16  # longer attribute paths only come from a local or variable that reads itself
 SELECTING = ("backend", "workspace", "organization")
@@ -219,7 +229,7 @@ def place_remote(networks: dict[str, dict], ref: Ref) -> tuple[str, str, str] | 
     never to a network of another state; among the
     candidates, a network of its own state wins, then the longest name, then for a lookup one its own module looks
     up, then the key."""
-    name, tier = derive(ref.name or ""), tier_in(ref.name or "")
+    name, tier = derive(ref.name or ""), ref.tier
 
     def rank(key: str) -> tuple[bool, int, bool, str]:
         n = networks[key]
@@ -234,7 +244,7 @@ def place_remote(networks: dict[str, dict], ref: Ref) -> tuple[str, str, str] | 
 
 def _module(address: str) -> str:
     """The module path a data source address starts with: `module.a.` for `module.a.data.aws_vpc.main`."""
-    return address.rpartition("data.")[0]
+    return MODULE_PREFIX.match(address)[0]
 
 
 def placement_facts(found: dict[tuple[str, str, str], tuple[str, Res]]) -> list[dict]:
