@@ -245,8 +245,10 @@ def test_a_vpc_the_stack_creates_is_not_shared_even_citing_a_remote_fact() -> No
 def test_a_vpc_whose_evidence_cites_a_local_network_is_not_shared() -> None:
     curated = _shared_vpc(vpc_parent="acct", cidrs=VPC["cidrs"])
     _group_of(curated, "shared")["evidence"] = [{"fact": VPC["id"]}]
-    verified, _ = _verify(curated)
+    verified, report = _verify(curated)
     assert "shared_from" not in _group_of(verified, "shared")
+    assert ("group shared: evidence cites a network of this stack, but its nodes are placed in a network of networking; "
+            "cite the network the nodes run in") in report
 
 
 def test_a_cited_local_network_keeps_a_vpc_local_after_its_unsupported_cidrs_drop() -> None:
