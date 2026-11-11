@@ -81,7 +81,7 @@ def stack(inst: Inst, kind: str, name: str) -> str:
     """The workspace or state the remote state data source `kind`.`name` reads, else `name`. Its body names it as a
     literal, directly or through `var.` and `local.`. The first of these that leaves a name with a word of its own (not only environments, regions and numbers) counts, less its
     `terraform.tfstate` file or `.tfstate` suffix and any leading `./` or `../`: `config.workspaces.name`, `config.key`,
-    `config.workspace_key_prefix`, `config.path`, `config.prefix`, then the `workspace` of `tfe_outputs` (that of
+    `config.workspace_key_prefix`, `config.path`, `config.prefix`, then the `workspace` of `tfe_outputs`; when none counts, `name` and the first of them, as in `networking/prod` (the `workspace` of
     `terraform_remote_state` is an environment, not a stack)."""
     block = inst.mod.data.get((kind, name))
     body = norm_keys(block.body) if block else {}
@@ -89,11 +89,9 @@ def stack(inst: Inst, kind: str, name: str) -> str:
     workspaces = config["workspaces"] if isinstance(config.get("workspaces"), dict) else {}
     named = [workspaces.get("name"), *(config.get(k) for k in ("key", "workspace_key_prefix", "path", "prefix")),
              body.get("workspace") if kind == "tfe_outputs" else None]
-    for found in map(inst.value, named):
-        state = STATE_FILE.sub("", re.sub(r"^(\.\.?/)+", "", found)) if isinstance(found, str) else ""
-        if names_a_stack(state):  # `prod/terraform.tfstate` does not
-            return state
-    return name
+    states = [STATE_FILE.sub("", re.sub(r"^(\.\.?/)+", "", v)) for v in map(inst.value, named) if isinstance(v, str)]
+    # `prod/terraform.tfstate` names no stack, but keeps the `prod` and `dev` states of one data source name apart
+    return next((s for s in states if names_a_stack(s)), "/".join([name, *filter(None, states[:1])]))
 
 
 def network_fact(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:

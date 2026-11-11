@@ -10,7 +10,7 @@ REGION = re.compile(r"\b(us|eu|ap|sa|ca|me|af|il|mx|cn)(-gov|-iso[a-z]?)?-(north
 
 def _stem(word: str) -> str:
     """`word` less a plural `s`, then `ing`, then one of a doubled last consonant: `logs` and `logging` are `log`."""
-    return re.sub(r"([b-df-hj-np-tv-z])\1$", r"\1", re.sub(r"(ing)?s?$", "", word))
+    return re.sub(r"([b-df-hj-np-tv-z])\1$", r"\1", re.sub(r"(ing)?s?$", "", re.sub(r"ies$", "y", word)))
 
 
 IGNORED_STEMS = {_stem(w) for w in IGNORED}
@@ -22,7 +22,7 @@ def named_after(label: str, stack: str) -> bool:
     `prod/networking` name `Networking account`, `Network account`, `AWS networking us-east-1` and
     `Networking (123456789012)`; none names `Shop network account`, `Prod account` or `Net`."""
     words = _stems(label)
-    return bool(words) and words == _stems(stack)
+    return bool(words) and words in (_stems(stack), _stems(stack.rpartition("/")[2]))  # a state path ends in its name
 
 
 def names_a_stack(name: str) -> bool:
