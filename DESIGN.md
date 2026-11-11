@@ -222,10 +222,11 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   moves it to the nearest ancestor that is not a network or subnet group, with a note. A placed node outside every
   network group gets a note only. Nodes without placement facts (security groups, gateways) are not checked. After the
   moves, a group that stands only for remote networks and still holds a node gets `external`. Verify drops any curated
-  `external` or `shared_from` first, in both modes, with a note. Dropping a wrong `cidrs` claim keeps the citation.
+  `external` first, in both modes, with a note. A network group that cites more than one network fact gets a note:
+  it stands for all of them, which is right only when they are one network that extract keys twice. Dropping a wrong `cidrs` claim keeps the citation.
   - Extract reads only `.tf` text. A remote output's network is identified by the state its data block names plus the
     network name derived from the output. The state is a `State(kind, settings, index)` value: `backend`,
-    `workspace` (dropped when `"default"` on `terraform_remote_state`), `organization` and every `config` leaf as a
+    `workspace` (dropped when `"default"` on `terraform_remote_state`), `organization`, the `hostname` of the `tfe` provider a `tfe_outputs` block uses, and every `config` leaf as a
     dotted path, resolved to literals through `var.` and `local.` and compared exactly as written. A setting that does
     not resolve, calls of one module instance that disagree, a non-literal index or a data block without settings
     make the identity the data source's full address, so separate modules get separate networks. The calls that one

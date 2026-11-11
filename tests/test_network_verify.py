@@ -85,6 +85,7 @@ def test_node_without_placement_of_that_tier_leaves_the_subnet_group() -> None:
     verified, report = _verify(curated)
     assert {n["id"]: n["group"] for n in verified["nodes"]} == {"lb": "shop", "vm": "acct"}
     assert "vm: no public placement fact, moved out of subnet group pub" in report
+    assert "drawn outside any network group" not in report
     assert tf_verify.needs_attention(curated, verified)
 
 
@@ -205,8 +206,9 @@ def test_correct_box(nodes: tuple, extra: list, group_of: dict, external: bool, 
 
 
 def test_a_group_citing_a_local_and_a_remote_network_is_not_external() -> None:
-    verified, _ = _verify(_boxes(list(EXTERNAL), evidence=[{"fact": REMOTE["id"]}, {"fact": VPC["id"]}]))
+    verified, report = _verify(_boxes(list(EXTERNAL), evidence=[{"fact": REMOTE["id"]}, {"fact": VPC["id"]}]))
     assert "external" not in _group_of(verified, "shared")
+    assert f"group shared: cites 2 network facts ({', '.join(sorted([REMOTE['id'], VPC['id']]))})" in report
 
 
 def test_a_group_that_cites_no_network_is_noted_and_its_nodes_are_not_checked() -> None:
@@ -228,14 +230,13 @@ def test_a_cited_network_survives_a_cidrs_claim_another_fact_backs() -> None:
     assert {ev["fact"] for ev in _group_of(verified, "shared")["evidence"]} == {VPC["id"], REMOTE["id"]}
 
 
-def test_a_curated_external_or_shared_from_is_dropped_and_set_by_the_tool() -> None:
-    curated = _boxes(list(EXTERNAL), external=False, shared_from="networking")
+def test_a_curated_external_is_dropped_and_set_by_the_tool() -> None:
+    curated = _boxes(list(EXTERNAL), external=False)
     _group_of(curated, "vpc")["external"] = True
     verified, report = _verify(curated)
-    assert _group_of(verified, "shared")["external"] is True and "shared_from" not in _group_of(verified, "shared")
+    assert _group_of(verified, "shared")["external"] is True
     assert "external" not in _group_of(verified, "vpc")
-    assert "group vpc: external is not a curated field, dropped" in report
-    assert "group shared: shared_from is not a curated field, dropped" in report
+    assert "group vpc: external is set by verify, not the curator, dropped" in report
 
 
 def test_a_vpc_the_stack_creates_gets_no_marker_and_no_warning() -> None:

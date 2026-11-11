@@ -131,6 +131,15 @@ def _head(expr: Any, depth: int) -> str | None | object | tuple[str, str]:
     return UNRESOLVED if depth >= MAX_DEPTH else (m[1], m[2])
 
 
+def declared_provider(inst: Inst | None, key: str) -> tuple[Inst, dict] | None:
+    """The instance that declares the provider `key` (`name` or `name.alias`) `inst` uses, through the `providers`
+    maps of the module calls, and the provider block's body; None when no module declares it or calls disagree."""
+    while inst is not None and key and key not in inst.mod.providers:
+        key = inst.provider_map.get(key, key)
+        inst = inst.parent
+    return (inst, inst.mod.providers[key]) if inst is not None and key else None
+
+
 def provider_map(calls: list[Block]) -> dict[str, str]:
     maps = [{unq(k): unq(v).removeprefix("${").removesuffix("}") for k, v in b.body.get("providers", {}).items() if k != "__is_block__"}
             for b in calls]

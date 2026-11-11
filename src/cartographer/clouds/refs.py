@@ -6,7 +6,9 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from cartographer.tf_modules import declared_provider
 from cartographer.tf_policies import norm_keys, unq
+from cartographer.tf_values import UNRESOLVED
 
 TIERS = ("isolated", "private", "public")
 CIDR = re.compile(r"\d{1,3}(\.\d{1,3}){3}/\d{1,2}")
@@ -77,7 +79,7 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str]) -> dict[Ref, None]:
 def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], pattern: re.Pattern[str], seen: set) -> dict[Ref, None]:
     """`sources`, where `unread` is the attribute path a reference that is all of `obj` still has to read."""
     text = obj if isinstance(obj, str) else str(obj)
-    whole = pattern.fullmatch(text.removeprefix("${").removesuffix("}"))
+    whole = pattern.fullmatch(unq(text).removeprefix("${").removesuffix("}"))
     out: dict[Ref, None] = {}
     for m in pattern.finditer(text):
         own = m["path"] or m["outpath"] or ""
@@ -146,6 +148,7 @@ INSTANCE = re.compile(r"^(?:\[[^\]]*\])+")  # the index of a module call with `c
 SELECTORS = ("id", "name", "filter", "tags")  # the arguments by which a lookup selects its network or subnet
 MAX_PATH = 16  # longer attribute paths only come from a local or variable that reads itself
 SELECTING = ("backend", "workspace", "organization")
+TFE_HOST = "app.terraform.io"  # the `tfe` provider's default hostname
 LITERAL_INDEX = re.compile(r'"[^"]*"|\d+')
 
 
@@ -158,12 +161,25 @@ def state_of(inst: Inst, kind: str, name: str, index: str | None) -> State | str
         return address
     written = [(k, body[k]) for k in SELECTING if k in body] + _leaves("config", config)
     settings = [(path, inst.agreed_value(v)) for path, v in written]
+    if kind == "tfe_outputs" and settings:
+        settings.append(("hostname", _tfe_host(inst, body)))
     literal = LITERAL_INDEX.fullmatch(index) if index is not None else None
     if not settings or any(not isinstance(v, str) for _, v in settings) or (index is not None and not literal):
         return address
     if kind == "terraform_remote_state":
         settings = [(k, v) for k, v in settings if (k, v) != ("workspace", "default")]
     return State(kind, tuple(sorted(settings)), literal[0].strip('"') if literal else None)  # type: ignore[arg-type]
+
+
+def _tfe_host(inst: Inst, body: dict) -> str | object:
+    """The `hostname` of the `tfe` provider a `tfe_outputs` block uses (its `provider` meta-argument, through the
+    module calls' `providers` maps): two hosts can each hold a workspace of one name. UNRESOLVED when no literal."""
+    key = unq(body.get("provider", "tfe")).removeprefix("${").removesuffix("}")
+    declared = declared_provider(inst, key)
+    if declared is None:
+        return TFE_HOST if key == "tfe" else UNRESOLVED  # the implicit default provider
+    host = declared[0].agreed_value(declared[1].get("hostname"))
+    return TFE_HOST if host is None else host
 
 
 def _leaves(path: str, value: Any) -> list[tuple[str, Any]]:
@@ -181,8 +197,8 @@ def _remote_state(inst: Inst, kind: str, name: str) -> tuple[dict, dict | None]:
     if "config" not in body:
         return body, {}
     config = body["config"]
-    if isinstance(config, str) and (m := re.fullmatch(r"\$\{local\.([\w-]+)\}|local\.([\w-]+)", config.strip('"'))):
-        config = norm_keys(inst.mod.locals.get(m[1] or m[2]))
+    if isinstance(config, str) and (m := re.fullmatch(r"\$\{local\.([\w-]+)\}", unq(config))):
+        config = norm_keys(inst.mod.locals.get(m[1]))
     return body, config if isinstance(config, dict) else None
 
 

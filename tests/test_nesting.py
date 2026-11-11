@@ -70,7 +70,7 @@ def test_schema_has_subnet_kind_tier_cidrs_and_evidence() -> None:
     assert "subnet" in props["kind"]["enum"]
     assert props["tier"]["enum"] == ["public", "private", "isolated"]
     assert props["cidrs"]["items"]["pattern"].startswith("^")
-    assert props["external"]["type"] == "boolean" and "shared_from" not in props
+    assert props["external"]["type"] == "boolean"
     assert props["evidence"]["items"] == {"$ref": "#/$defs/evidence"}
     assert group["additionalProperties"] is False
     assert group["required"] == ["id", "label", "kind", "parent", "column"]

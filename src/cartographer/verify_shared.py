@@ -129,8 +129,8 @@ def fix_clouds(curated: dict, notes: list[str]) -> None:
 
 
 def fix_network_groups(curated: dict, notes: list[str]) -> None:
-    """Drop `tier` and `cidrs` from groups they do not belong to and `external` (and the older `shared_from`), which
-    only verify sets, from every group; a subnet group needs a tier and a network parent."""
+    """Drop `tier` and `cidrs` from groups they do not belong to and `external`, which only verify sets, from every
+    group; a subnet group needs a tier and a network parent."""
     groups = {g["id"]: g for g in curated["groups"]}
     for g in curated["groups"]:
         if g["kind"] != "subnet" and "tier" in g:
@@ -139,10 +139,9 @@ def fix_network_groups(curated: dict, notes: list[str]) -> None:
         if g["kind"] != "network" and "cidrs" in g:
             notes.append(f"group {g['id']}: cidrs on a group that is not a network, dropped")
             del g["cidrs"]
-        for key in ("external", "shared_from"):
-            if key in g:
-                notes.append(f"group {g['id']}: {key} is not a curated field, dropped")
-                del g[key]
+        if "external" in g:
+            notes.append(f"group {g['id']}: external is set by verify, not the curator, dropped")
+            del g["external"]
         if g["kind"] == "subnet" and "tier" not in g:
             notes.append(f"group {g['id']}: subnet without a tier, now a plain group")
             _demote(g)

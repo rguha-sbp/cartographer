@@ -6,6 +6,7 @@ from cartographer.clouds.azure.rules import RULES
 from cartographer.clouds.azure.specs import EDGE_SPECS
 from cartographer.clouds.base import Catalog, Cloud, load_json
 from cartographer.diagram_model import FRAME_TITLE_LEFT
+from cartographer.tf_modules import declared_provider
 from cartographer.tf_policies import unq
 from cartographer.tf_values import text
 
@@ -72,14 +73,8 @@ class AzureCloud(Cloud):
         else:
             provider, chosen = res.type.split("_", 1)[0], body.get("provider", "")
         alias = ALIAS.search(text(chosen))
-        key = f"{provider}.{alias[1]}" if alias else provider
-        inst = res.inst
-        while inst is not None and key not in inst.mod.providers:
-            key = inst.provider_map.get(key, key)
-            inst = inst.parent
-        if not key:
-            return None
-        found = inst.value(inst.mod.providers[key].get("subscription_id")) if inst else None
+        declared = declared_provider(res.inst, f"{provider}.{alias[1]}" if alias else provider)
+        found = declared[0].value(declared[1].get("subscription_id")) if declared else None
         return found if isinstance(found, str) else None
 
     def icon_style(self, name: str) -> str:

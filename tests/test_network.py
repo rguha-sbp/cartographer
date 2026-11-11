@@ -110,6 +110,8 @@ def _tfe(workspace: str, organization: str = "acme", name: str = "net") -> str:
             f'resource "aws_security_group" "sg" {{ vpc_id = data.tfe_outputs.{name}.values.shared_vpc_id }}\n')
 
 
+ONPREM = 'provider "tfe" {\n  alias = "corp"\n  hostname = "tfe.corp.example"\n}\n'
+APP = 'provider "tfe" {\n  alias = "app"\n  hostname = "app.terraform.io"\n}\n'
 KEY = '{ bucket = "states", key = "networking/terraform.tfstate" }'
 INDEXED = ('data "terraform_remote_state" "net" {{\n  count = 2\n  backend = "s3"\n  config = {{ key = "n.tfstate" }}\n}}\n'
            'resource "aws_security_group" "sg" {{ vpc_id = data.terraform_remote_state.net[{index}].outputs.shared_vpc_id }}\n')
@@ -130,6 +132,9 @@ INDEXED = ('data "terraform_remote_state" "net" {{\n  count = 2\n  backend = "s3
     (_tfe("networking"), None, 1),
     (_tfe("networking"), _tfe("networking", organization="other"), 2),
     (_tfe("default"), _tfe("networking"), 2),  # a tfe workspace named default is a workspace like any other
+    (_tfe("n").replace("{\n", '{\n  provider = tfe.corp\n', 1) + ONPREM, _tfe("n"), 2),  # two hosts, one workspace name
+    (_tfe("n").replace("{\n", '{\n  provider = tfe.app\n', 1) + APP, _tfe("n"), 1),  # the default host, named
+    (_tfe("n").replace("{\n", '{\n  provider = tfe.nowhere\n', 1), None, 2),  # an undeclared provider: one per module
     ('resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.net.values.shared_vpc_id }\n', None, 2),  # no block
     (_remote_state("var.cfg"), None, 2),  # a config that cannot be read: one per module, never one by backend alone
     (_remote_state("local.all.net").replace("data", 'locals {\n  all = { net = { key = "n" } }\n}\ndata', 1), None, 2),
@@ -436,3 +441,13 @@ def test_each_literal_index_of_a_lookup_is_its_own_network(tmp_path: Path) -> No
           'resource "aws_security_group" "a" { vpc_id = data.aws_vpc.x[0].id }\n'
           'resource "aws_security_group" "b" { vpc_id = data.aws_vpc.x[1].id }\n')
     assert _vpc_networks(tmp_path, tf) == [("data.aws_vpc.x[0]", True), ("data.aws_vpc.x[1]", True)]
+
+
+def test_a_quoted_local_keeps_the_attribute_path(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_vpc" "a" { cidr_block = "10.0.0.0/16" }\n'
+        'resource "aws_vpc" "b" { cidr_block = "10.1.0.0/16" }\n'
+        'locals {\n  net = { a = aws_vpc.a.id, b = aws_vpc.b.id }\n  alias = "${local.net}"\n}\n'
+        'resource "aws_subnet" "private" {\n  vpc_id = local.alias.b\n  cidr_block = "10.1.1.0/24"\n}\n'
+        'resource "aws_instance" "i" { subnet_id = aws_subnet.private.id }\n')
+    assert _placed(tf_extract.extract(Path("."), tmp_path)) == {"aws_instance.i": "aws_vpc.b"}
