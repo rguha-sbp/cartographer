@@ -345,10 +345,19 @@ def test_a_remote_subnet_goes_to_a_remote_vpc_before_a_lookup_of_the_same_name_i
     ('{ key = "terraform.tfstate" }', "n"),
     ('{ key = "terraform.tfstate", workspace_key_prefix = "networking" }', "networking"),
     ('{ path = "../networking/terraform.tfstate" }', "networking"),
-    ('{ prefix = "networking" }', "networking"),
+    ('{ prefix = "networking/" }', "networking"),
+    ('{ path = "../.terraform/terraform.tfstate" }', ".terraform"),
+    ('{ path = "./terraform.tfstate" }', "n"),
 ])
 def test_the_stack_reads_quoted_config_keys_and_cuts_only_a_whole_terraform_word(tmp_path: Path, config: str, stack: str) -> None:
     (tmp_path / "main.tf").write_text(
         f'data "terraform_remote_state" "n" {{\n  backend = "s3"\n  config = {config}\n}}\n'
         'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.n.outputs.shared_vpc_id }\n')
     assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == [stack]
+
+
+def test_a_remote_state_name_with_a_hyphen_is_a_remote_network(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'data "tfe_outputs" "shared-net" {\n  workspace = "networking"\n}\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.shared-net.values.shared_vpc_id }\n')
+    assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == ["networking"]

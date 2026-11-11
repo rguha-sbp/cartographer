@@ -39,8 +39,8 @@ class Ref:
 def token(heads: str, data: str) -> re.Pattern[str]:
     """A reference to a local resource whose type matches `heads`, a data source matching `data`, or a remote output."""
     return re.compile(
-        r"(?<![\w.\-])(?:(?P<remote>data\.(?P<kind>tfe_outputs|terraform_remote_state)\.(?P<state>\w+)"
-        rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.(?:{data})\.(?P<ds>\w+))"
+        r"(?<![\w.\-])(?:(?P<remote>data\.(?P<kind>tfe_outputs|terraform_remote_state)\.(?P<state>[\w-]+)"
+        rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.(?:{data})\.(?P<ds>[\w-]+))"
         rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?:\[[^\]]*\])?(?:\.(?P<third>[\w-]+))?)"
     )
 
@@ -72,6 +72,9 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
     return out
 
 
+STATE_FILE = re.compile(r"/*(((^|[/._-])terraform)?\.tfstate)?$")  # the file of a state path, and the `/` before it
+
+
 def stack(inst: Inst, kind: str, name: str) -> str:
     """The workspace or state the remote state data source `kind`.`name` reads, else `name`. Its body names it as a
     literal, directly or through `var.` and `local.`. The first of these that leaves a name counts, less its
@@ -85,7 +88,7 @@ def stack(inst: Inst, kind: str, name: str) -> str:
     named = [workspaces.get("name"), *(config.get(k) for k in ("key", "workspace_key_prefix", "path", "prefix")),
              body.get("workspace") if kind == "tfe_outputs" else None]
     for found in map(inst.value, named):
-        if isinstance(found, str) and (state := re.sub(r"((^|[/._-])terraform)?\.tfstate$", "", found).strip("./")):
+        if isinstance(found, str) and (state := STATE_FILE.sub("", re.sub(r"^(\.\.?/)+", "", found))):
             return state
     return name
 
