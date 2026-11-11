@@ -137,8 +137,10 @@ def fix_network_groups(curated: dict, notes: list[str]) -> None:
     groups = {g["id"]: g for g in curated["groups"]}
     for g in curated["groups"]:  # networks do not nest: an inner one would draw its nodes inside the outer network
         if g["kind"] == "network" and (outer := enclosing(groups, g["parent"], "network")):
+            while above := enclosing(groups, outer["parent"], "network"):
+                outer = above
             notes.append(f"group {g['id']}: network inside network group {outer['id']}, moved beside it")
-            g["parent"] = outside_network(groups, g)
+            g["parent"] = outer["parent"]
     for g in curated["groups"]:
         if g["kind"] != "subnet" and "tier" in g:
             notes.append(f"group {g['id']}: tier on a group that is not a subnet, dropped")

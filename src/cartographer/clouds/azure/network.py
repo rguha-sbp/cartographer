@@ -19,6 +19,7 @@ from cartographer.clouds.refs import (
     sources,
     tier_in,
     token,
+    unplaced,
 )
 from cartographer.tf_policies import unq
 from cartographer.tf_values import find, text
@@ -58,6 +59,7 @@ class Network:
         self.public: dict[str, str] = {}
         self.outbound: dict[str, str] = {}
         self.ambiguous: dict[str, str] = {}  # resource -> why a subnet reference could not be placed
+        self.ties: dict[str, str] = {}  # resource -> why its remote subnet fits two networks equally well
 
     def refs(self, inst: Inst, obj: Any) -> dict[Ref, None]:
         return sources(inst, obj, TOKEN)
@@ -212,7 +214,7 @@ class Network:
                     found.setdefault((r.address, s.network, tier), (via, r))
             for value in find(r.block.body, SUBNET_KEY):
                 for ref in self.refs(r.inst, value):
-                    if ref.remote and (placed := place_remote(self.nets, ref)):
+                    if ref.remote and (placed := place_remote(self.nets, ref, self.ties, r.address)):
                         found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
         return placement_facts(found)
 
@@ -222,4 +224,6 @@ def network_facts(ex: Extractor) -> dict:
     net.collect_networks()
     net.collect_subnets()
     net.collect_evidence()
-    return {"networks": dict(sorted(net.nets.items())), "placements": net.placements(), "unplaced": net.ambiguous}
+    placements = net.placements()
+    return {"networks": dict(sorted(net.nets.items())), "placements": placements,
+            "unplaced": net.ambiguous | unplaced(net.ties, placements)}

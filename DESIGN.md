@@ -218,7 +218,7 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - IAM-only vs code-only mismatches for code-cited edges
 - Networks (`tf_network_check.check_boxes`): a network group stands for the network facts its evidence cites. In a
   Terraform diagram a network group that cites none gets a note, and its nodes are not checked. Networks do not nest:
-  a network group inside another network group moves beside it, with a note. One pass per node (`_place`) decides
+  a network group inside another network group moves beside the outermost network group around it, with a note. One pass per node (`_place`) decides
   its network group, then its subnet group. A node with placement facts inside a network group that stands for
   networks must be placed in one of them (any tier); otherwise verify moves it to the one network group that stands
   for a network it runs in, or, when there is not exactly one, to the nearest ancestor that is not a network or
@@ -237,9 +237,10 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     module instance stands for share that instance's network, as they share its nodes. A `terraform_remote_state`
     with the `remote` backend and only `organization`, `workspaces.name` and `hostname` reads the workspace a
     `tfe_outputs` block reads, so it gets that block's identity. Settings resolve with `Inst.value(agree=True)`.
-  - An index or attribute after a remote output is part of the network name. Each word loses `_id`, `_ids` and
-    `_name`; a list index stays in brackets: `vpcs["blue"]` is `vpcs-blue`, `vpc_ids[0]` is `vpc[0]`. A last
-    attribute that identifies what the path reads names no network: `network.vpc_id` is `network`. An attribute path
+  - An index or attribute after a remote output is part of the network name. Each word loses `_id`, `_ids`,
+    `_name` and `_arn`; a list index stays in brackets: `vpcs["blue"]` is `vpcs-blue`, `vpc_ids[0]` is `vpc[0]`. A
+    last attribute that only identifies the network (`id`, `vpc_id`, `vnet_name`) names no network: `network.vpc_id`
+    is `network`, but `network.app_vpc_id` is `network-app-vpc`. An attribute path
     through locals, variables and module outputs reads object keys and list indexes; an index that is no literal
     reads the rest of the path from every element. After a remote output it is named `[*]`, so every key of
     `vpcs[each.key]` reads one network `vpcs[*]`. The index of a module call (`module.net[0]`) is skipped: every
@@ -247,13 +248,16 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     (`vpcs["private-net"].public_subnet_ids` is public); a key or object name before it never sets the tier, and
     a trailing index or identifier attribute (`id`, `ids`, `arn`, `name`) is skipped.
   - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module and a
-    literal index (`data.aws_vpc.x[0]` is network `x[0]`). A lookup whose `id`, `name`, `filter` or `tags` reads a
-    network this stack creates is that local network; `depends_on`, `resource_group_name` and other arguments do not
-    select. A subnet lookup whose selectors read one network of this stack (`values = [aws_vpc.main.id]`) is in it.
+    literal index (`data.aws_vpc.x[0]` is network `x[0]`). A lookup whose `id`, `name`, `filter`, `tags`, `vpc_id` or
+    `virtual_network_name` reads a network this stack creates is that local network; `depends_on`,
+    `resource_group_name` and other arguments do not select. A subnet lookup whose selectors read one network of this
+    stack (`vpc_id = aws_vpc.main.id`, or a subnet of it) is in it. An attribute of a subnet lookup
+    (`data.aws_subnet.x.vpc_id`) is no network.
   - A remote subnet output places a resource in a remote network whose name without indexes is the subnet's name
     without indexes or starts it (`shared-vpc` for `shared_vpc_private_subnet_ids[0]`), and whose indexes are the
     subnet's or none: one of the same state first, then one with the subnet's indexes, then the longest name, then
-    for a lookup one of the same module. Two networks that fit equally well give no placement.
+    for a lookup one of the same module. A subnet name that names no network (`private_subnet_ids`) goes to the only
+    network of its state. Two networks that fit equally well give no placement, and the resource is marked with why.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.
 
 ## tf_layout.py (stage 4)

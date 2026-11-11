@@ -14,6 +14,7 @@ from cartographer.clouds.refs import (
     sources,
     tier_in,
     token,
+    unplaced,
 )
 from cartographer.tf_policies import unq
 from cartographer.tf_values import find
@@ -43,6 +44,7 @@ class Network:
         self.ex = ex
         self.by_address = {r.address: r for r in ex.res}
         self.vpcs: dict[str, dict] = {}
+        self.ties: dict[str, str] = {}  # resource -> why its subnet fits two networks equally well
 
     def cidrs(self, vpc: Res) -> list[str]:
         """Every CIDR of a local VPC, or none when any of them is not a literal."""
@@ -67,10 +69,11 @@ class Network:
                     if ref.remote:
                         add_remote(self.vpcs, ref, r)
 
-    def place(self, ref: Ref) -> tuple[str, str, str] | None:
-        """(network key, tier, what decided the tier) for a subnet reference, None when either is unknown."""
+    def place(self, ref: Ref, address: str) -> tuple[str, str, str] | None:
+        """(network key, tier, what decided the tier) for a subnet reference of the resource at `address`, None when
+        either is unknown."""
         if ref.remote:
-            return place_remote(self.vpcs, ref)
+            return place_remote(self.vpcs, ref, self.ties, address)
         subnet = self.by_address[ref.address]
         if subnet.type != "aws_subnet":
             return None
@@ -85,7 +88,7 @@ class Network:
                 continue
             for value in find(r.block.body, SUBNET_KEY):
                 for ref in sources(r.inst, value, TOKEN):
-                    if placed := self.place(ref):
+                    if placed := self.place(ref, r.address):
                         found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
         return placement_facts(found)
 
@@ -93,4 +96,6 @@ class Network:
 def network_facts(ex: Extractor) -> dict:
     net = Network(ex)
     net.collect_vpcs()
-    return {"networks": dict(sorted(net.vpcs.items())), "placements": net.placements()}
+    placements = net.placements()
+    return {"networks": dict(sorted(net.vpcs.items())), "placements": placements,
+            "unplaced": unplaced(net.ties, placements)}

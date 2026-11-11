@@ -107,6 +107,12 @@ class Inst:
         found = {where.value(target, depth + 1, agree) for where, target in options}  # type: ignore[union-attr]
         return found.pop() if len(found) == 1 and None not in found else UNRESOLVED
 
+
+def bare(text: Any) -> str:
+    """An expression without its quotes and its one `${...}`: `"${aws_vpc.main.id}"` -> `aws_vpc.main.id`."""
+    return unq(text if isinstance(text, str) else str(text)).removeprefix("${").removesuffix("}")
+
+
 def _head(expr: Any, depth: int) -> str | None | object | tuple[str, str]:
     """A literal `expr` (None when absent, UNRESOLVED when no literal), or the (`var` | `local`, name) it reads."""
     if expr is None:
@@ -132,7 +138,7 @@ def declared_provider(inst: Inst | None, key: str) -> tuple[Inst | None, str]:
 
 
 def provider_map(calls: list[Block]) -> dict[str, str]:
-    maps = [{unq(k): unq(v).removeprefix("${").removesuffix("}") for k, v in b.body.get("providers", {}).items() if k != "__is_block__"}
+    maps = [{unq(k): bare(v) for k, v in b.body.get("providers", {}).items() if k != "__is_block__"}
             for b in calls]
     return {key: found.pop() if len(found := {m.get(key) for m in maps}) == 1 else "" for key in {k for m in maps for k in m}}
 

@@ -411,3 +411,14 @@ def test_a_frame_made_a_plain_group_names_the_cidrs_it_drops() -> None:
     notes: list[str] = []
     fix_clouds({"groups": [group]}, notes)
     assert notes == ["group v: network frame without a known cloud, now a plain group, cidrs 10.0.0.0/16 dropped"]
+
+
+def test_a_network_under_a_plain_group_in_a_network_moves_beside_the_outer_network() -> None:
+    from cartographer.verify_shared import fix_network_groups
+
+    groups = [_group("inner", "network", "plain"), _group("plain", None, "outer"),
+              _group("outer", "network", "acct"), _group("acct", "account", None)]
+    notes: list[str] = []
+    fix_network_groups({"groups": groups}, notes)
+    assert {g["id"]: g["parent"] for g in groups}["inner"] == "acct"
+    assert notes == ["group inner: network inside network group outer, moved beside it"]
