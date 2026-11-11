@@ -49,22 +49,21 @@ def check_network(out: dict, facts: dict, facts_by_id: dict, repo_root: Path, no
     placed: dict[str, list[dict]] = defaultdict(list)  # a resource -> its placements
     for p in facts.get("placements", []):
         placed[p["resource"]].append(p)
-    moved: set[str] = set()
     for n in out["nodes"]:
         subnet = enclosing(groups, n["group"], "subnet")
-        if subnet and not any(p["tier"] == subnet["tier"] for address in n["tf"] for p in placed[address]):
+        runs = [p for address in n["tf"] for p in placed[address]]
+        if subnet and not any(p["tier"] == subnet["tier"] for p in runs):
             notes.append(f"{n['id']}: no {subnet['tier']} placement fact, moved out of subnet group {subnet['id']}")
-            n["group"] = outside_network(groups, subnet)
-            moved.add(n["id"])
-    check_boxes(out, networks, groups, placed, notes, moved)
+            n["group"] = subnet["parent"] if runs else outside_network(groups, subnet)  # the network check comes next
+    check_boxes(out, networks, groups, placed, notes)
 
 
 def check_boxes(out: dict, networks: dict[str, dict], groups: dict[str, dict], placed: dict[str, list[dict]],
-                notes: list[str], moved: set[str]) -> None:
+                notes: list[str]) -> None:
     """A network group stands for the network facts its evidence cites. Move each placed node out of a network group
-    that stands for none of the networks it runs in, note a placed node outside every network group (unless verify
-    already `moved` it there), a group that cites no network and one that cites more than one, then mark `external`
-    the groups that stand only for remote networks and still hold a node."""
+    that stands for none of the networks it runs in, note a placed node outside every network group, a group that
+    cites no network and one that cites more than one, then mark `external` the groups that stand only for remote
+    networks and still hold a node."""
     stands = {g["id"]: {ev["fact"] for ev in g.get("evidence", []) if ev.get("fact") in networks}
               for g in groups.values() if g["kind"] == "network"}
     notes += [f"group {gid}: cites no network fact, its nodes cannot be checked" for gid, cited in stands.items() if not cited]
@@ -77,8 +76,7 @@ def check_boxes(out: dict, networks: dict[str, dict], groups: dict[str, dict], p
         names = ", ".join(sorted({networks[i]["name"] for i in runs_in if i in networks}))
         box = enclosing(groups, n["group"], "network")
         if box is None:
-            if n["id"] not in moved:
-                notes.append(f"{n['id']}: placed in {names}, drawn outside any network group")
+            notes.append(f"{n['id']}: placed in {names}, drawn outside any network group")
         elif stands[box["id"]] and not runs_in & stands[box["id"]]:
             notes.append(f"{n['id']}: placed in {names}, not in network group {box['id']}; moved out")
             n["group"] = outside_network(groups, box)

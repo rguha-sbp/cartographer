@@ -92,7 +92,7 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], pattern: re.Pa
         head, second = m["head"], m["second"]
         if m["kind"]:
             name = "_".join([m["out"], *(s if s is not None else "any" for s in path)])
-            out[Ref(m["remote"], name, state_of(inst, m["kind"], m["state"], m["index"]))] = None
+            out[Ref(f"{inst.prefix}{m['remote']}", name, state_of(inst, m["kind"], m["state"], m["index"]))] = None
         elif m["ds"]:
             out |= _looked_up(inst, m["ds_type"], m["ds"], pattern, seen) or {_lookup(inst, m): None}
         elif head == "var" and inst.parent is not None:
@@ -174,11 +174,10 @@ def state_of(inst: Inst, kind: str, name: str, index: str | None) -> State | str
 def _tfe_host(inst: Inst, body: dict) -> str | object:
     """The `hostname` of the `tfe` provider a `tfe_outputs` block uses (its `provider` meta-argument, through the
     module calls' `providers` maps): two hosts can each hold a workspace of one name. UNRESOLVED when no literal."""
-    key = unq(body.get("provider", "tfe")).removeprefix("${").removesuffix("}")
-    declared = declared_provider(inst, key)
-    if declared is None:
-        return TFE_HOST if key == "tfe" else UNRESOLVED  # the implicit default provider
-    host = declared[0].agreed_value(declared[1].get("hostname"))
+    owner, key = declared_provider(inst, unq(body.get("provider", "tfe")).removeprefix("${").removesuffix("}"))
+    if owner is None or not key:
+        return TFE_HOST if key == "tfe" else UNRESOLVED  # the implicit default provider of the root
+    host = owner.agreed_value(owner.mod.providers[key].get("hostname"))
     return TFE_HOST if host is None else host
 
 

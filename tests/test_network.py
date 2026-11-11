@@ -165,7 +165,19 @@ def test_settings_passed_through_module_variables(tmp_path: Path, root: str, net
 def test_calls_of_one_module_instance_that_disagree_fall_back_to_its_address(tmp_path: Path, second: str) -> None:
     root = f'module "x" {{\n  source = "./a"\n  ws = "networking"\n}}\nmodule "y" {{\n  source = "./a"\n{second}}}\n'
     facts = _two_modules(tmp_path, WORKSPACE_FROM_A_VARIABLE, root=root)
-    assert [n["address"] for n in facts["networks"]] == ["data.tfe_outputs.net.values.shared_vpc_id"]
+    assert [n["address"] for n in facts["networks"]] == ["module.a.data.tfe_outputs.net.values.shared_vpc_id"]
+
+
+@pytest.mark.parametrize("second", ['  providers = { tfe = tfe.us }\n', ""])
+def test_calls_of_one_module_instance_that_map_the_tfe_provider_differently_fall_back_to_its_address(
+        tmp_path: Path, second: str) -> None:
+    root = ('provider "tfe" {\n  alias = "eu"\n  hostname = "tfe.eu.example"\n}\n'
+            'provider "tfe" {\n  alias = "us"\n  hostname = "tfe.us.example"\n}\n'
+            f'module "x" {{\n  source = "./a"\n  providers = {{ tfe = tfe.eu }}\n}}\nmodule "y" {{\n  source = "./a"\n{second}}}\n'
+            + _tfe("n", name="root").replace('"sg"', '"root_sg"'))
+    facts = _two_modules(tmp_path, _tfe("n"), root=root)
+    assert sorted(n["address"] for n in facts["networks"]) == [
+        "data.tfe_outputs.root.values.shared_vpc_id", "module.a.data.tfe_outputs.net.values.shared_vpc_id"]
 
 
 def test_other_values_read_the_first_call(tmp_path: Path) -> None:
@@ -228,7 +240,7 @@ def test_a_subnet_in_one_module_belongs_to_a_remote_vpc_another_module_reads(tmp
         tmp_path, _tfe("networking", name="networking"),
         _tfe("networking", name="networking").replace('"aws_security_group" "sg"', '"aws_subnet" "private"')
         + 'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = [aws_subnet.private.id] }\n}\n')
-    assert [n["address"] for n in facts["networks"]] == ["data.tfe_outputs.networking.values.shared_vpc_id"]
+    assert [n["address"] for n in facts["networks"]] == ["module.a.data.tfe_outputs.networking.values.shared_vpc_id"]
     assert [p["resource"] for p in facts["placements"]] == ["module.b.aws_lambda_function.fn"]
 
 

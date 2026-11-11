@@ -217,10 +217,12 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - `unshown` facts of kind iam/trigger/route between two shown nodes that no curated edge covers (recall hints)
   - IAM-only vs code-only mismatches for code-cited edges
 - Networks (`tf_network_check.check_boxes`): a network group stands for the network facts its evidence cites. In a
-  Terraform diagram a network group that cites none gets a note, and its nodes are not checked. A node with placement
+  Terraform diagram a network group that cites none gets a note, and its nodes are not checked. Networks do not nest:
+  a network group inside another network group becomes a plain group, with a note. A node with placement
   facts inside a network group that stands for networks must be placed in one of them (any tier); otherwise verify
   moves it to the nearest ancestor that is not a network or subnet group, with a note. A placed node outside every
-  network group gets a note only. Nodes without placement facts (security groups, gateways) are not checked. After the
+  network group gets a note only. A node in a subnet group without a placement of that tier moves to the subnet's
+  network group when it has placements (the network check then judges it), else out of the network. Nodes without placement facts (security groups, gateways) are not checked. After the
   moves, a group that stands only for remote networks and still holds a node gets `external`. Verify drops any curated
   `external` first, in both modes, with a note. A network group that cites more than one network fact gets a note:
   it stands for all of them, which is right only when they are one network that extract keys twice. Dropping a wrong `cidrs` claim keeps the citation.
@@ -228,8 +230,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     network name derived from the output. The state is a `State(kind, settings, index)` value: `backend`,
     `workspace` (dropped when `"default"` on `terraform_remote_state`), `organization`, the `hostname` of the `tfe` provider a `tfe_outputs` block uses, and every `config` leaf as a
     dotted path, resolved to literals through `var.` and `local.` and compared exactly as written. A setting that does
-    not resolve, calls of one module instance that disagree, a non-literal index or a data block without settings
-    make the identity the data source's full address, so separate modules get separate networks. The calls that one
+    not resolve, calls of one module instance that disagree (also on which `tfe` provider they pass), a non-literal index or a data block without settings
+    make the identity the data source's full address, module prefix included, so separate modules get separate networks. The calls that one
     module instance stands for share that instance's network, as they share its nodes.
   - An index or attribute after a remote output is part of the network name: `vpcs["blue"]` is `vpcs-blue`,
     `vpc_ids[0]` is `vpc-ids-0`. An attribute path through locals, variables and module outputs reads object keys and

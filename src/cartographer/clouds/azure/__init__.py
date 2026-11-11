@@ -73,8 +73,8 @@ class AzureCloud(Cloud):
         else:
             provider, chosen = res.type.split("_", 1)[0], body.get("provider", "")
         alias = ALIAS.search(text(chosen))
-        declared = declared_provider(res.inst, f"{provider}.{alias[1]}" if alias else provider)
-        found = declared[0].value(declared[1].get("subscription_id")) if declared else None
+        owner, key = declared_provider(res.inst, f"{provider}.{alias[1]}" if alias else provider)
+        found = owner.value(owner.mod.providers[key].get("subscription_id")) if owner and key else None
         return found if isinstance(found, str) else None
 
     def icon_style(self, name: str) -> str:

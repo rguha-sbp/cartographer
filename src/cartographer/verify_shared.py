@@ -118,6 +118,7 @@ def outside_network(groups: dict[str, dict], group: dict) -> str | None:
 def _demote(group: dict) -> None:
     group["kind"] = None
     group.pop("tier", None)
+    group.pop("cidrs", None)
 
 
 def fix_clouds(curated: dict, notes: list[str]) -> None:
@@ -132,6 +133,10 @@ def fix_network_groups(curated: dict, notes: list[str]) -> None:
     """Drop `tier` and `cidrs` from groups they do not belong to and `external`, which only verify sets, from every
     group; a subnet group needs a tier and a network parent."""
     groups = {g["id"]: g for g in curated["groups"]}
+    for g in curated["groups"]:  # networks do not nest: an inner one would draw its nodes inside the outer network
+        if g["kind"] == "network" and (outer := enclosing(groups, g["parent"], "network")):
+            notes.append(f"group {g['id']}: network inside network group {outer['id']}, now a plain group")
+            _demote(g)
     for g in curated["groups"]:
         if g["kind"] != "subnet" and "tier" in g:
             notes.append(f"group {g['id']}: tier on a group that is not a subnet, dropped")

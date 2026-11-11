@@ -83,7 +83,7 @@ def test_node_without_placement_of_that_tier_leaves_the_subnet_group() -> None:
     curated = _curated()
     curated["nodes"] = [_node("lb", "aws_lb.front", "shop"), _node("vm", "aws_instance.orders", "shop")]
     verified, report = _verify(curated)
-    assert {n["id"]: n["group"] for n in verified["nodes"]} == {"lb": "shop", "vm": "acct"}
+    assert {n["id"]: n["group"] for n in verified["nodes"]} == {"lb": "shop", "vm": "vpc"}
     assert "vm: no public placement fact, moved out of subnet group pub" in report
     assert "drawn outside any network group" not in report
     assert tf_verify.needs_attention(curated, verified)
@@ -92,7 +92,7 @@ def test_node_without_placement_of_that_tier_leaves_the_subnet_group() -> None:
 def test_a_node_directly_in_the_subnet_group_is_checked_too() -> None:
     curated = _curated()
     curated["nodes"] = [_node("vm", "aws_instance.orders", "pub")]
-    assert _verify(curated)[0]["nodes"][0]["group"] == "acct"
+    assert _verify(curated)[0]["nodes"][0]["group"] == "vpc"
 
 
 def test_a_subnet_group_needs_a_vpc_parent() -> None:
@@ -363,3 +363,12 @@ def test_described_mode_drops_a_curated_external_and_notes_nothing_about_boxes()
     verified, report = verify_description.verify(curated, Path("."))
     assert "external" not in _group_of(verified, "vpc")
     assert "cites no network fact" not in report
+
+
+def test_a_network_inside_a_network_becomes_a_plain_group_and_its_nodes_are_checked_against_the_outer_one() -> None:
+    curated = _boxes(list(EXTERNAL))
+    _group_of(curated, "shared")["parent"] = "vpc"
+    verified, report = _verify(curated)
+    assert _group_of(verified, "shared")["kind"] is None
+    assert "group shared: network inside network group vpc, now a plain group" in report
+    assert next(n for n in verified["nodes"] if n["id"] == "fn")["group"] == "acct"
