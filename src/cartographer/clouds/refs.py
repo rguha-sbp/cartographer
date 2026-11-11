@@ -91,11 +91,11 @@ def stack(inst: Inst, kind: str, name: str) -> str:
     `terraform_remote_state` is an environment, not a stack)."""
     body, config = _remote_state(inst, kind, name)
     workspaces = config["workspaces"] if isinstance(config.get("workspaces"), dict) else {}
-    path = inst.value(config.get("path"))
-    named = [workspaces.get("name"), workspaces.get("prefix"), config.get("key"), config.get("workspace_key_prefix"),
-             _local_stack(path) if isinstance(path, str) else None, config.get("prefix"),
-             body.get("workspace") if kind == "tfe_outputs" else None]
-    states = [_state(v) for v in map(inst.value, named) if isinstance(v, str)]
+    name_, prefix, key, key_prefix, path, gcs_prefix, workspace = map(inst.value, (
+        workspaces.get("name"), workspaces.get("prefix"), config.get("key"), config.get("workspace_key_prefix"),
+        config.get("path"), config.get("prefix"), body.get("workspace") if kind == "tfe_outputs" else None))
+    named = [name_, prefix, key, key_prefix, _local_stack(path) if isinstance(path, str) else None, gcs_prefix, workspace]
+    states = [_state(v) for v in named if isinstance(v, str)]
     # `prod/terraform.tfstate` names no stack, but keeps the `prod` and `dev` states of one data source name apart
     return next((s for s in states if names_a_stack(s)), "/".join([name, *filter(None, states[:1])]))
 
@@ -116,10 +116,10 @@ def store(inst: Inst, kind: str, name: str, index: str | None) -> str:
     literal `index` of a reference to one of a `count` or `for_each` of them. One state key in two of them is two
     stacks' worth of networks under one stack name."""
     body, config = _remote_state(inst, kind, name)
-    places = [body.get("workspace") if kind == "terraform_remote_state" else body.get("organization"),
+    workspace = inst.value(body.get("workspace")) if kind == "terraform_remote_state" else None
+    places = [None if workspace == "default" else workspace, body.get("organization") if kind == "tfe_outputs" else None,
               *(config.get(k) for k in ("organization", "bucket", "storage_account_name", "container_name"))]
     found = [v for v in map(inst.value, places) if isinstance(v, str)]
-    found = found[1:] if kind == "terraform_remote_state" and found[:1] == ["default"] else found
     literal = re.fullmatch(r'"([^"]*)"|(\d+)', index or "")
     return "/".join([*found, literal[1] or literal[2]] if literal else found)
 

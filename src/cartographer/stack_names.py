@@ -39,4 +39,4 @@ def _stems(name: str) -> list[str]:
     other word keeps a variant of an IGNORED word that is no environment: `accounting` and `subscriptions` are names."""
     words = [w for w in re.findall(r"[a-z0-9]+", REGION.sub(" ", name.lower().replace("_", "-"))) if not w.isdigit()]
     own = [s for w in words if (s := _stem(w)) and s not in IGNORED_STEMS]
-    return sorted(own or (_stem(w) for w in words if w not in IGNORED and _stem(w) not in ENVIRONMENT_STEMS))
+    return sorted(set(own) or {_stem(w) for w in words if w not in IGNORED and _stem(w) not in ENVIRONMENT_STEMS})

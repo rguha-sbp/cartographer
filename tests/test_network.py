@@ -415,6 +415,15 @@ def test_the_default_workspace_named_or_left_out_is_one_state(tmp_path: Path) ->
     assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == ["networking"]
 
 
+def test_a_bucket_named_default_is_no_default_workspace(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text("".join(
+        f'data "terraform_remote_state" "{name}" {{\n  backend = "s3"\n'
+        f'  config = {{ bucket = "{bucket}", key = "networking/terraform.tfstate" }}\n}}\n'
+        f'resource "aws_security_group" "{name}" {{ vpc_id = data.terraform_remote_state.{name}.outputs.vpc_id }}\n'
+        for name, bucket in (("a", "default"), ("b", "other"))))
+    assert len(tf_extract.extract(Path("."), tmp_path)["networks"]) == 2
+
+
 def test_the_stack_reads_a_config_given_as_one_local(tmp_path: Path) -> None:
     (tmp_path / "main.tf").write_text(
         'locals {\n  net_state = { key = "networking/terraform.tfstate" }\n}\n'

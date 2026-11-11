@@ -438,6 +438,9 @@ def test_described_mode_drops_a_curated_shared_from() -> None:
     ("Network account", "networking/prod", True),
     ("Policies account", "policy", True),
     ("Addresses account", "address", True),
+    ("Integrations account", "integrations", False),  # a variant of an environment word names no stack
+    ("Network networking account", "networking", True),
+    ("Integration account", "integration", False),
     ("Boxes", "box", True),
     ("Databases account", "database", True),
     ("My app account", "my-app-west-1", False),
