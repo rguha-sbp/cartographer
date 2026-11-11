@@ -141,7 +141,9 @@ def test_a_network_group_keeps_only_evidence_that_cites_a_network_fact_or_code()
     for cidrs in ({"cidrs": VPC["cidrs"]}, {}):
         curated = _curated()
         curated["groups"][1] = _group("vpc", "network", "acct", **cidrs, evidence=[{"fact": VPC["id"]}, *bad])
-        assert _group_of(_verify(curated)[0], "vpc") == {**curated["groups"][1], "evidence": [{"fact": VPC["id"]}]}
+        verified, report = _verify(curated)
+        assert _group_of(verified, "vpc") == {**curated["groups"][1], "evidence": [{"fact": VPC["id"]}]}
+        assert "group vpc: evidence dropped, " in report
 
 
 def test_edges_cannot_cite_network_facts() -> None:
@@ -232,8 +234,8 @@ def test_a_curated_external_or_shared_from_is_dropped_and_set_by_the_tool() -> N
     verified, report = _verify(curated)
     assert _group_of(verified, "shared")["external"] is True and "shared_from" not in _group_of(verified, "shared")
     assert "external" not in _group_of(verified, "vpc")
-    assert "group vpc: external is set by verify, not the curator, dropped" in report
-    assert "group shared: shared_from is set by verify, not the curator, dropped" in report
+    assert "group vpc: external is not a curated field, dropped" in report
+    assert "group shared: shared_from is not a curated field, dropped" in report
 
 
 def test_a_vpc_the_stack_creates_gets_no_marker_and_no_warning() -> None:

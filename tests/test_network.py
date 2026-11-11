@@ -395,3 +395,44 @@ def test_a_remote_subnet_goes_to_its_own_state_before_a_lookup_of_the_same_name(
 def test_a_local_that_reads_itself_gives_no_network_and_no_crash(tmp_path: Path) -> None:
     tf = 'locals {\n  a = local.a.x\n}\nresource "aws_security_group" "sg" { vpc_id = local.a.x }\n'
     assert _vpc_networks(tmp_path, tf) == []
+
+
+@pytest.mark.parametrize(("call", "read"), [("count = 1", "[0]"), ('for_each = { a = 1 }', '["a"]')])
+def test_an_output_of_an_indexed_module_call_places_its_subnet(tmp_path: Path, call: str, read: str) -> None:
+    (tmp_path / "net").mkdir()
+    (tmp_path / "net" / "main.tf").write_text(
+        'resource "aws_vpc" "v" { cidr_block = "10.0.0.0/16" }\n'
+        'resource "aws_subnet" "private" {\n  vpc_id = aws_vpc.v.id\n  cidr_block = "10.0.1.0/24"\n}\n'
+        'output "private_subnet_id" { value = aws_subnet.private.id }\n')
+    (tmp_path / "main.tf").write_text(
+        f'module "net" {{\n  source = "./net"\n  {call}\n}}\n'
+        f'resource "aws_instance" "i" {{ subnet_id = module.net{read}.private_subnet_id }}\n')
+    assert _placed(tf_extract.extract(Path("."), tmp_path)) == {"aws_instance.i": "module.net.aws_vpc.v"}
+
+
+def test_a_lookup_that_only_depends_on_a_local_vpc_stays_external(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }\n'
+        'resource "aws_subnet" "private" {\n  vpc_id = aws_vpc.main.id\n  cidr_block = "10.0.1.0/24"\n}\n'
+        'data "aws_vpc" "peer" {\n  id = var.peer_vpc_id\n  depends_on = [aws_vpc.main]\n}\n'
+        'data "aws_subnet" "peer_private" {\n  id = var.peer_subnet_id\n  depends_on = [aws_subnet.private]\n}\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.peer.id }\n'
+        'resource "aws_instance" "i" { subnet_id = data.aws_subnet.peer_private.id }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [(n["address"], n["remote"]) for n in facts["networks"]] == [("aws_vpc.main", False), ("data.aws_vpc.peer", True)]
+    assert _placed(facts) == {"aws_instance.i": "data.aws_vpc.peer"}
+
+
+def test_a_lookup_read_twice_stays_the_local_vpc_it_selects(tmp_path: Path) -> None:
+    tf = ('resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }\n'
+          'data "aws_vpc" "x" { id = aws_vpc.main.id }\n'
+          'locals {\n  vpc = data.aws_vpc.x\n}\n'
+          'resource "aws_security_group" "sg" { vpc_id = var.alt ? local.vpc.id : local.vpc.arn }\n')
+    assert _vpc_networks(tmp_path, tf) == [("aws_vpc.main", False)]
+
+
+def test_each_literal_index_of_a_lookup_is_its_own_network(tmp_path: Path) -> None:
+    tf = ('data "aws_vpc" "x" {\n  count = 2\n  id = var.ids[count.index]\n}\n'
+          'resource "aws_security_group" "a" { vpc_id = data.aws_vpc.x[0].id }\n'
+          'resource "aws_security_group" "b" { vpc_id = data.aws_vpc.x[1].id }\n')
+    assert _vpc_networks(tmp_path, tf) == [("data.aws_vpc.x[0]", True), ("data.aws_vpc.x[1]", True)]

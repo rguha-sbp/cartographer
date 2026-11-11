@@ -176,3 +176,22 @@ def test_each_resource_body_is_scanned_for_references_once(monkeypatch):
 
 def test_blocks_given_as_expressions_are_skipped_not_crashed_on():
     assert placements("subnet_expression") == {}
+
+
+def test_a_hub_lookup_that_shares_a_resource_group_with_a_local_vnet_stays_external(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "azurerm_virtual_network" "spoke" {\n  name = "spoke"\n  address_space = ["10.1.0.0/16"]\n'
+        '  resource_group_name = "rg-net"\n}\n'
+        'data "azurerm_virtual_network" "hub" {\n  name = "hub"\n'
+        '  resource_group_name = azurerm_virtual_network.spoke.resource_group_name\n}\n'
+        'data "azurerm_subnet" "hub_private" {\n  name = "private"\n'
+        '  virtual_network_name = data.azurerm_virtual_network.hub.name\n'
+        '  resource_group_name = azurerm_virtual_network.spoke.resource_group_name\n}\n'
+        'resource "azurerm_virtual_network_peering" "p" {\n  virtual_network_name = azurerm_virtual_network.spoke.name\n'
+        '  remote_virtual_network_id = data.azurerm_virtual_network.hub.id\n}\n'
+        'resource "azurerm_private_endpoint" "pe" { subnet_id = data.azurerm_subnet.hub_private.id }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [(n["address"], n["remote"]) for n in facts["networks"]] == [
+        ("azurerm_virtual_network.spoke", False), ("data.azurerm_virtual_network.hub", True)]
+    hub = next(n["id"] for n in facts["networks"] if n["remote"])
+    assert [(p["resource"], p["network"], p["tier"]) for p in facts["placements"]] == [("azurerm_private_endpoint.pe", hub, "private")]

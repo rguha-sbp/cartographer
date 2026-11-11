@@ -141,7 +141,7 @@ def fix_network_groups(curated: dict, notes: list[str]) -> None:
             del g["cidrs"]
         for key in ("external", "shared_from"):
             if key in g:
-                notes.append(f"group {g['id']}: {key} is set by verify, not the curator, dropped")
+                notes.append(f"group {g['id']}: {key} is not a curated field, dropped")
                 del g[key]
         if g["kind"] == "subnet" and "tier" not in g:
             notes.append(f"group {g['id']}: subnet without a tier, now a plain group")
@@ -172,6 +172,8 @@ def check_claims(curated: dict, notes: list[str], supported: Supported,
         elif g["kind"] == "subnet" and not good:
             notes.append(f"group {g['id']}: tier {g['tier']} dropped, {'; '.join(why) or 'no evidence'}")
             _demote(g)
+        elif len(good) < len(g.get("evidence", [])):
+            notes.append(f"group {g['id']}: evidence dropped, {'; '.join(why)}")
         if good:
             g["evidence"] = good
         else:

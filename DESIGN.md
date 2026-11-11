@@ -232,8 +232,13 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     module instance stands for share that instance's network, as they share its nodes.
   - An index or attribute after a remote output is part of the network name: `vpcs["blue"]` is `vpcs-blue`,
     `vpc_ids[0]` is `vpc-ids-0`. An attribute path through locals, variables and module outputs reads object keys and
-    list indexes; an index that is no literal reads the whole value.
-  - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module.
+    list indexes; an index that is no literal reads the whole value. After a remote output it is named `any`, so
+    every key of `vpcs[each.key]` reads one network `vpcs-any`. The index of a module call (`module.net[0]`) is
+    skipped: every instance has the same outputs.
+  - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module and a
+    literal index (`data.aws_vpc.x[0]` is network `x-0`). A lookup whose `id`, `name`, `filter` or `tags` reads a
+    network this stack creates is that local network; `depends_on`, `resource_group_name` and other arguments do not
+    select.
   - A remote subnet output places a resource in a remote network whose name prefixes the output name: one of the same
     state first, then the longest name, then for a lookup one of the same module, then the network key.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.

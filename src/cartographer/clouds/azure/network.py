@@ -34,7 +34,6 @@ SUBNET_KEY = re.compile(r"(?!virtual_network_subnet_ids?$)(\w*_)?subnet_ids?")
 NIC_ATTACHMENT = re.compile(r"network_interface(_ids?)?")
 FRONTEND = "frontend_ip_configuration"
 PUBLIC_IP_KEY = re.compile(r"public_ip_address(_id)?")
-NAME_SUFFIXES = "ids?|name"
 RESERVED_PUBLIC = {"GatewaySubnet", "AzureBastionSubnet", "AzureFirewallSubnet"}
 NOT_PLACED = {"azurerm_subnet", "azurerm_virtual_network"}
 TOKEN = token(r"azurerm_\w+", "azurerm_(?:virtual_network|subnet)")
@@ -86,13 +85,13 @@ class Network:
             for value in find(r.block.body, NETWORK_KEY):
                 for ref in self.refs(r.inst, value):
                     if ref.remote:
-                        add_remote(self.nets, ref, r, NAME_SUFFIXES)
+                        add_remote(self.nets, ref, r)
 
     def collect_subnets(self) -> None:
         for r in self.ex.res:
             body = r.block.body
             if r.type == "azurerm_subnet":
-                owner = next((x.key(NAME_SUFFIXES) for x in self.refs(r.inst, body.get("virtual_network_name")) if x.key(NAME_SUFFIXES) in self.nets), None)
+                owner = next((k for x in self.refs(r.inst, body.get("virtual_network_name")) if (k := x.key()) in self.nets), None)
                 self.subnets[r.address] = Subnet(r.address, owner, body, r)
             elif r.type == "azurerm_virtual_network":
                 for i, block in enumerate(blocks(body.get("subnet"))):
@@ -213,7 +212,7 @@ class Network:
                     found.setdefault((r.address, s.network, tier), (via, r))
             for value in find(r.block.body, SUBNET_KEY):
                 for ref in self.refs(r.inst, value):
-                    if ref.remote and (placed := place_remote(self.nets, ref, NAME_SUFFIXES)):
+                    if ref.remote and (placed := place_remote(self.nets, ref)):
                         found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
         return placement_facts(found)
 
