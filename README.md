@@ -176,10 +176,10 @@ An L7 diagram nests these levels: cloud, region, account (an Azure subscription)
 network), subnet tier and workload. A diagram that uses both clouds has one top-level frame for each cloud, side by
 side:
 
-- A network frame shows its address ranges in the title, for example `shop-vpc (10.0.0.0/16)`. It does this only when
+- A network frame shows its address ranges in the title, for example `Shop VPC (10.0.0.0/16)`. It does this only when
   the Terraform or you gave the ranges. The tool never guesses a CIDR.
 - A network frame for a network that this stack does not create (a remote state output or a data source lookup)
-  shows `external` in the title, for example `shared-vpc (external)`. Verify writes this; the curator does not. The
+  shows `External` in the title, for example `Shared VPC (External)`. Verify writes this; the curator does not. The
   frame stays in your workload account, because the services in it belong to that account.
 - Each service with a subnet in the Terraform sits in the frame of the network it runs in. Verify moves a service out
   of a network frame it does not run in, and notes a service drawn outside every network frame.

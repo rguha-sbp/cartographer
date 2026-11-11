@@ -29,7 +29,7 @@ Each rule, where it is enforced, and where it comes from.
 | Line style is explained in words (solid primary, dashed secondary) | legend (`tf_layout`) | C4 model notation |
 | Captions are a specific verb plus protocol where known, never "uses" | curation prompt (`curate_prompt.md`, schema `maxLength` 28) | C4 model notation |
 | Official icons and group frames (cloud, region, account or subscription, VPC or virtual network, subnet tier), one top-level frame per cloud | renderer (`gen_drawio`, `clouds/<cloud>/icons.json`) | AWS and Azure Architecture Icons |
-| A placed node sits only in a network frame that stands for a network it runs in; a network this stack does not create is titled `(external)` and sits in the stack's account frame | `tf_network_check.check_boxes`; `tf_blocks.group_label` | AWS VPC sharing (participants own their resources) |
+| A placed node sits only in a network frame that stands for a network it runs in; a network this stack does not create is titled `(External)` and sits in the stack's account frame | `tf_network_check.check_boxes`; `tf_blocks.group_label` | AWS VPC sharing (participants own their resources) |
 | An icon comes from the catalog, never from the curation, unless no resource of the node resolves to one; a reviewed fix is an override in `icons.json` | `clouds/<cloud>/catalog.json`, `overrides.py` | Cartographer design |
 | Layout fits A4 landscape | `tf_layout` grid choice | AWS networking best-practices conventions |
 | C4: the page name and the title state the view type and scope ("Container diagram for S") | `c4_views` | C4 model notation |

@@ -178,7 +178,7 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
 - `kind` in groups: `cloud | region | account | network | subnet | null`. Frame kinds carry `cloud`. A null kind is a plain
   dashed role group. There is one top-level `cloud` frame per cloud present, side by side. The tool never draws resource groups.
 - `external` in groups: set by verify, never by the curator. On a network frame whose nodes run only in networks this
-  stack does not create, the frame title shows it as `<label> (external)`. The frame stays in the stack's account.
+  stack does not create, the frame title shows it as `<label> (External)`. The frame stays in the stack's account.
 - `column` in groups: integer 0 to 3, required. It places the role groups that are directly in the account from left to right.
   The tool ignores it for frames and for groups nested in another group, which follow their parent.
 - Node `icon`: a qualified name. Set it only when no resource of the node resolves to one (a non-cloud provider) or for a

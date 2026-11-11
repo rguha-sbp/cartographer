@@ -50,7 +50,7 @@ def group_label(g: dict[str, Any]) -> str:
     """A group's title: a VPC also names its address ranges and, when this stack does not create it, `external`."""
     notes = list(g.get("cidrs") or [])
     if g.get("external"):
-        notes.append("external")
+        notes.append("External")
     return f"{g['label']} ({', '.join(notes)})" if notes else g["label"]
 
 
