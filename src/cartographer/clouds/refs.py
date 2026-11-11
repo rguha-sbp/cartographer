@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from cartographer.account_names import ENVIRONMENTS
 from cartographer.tf_policies import norm_keys
 
 TIERS = ("isolated", "private", "public")
@@ -77,7 +78,7 @@ STATE_FILE = re.compile(r"/*(((^|[/._-])terraform)?\.tfstate)?$")  # the file of
 
 def stack(inst: Inst, kind: str, name: str) -> str:
     """The workspace or state the remote state data source `kind`.`name` reads, else `name`. Its body names it as a
-    literal, directly or through `var.` and `local.`. The first of these that leaves a name counts, less its
+    literal, directly or through `var.` and `local.`. The first of these that leaves a name with a word that is not an environment counts, less its
     `terraform.tfstate` file or `.tfstate` suffix and any leading `./` or `../`: `config.workspaces.name`, `config.key`,
     `config.workspace_key_prefix`, `config.path`, `config.prefix`, then the `workspace` of `tfe_outputs` (that of
     `terraform_remote_state` is an environment, not a stack)."""
@@ -88,7 +89,8 @@ def stack(inst: Inst, kind: str, name: str) -> str:
     named = [workspaces.get("name"), *(config.get(k) for k in ("key", "workspace_key_prefix", "path", "prefix")),
              body.get("workspace") if kind == "tfe_outputs" else None]
     for found in map(inst.value, named):
-        if isinstance(found, str) and (state := STATE_FILE.sub("", re.sub(r"^(\.\.?/)+", "", found))):
+        state = STATE_FILE.sub("", re.sub(r"^(\.\.?/)+", "", found)) if isinstance(found, str) else ""
+        if set(re.findall(r"[a-z0-9]+", state.lower())) - ENVIRONMENTS:  # `prod/terraform.tfstate` names no stack
             return state
     return name
 

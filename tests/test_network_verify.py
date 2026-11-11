@@ -418,6 +418,8 @@ def test_described_mode_drops_a_curated_shared_from() -> None:
     ("Networking", "networking_us_east_1", True),
     ("Network us-east-1a", "networking-stg", True),
     ("Logs account", "logging", True),
+    ("My app account", "my-app-west-1", False),
+    ("My app west account", "my-app-west-1", True),
     ("Shared settings", "shared-setting", True),
     ("Networking", "env:/preprod/networking", True),
 ])

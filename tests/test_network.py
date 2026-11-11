@@ -348,6 +348,9 @@ def test_a_remote_subnet_goes_to_a_remote_vpc_before_a_lookup_of_the_same_name_i
     ('{ prefix = "networking/" }', "networking"),
     ('{ path = "../.terraform/terraform.tfstate" }', ".terraform"),
     ('{ path = "./terraform.tfstate" }', "n"),
+    ('{ key = "prod.terraform.tfstate" }', "n"),
+    ('{ key = "prod/terraform.tfstate", workspace_key_prefix = "networking" }', "networking"),
+    ('{ key = "prod/networking.tfstate" }', "prod/networking"),
 ])
 def test_the_stack_reads_quoted_config_keys_and_cuts_only_a_whole_terraform_word(tmp_path: Path, config: str, stack: str) -> None:
     (tmp_path / "main.tf").write_text(
