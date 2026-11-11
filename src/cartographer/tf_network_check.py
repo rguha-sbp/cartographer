@@ -75,7 +75,7 @@ def _mark_shared(out: dict, facts: dict, groups: dict[str, dict], cited: dict[st
                          f"placed in a network of {', '.join(sorted(stacks))}; cite the network the nodes run in")
         if not stacks or None in stacks | cited_stacks:
             continue
-        g["shared_from"] = ", ".join(sorted(stacks))
+        g["shared_from"] = " and ".join(sorted(stacks))
         if elsewhere := cited_stacks - stacks:
             notes.append(f"group {g['id']}: evidence cites a network of {', '.join(sorted(elsewhere))}, but its nodes are "
                          f"placed in a network of {g['shared_from']}; cite the network the nodes run in")

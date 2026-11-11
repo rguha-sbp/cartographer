@@ -47,7 +47,7 @@ class Ref:
 def token(heads: str, data: str) -> re.Pattern[str]:
     """A reference to a local resource whose type matches `heads`, a data source matching `data`, or a remote output."""
     return re.compile(
-        r"(?<![\w.\-])(?:(?P<remote>data\.(?P<kind>tfe_outputs|terraform_remote_state)\.(?P<state>[\w-]+)(?:\[[^\]]*\])?"
+        r"(?<![\w.\-])(?:(?P<remote>data\.(?P<kind>tfe_outputs|terraform_remote_state)\.(?P<state>[\w-]+)(?:\[(?P<index>[^\]]*)\])?"
         rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.(?:{data})\.(?P<ds>[\w-]+))"
         rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?:\[[^\]]*\])?(?:\.(?P<third>[\w-]+))?)"
     )
@@ -63,7 +63,7 @@ def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = N
         seen.add(key)
         head, second, third = m["head"], m["second"], m["third"]
         if m["kind"]:
-            out[Ref(m["remote"], m["out"], stack(inst, m["kind"], m["state"]), store(inst, m["kind"], m["state"]))] = None
+            out[Ref(m["remote"], m["out"], stack(inst, m["kind"], m["state"]), store(inst, m["kind"], m["state"], m["index"]))] = None
         elif m["ds"]:
             out[Ref(f"{inst.prefix}{m['remote']}", m["ds"])] = None
         elif head == "var" and inst.parent is not None:
@@ -110,15 +110,18 @@ def _local_stack(path: str) -> str:
     return STATE_FILE.sub("", path).rpartition("/")[2] if path.startswith("/") else path
 
 
-def store(inst: Inst, kind: str, name: str) -> str:
+def store(inst: Inst, kind: str, name: str, index: str | None) -> str:
     """Where the state the data source `kind`.`name` reads is kept, as far as its body says in literals: the
-    `workspace` of `terraform_remote_state` and the backend's organization, bucket or storage container. One state
-    key in two of them is two stacks' worth of networks under one stack name."""
+    `workspace` of `terraform_remote_state` and the backend's organization, bucket or storage container, then the
+    literal `index` of a reference to one of a `count` or `for_each` of them. One state key in two of them is two
+    stacks' worth of networks under one stack name."""
     body, config = _remote_state(inst, kind, name)
     places = [body.get("workspace") if kind == "terraform_remote_state" else body.get("organization"),
               *(config.get(k) for k in ("organization", "bucket", "storage_account_name", "container_name"))]
     found = [v for v in map(inst.value, places) if isinstance(v, str)]
-    return "/".join(found[1:] if kind == "terraform_remote_state" and found[:1] == ["default"] else found)
+    found = found[1:] if kind == "terraform_remote_state" and found[:1] == ["default"] else found
+    literal = re.fullmatch(r'"([^"]*)"|(\d+)', index or "")
+    return "/".join([*found, literal[1] or literal[2]] if literal else found)
 
 
 def _remote_state(inst: Inst, kind: str, name: str) -> tuple[dict, dict]:

@@ -462,7 +462,7 @@ def test_a_cited_remote_network_of_another_stack_does_not_join_the_title() -> No
 def test_the_title_also_names_the_stack_a_nodes_subnet_output_comes_from() -> None:
     placements = [{**p, "stack": "other"} if p["resource"] == SHARED_FN else p for p in FACTS["placements"]]
     verified, _ = _verify(_shared_vpc(vpc_parent="acct"), {**FACTS, "placements": placements})
-    assert _group_of(verified, "shared")["shared_from"] == "networking, other"
+    assert _group_of(verified, "shared")["shared_from"] == "networking and other"
 
 
 def test_a_node_also_placed_in_a_local_network_leaves_the_remote_one_it_cites_shared() -> None:
