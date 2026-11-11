@@ -353,6 +353,8 @@ def test_a_remote_subnet_goes_to_a_remote_vpc_before_a_lookup_of_the_same_name_i
     ('{ organization = "acme", workspaces = { prefix = "networking-" } }', "networking"),
     ('{ organization = "acme", workspaces = { prefix = "networking_" } }', "networking"),
     ('{ path = "/srv/state/core/terraform.tfstate" }', "core"),
+    ('{ bucket = "b", key = "/networking/prod/terraform.tfstate" }', "networking/prod"),
+    ('{ bucket = "b", prefix = "/networking" }', "networking"),
     ('{ key = "pre-prod/terraform.tfstate" }', "n/pre-prod"),
     ('{ key = "envs/non-prod/terraform.tfstate" }', "n/envs/non-prod"),
     ('{ key = "envs/prod/terraform.tfstate" }', "n/envs/prod"),

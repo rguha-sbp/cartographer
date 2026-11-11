@@ -91,7 +91,9 @@ def stack(inst: Inst, kind: str, name: str) -> str:
     `terraform_remote_state` is an environment, not a stack)."""
     body, config = _remote_state(inst, kind, name)
     workspaces = config["workspaces"] if isinstance(config.get("workspaces"), dict) else {}
-    named = [workspaces.get("name"), workspaces.get("prefix"), *(config.get(k) for k in ("key", "workspace_key_prefix", "path", "prefix")),
+    path = inst.value(config.get("path"))
+    named = [workspaces.get("name"), workspaces.get("prefix"), config.get("key"), config.get("workspace_key_prefix"),
+             _local_stack(path) if isinstance(path, str) else None, config.get("prefix"),
              body.get("workspace") if kind == "tfe_outputs" else None]
     states = [_state(v) for v in map(inst.value, named) if isinstance(v, str)]
     # `prod/terraform.tfstate` names no stack, but keeps the `prod` and `dev` states of one data source name apart
@@ -99,10 +101,13 @@ def stack(inst: Inst, kind: str, name: str) -> str:
 
 
 def _state(path: str) -> str:
-    """A state path less its file, a leading `./` or `../` and the `-` or `_` a workspace prefix ends in; an absolute
-    path keeps only its last directory, which is the stack's and not the machine's."""
-    state = STATE_FILE.sub("", re.sub(r"^(\.\.?/)+", "", path)).rstrip("-_")
-    return state.rpartition("/")[2] if state.startswith("/") else state
+    """A state path less its file, a leading `/`, `./` or `../` and the `-` or `_` a workspace prefix ends in."""
+    return STATE_FILE.sub("", re.sub(r"^(\.{0,2}/)+", "", path)).rstrip("-_")
+
+
+def _local_stack(path: str) -> str:
+    """A local state `path`: an absolute one keeps only its last directory, which is the stack's and not the machine's."""
+    return STATE_FILE.sub("", path).rpartition("/")[2] if path.startswith("/") else path
 
 
 def store(inst: Inst, kind: str, name: str) -> str:
