@@ -227,7 +227,7 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   runs after nodes without a matching placement leave their subnet.
   - A network fact read from another stack's outputs (`data.tfe_outputs.<name>` or
     `data.terraform_remote_state.<name>`) carries the stack: the first literal that leaves a name of `config.workspaces.name`,
-    `config.key`, `config.workspace_key_prefix`, `config.path`, `config.prefix` (each less a trailing `.tfstate`,
+    `config.workspaces.prefix`, `config.key`, `config.workspace_key_prefix`, `config.path`, `config.prefix` (each less a trailing `.tfstate`,
     `terraform.tfstate`, `.terraform.tfstate` or `-terraform.tfstate` and a leading `./` or `../`) and
     the `workspace` of `tfe_outputs`, else `<name>`. Each is a literal, or a `var.` or `local.` that resolves to one;
     calls of one module that give different values resolve to none, and a call that leaves the variable out gives its default. The `workspace` of `terraform_remote_state` is an

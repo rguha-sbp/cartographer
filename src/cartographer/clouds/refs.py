@@ -47,7 +47,7 @@ class Ref:
 def token(heads: str, data: str) -> re.Pattern[str]:
     """A reference to a local resource whose type matches `heads`, a data source matching `data`, or a remote output."""
     return re.compile(
-        r"(?<![\w.\-])(?:(?P<remote>data\.(?P<kind>tfe_outputs|terraform_remote_state)\.(?P<state>[\w-]+)"
+        r"(?<![\w.\-])(?:(?P<remote>data\.(?P<kind>tfe_outputs|terraform_remote_state)\.(?P<state>[\w-]+)(?:\[[^\]]*\])?"
         rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.(?:{data})\.(?P<ds>[\w-]+))"
         rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?:\[[^\]]*\])?(?:\.(?P<third>[\w-]+))?)"
     )
@@ -86,16 +86,23 @@ STATE_FILE = re.compile(r"/*(((^|[/._-])terraform)?\.tfstate)?$")  # the file of
 def stack(inst: Inst, kind: str, name: str) -> str:
     """The workspace or state the remote state data source `kind`.`name` reads, else `name`. Its body names it as a
     literal, directly or through `var.` and `local.`. The first of these that leaves a name with a word of its own (not only environments, regions and numbers) counts, less its
-    `terraform.tfstate` file or `.tfstate` suffix and any leading `./` or `../`: `config.workspaces.name`, `config.workspaces.prefix` less its last `-`, `config.key`,
+    `terraform.tfstate` file or `.tfstate` suffix and any leading `./` or `../`: `config.workspaces.name`, `config.workspaces.prefix` less its last `-` or `_`, `config.key`,
     `config.workspace_key_prefix`, `config.path`, `config.prefix`, then the `workspace` of `tfe_outputs`; when none counts, `name` and the first of them, as in `networking/prod` (the `workspace` of
     `terraform_remote_state` is an environment, not a stack)."""
     body, config = _remote_state(inst, kind, name)
     workspaces = config["workspaces"] if isinstance(config.get("workspaces"), dict) else {}
     named = [workspaces.get("name"), workspaces.get("prefix"), *(config.get(k) for k in ("key", "workspace_key_prefix", "path", "prefix")),
              body.get("workspace") if kind == "tfe_outputs" else None]
-    states = [STATE_FILE.sub("", re.sub(r"^(\.\.?/)+", "", v)).rstrip("-") for v in map(inst.value, named) if isinstance(v, str)]
+    states = [_state(v) for v in map(inst.value, named) if isinstance(v, str)]
     # `prod/terraform.tfstate` names no stack, but keeps the `prod` and `dev` states of one data source name apart
     return next((s for s in states if names_a_stack(s)), "/".join([name, *filter(None, states[:1])]))
+
+
+def _state(path: str) -> str:
+    """A state path less its file, a leading `./` or `../` and the `-` or `_` a workspace prefix ends in; an absolute
+    path keeps only its last directory, which is the stack's and not the machine's."""
+    state = STATE_FILE.sub("", re.sub(r"^(\.\.?/)+", "", path)).rstrip("-_")
+    return state.rpartition("/")[2] if state.startswith("/") else state
 
 
 def store(inst: Inst, kind: str, name: str) -> str:

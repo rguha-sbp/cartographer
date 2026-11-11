@@ -351,6 +351,8 @@ def test_a_remote_subnet_goes_to_a_remote_vpc_before_a_lookup_of_the_same_name_i
     ('{ key = "staging/terraform.tfstate" }', "n/staging"),
     ('{ key = "accounting/terraform.tfstate" }', "accounting"),
     ('{ organization = "acme", workspaces = { prefix = "networking-" } }', "networking"),
+    ('{ organization = "acme", workspaces = { prefix = "networking_" } }', "networking"),
+    ('{ path = "/srv/state/core/terraform.tfstate" }', "core"),
     ('{ key = "pre-prod/terraform.tfstate" }', "n/pre-prod"),
     ('{ key = "envs/non-prod/terraform.tfstate" }', "n/envs/non-prod"),
     ('{ key = "envs/prod/terraform.tfstate" }', "n/envs/prod"),
@@ -406,3 +408,14 @@ def test_the_stack_reads_a_config_given_as_one_local(tmp_path: Path) -> None:
         'data "terraform_remote_state" "net" {\n  backend = "s3"\n  config = local.net_state\n}\n'
         'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.net.outputs.shared_vpc_id }\n')
     assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == ["networking"]
+
+
+def test_an_indexed_remote_state_is_a_remote_network(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'data "terraform_remote_state" "c" {\n  count = 1\n  backend = "s3"\n  config = { key = "networking.tfstate" }\n}\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.c[0].outputs.hub_vpc_id }\n'
+        'resource "aws_lambda_function" "fn" {\n'
+        '  vpc_config { subnet_ids = data.terraform_remote_state.c[0].outputs.hub_vpc_private_subnet_ids }\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [n["stack"] for n in facts["networks"]] == ["networking"]
+    assert len(facts["placements"]) == 1
