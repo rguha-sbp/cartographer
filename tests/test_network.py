@@ -402,6 +402,17 @@ def test_one_state_key_in_two_workspaces_and_buckets_is_two_networks_and_each_su
         "net_prod": "net_prod", "net_dev": "net_dev"}
 
 
+def test_the_default_workspace_named_or_left_out_is_one_state(tmp_path: Path) -> None:
+    for name, workspace in (("a", '  workspace = "default"\n'), ("b", "")):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "main.tf").write_text(
+            f'data "terraform_remote_state" "net" {{\n  backend = "s3"\n{workspace}'
+            '  config = { bucket = "acme-state", key = "networking/terraform.tfstate" }\n}\n'
+            'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.net.outputs.vpc_id }\n')
+    (tmp_path / "main.tf").write_text('module "a" { source = "./a" }\nmodule "b" { source = "./b" }\n')
+    assert [n["stack"] for n in tf_extract.extract(Path("."), tmp_path)["networks"]] == ["networking"]
+
+
 def test_the_stack_reads_a_config_given_as_one_local(tmp_path: Path) -> None:
     (tmp_path / "main.tf").write_text(
         'locals {\n  net_state = { key = "networking/terraform.tfstate" }\n}\n'

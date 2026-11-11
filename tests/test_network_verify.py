@@ -242,13 +242,25 @@ def test_a_vpc_the_stack_creates_is_not_shared_even_citing_a_remote_fact() -> No
     assert "shared_from" not in _group_of(verified, "vpc")
 
 
+LOCAL_CITED = ("group shared: evidence cites a network this stack creates or looks up, but its nodes are placed in a network "
+               "of networking; cite the network the nodes run in")
+
+
 def test_a_vpc_whose_evidence_cites_a_local_network_is_not_shared() -> None:
     curated = _shared_vpc(vpc_parent="acct", cidrs=VPC["cidrs"])
     _group_of(curated, "shared")["evidence"] = [{"fact": VPC["id"]}]
     verified, report = _verify(curated)
     assert "shared_from" not in _group_of(verified, "shared")
-    assert ("group shared: evidence cites a network of this stack, but its nodes are placed in a network of networking; "
-            "cite the network the nodes run in") in report
+    assert LOCAL_CITED in report
+
+
+def test_a_vpc_whose_evidence_cites_a_looked_up_network_is_not_shared() -> None:
+    lookup = {**REMOTE, "id": "n99", "address": "data.aws_vpc.shared", "stack": None}
+    curated = _shared_vpc(vpc_parent="acct")
+    _group_of(curated, "shared")["evidence"] = [{"fact": "n99"}]
+    verified, report = _verify(curated, {**FACTS, "networks": [*FACTS["networks"], lookup]})
+    assert "shared_from" not in _group_of(verified, "shared")
+    assert LOCAL_CITED in report
 
 
 def test_a_cited_local_network_keeps_a_vpc_local_after_its_unsupported_cidrs_drop() -> None:
@@ -425,6 +437,9 @@ def test_described_mode_drops_a_curated_shared_from() -> None:
     ("Networking account", "terraform/state/networking", True),
     ("Network account", "networking/prod", True),
     ("Policies account", "policy", True),
+    ("Addresses account", "address", True),
+    ("Boxes", "box", True),
+    ("Databases account", "database", True),
     ("My app account", "my-app-west-1", False),
     ("My app west account", "my-app-west-1", True),
     ("Shared settings", "shared-setting", True),

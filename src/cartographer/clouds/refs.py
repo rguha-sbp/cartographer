@@ -112,7 +112,8 @@ def store(inst: Inst, kind: str, name: str) -> str:
     body, config = _remote_state(inst, kind, name)
     places = [body.get("workspace") if kind == "terraform_remote_state" else body.get("organization"),
               *(config.get(k) for k in ("organization", "bucket", "storage_account_name", "container_name"))]
-    return "/".join(v for v in map(inst.value, places) if isinstance(v, str))
+    found = [v for v in map(inst.value, places) if isinstance(v, str)]
+    return "/".join(found[1:] if kind == "terraform_remote_state" and found[:1] == ["default"] else found)
 
 
 def _remote_state(inst: Inst, kind: str, name: str) -> tuple[dict, dict]:
