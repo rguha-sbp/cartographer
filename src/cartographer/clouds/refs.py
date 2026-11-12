@@ -27,9 +27,12 @@ AGREE = {"azurerm_virtual_network": ("resource_group_name",),
          "azurerm_subnet": ("resource_group_name", "virtual_network_name")}
 IN_NETWORK = ("vpc_id", "vpc-id", "virtual_network_name")  # what names the network a subnet lookup is in
 NETWORK_LOOKUPS = ("aws_vpc", "azurerm_virtual_network")  # lookups that find a network, not a subnet
-# the arguments a reference reads through to what they are written as: `aws_subnet.a.vpc_id` is the subnet's VPC, and
-# `aws_vpc.main.tags.peer_vpc_id` is the value of a tag, never the VPC itself
-READ_THROUGH = ("vpc_id", "virtual_network_name", "tags", "tags_all")
+# the attributes a reference reads through to what they are written as: the tags of a resource or lookup are data
+# (`aws_vpc.main.tags.peer_vpc_id` is a tag value, never the VPC), and a resource's network argument names its network
+# (`aws_subnet.a.vpc_id` is the subnet's VPC)
+TAGS = ("tags", "tags_all")
+READ_THROUGH = ("vpc_id", "virtual_network_name", *TAGS)
+MAX_READS = 10_000  # distinct references one walk reads; only paths that fan out through functions at every level need more
 MAX_HOPS = 100  # locals, variables, outputs and lookups nested deeper only come from generated code; they read nothing
 MAX_PATH = 16  # longer attribute paths only come from a local or variable that reads itself
 SUFFIX = r"ids?|name|arn"  # the attributes that identify a resource rather than read a part of it
@@ -83,9 +86,14 @@ def token(heads: str, data: str) -> re.Pattern[str]:
     return re.compile(
         r"(?<![\w.\-])(?:(?P<remote>data\.(?P<kind>tfe_outputs|terraform_remote_state)\.(?P<state>[\w-]+)(?:\[(?P<index>[^\]]*)\])?"
         rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)(?P<outpath>{PATH})"
-        rf"|(?P<lookup>data\.(?P<ds_type>{data})\.(?P<ds>[\w-]+))(?:\[(?P<ds_index>[^\]]*)\])?)"
+        rf"|(?P<lookup>data\.(?P<ds_type>{data})\.(?P<ds>[\w-]+))(?:\[(?P<ds_index>[^\]]*)\])?(?P<dspath>{PATH}))"
         rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?P<path>{PATH}))"
     )
+
+
+@dataclass
+class _Budget:
+    left: int = MAX_READS
 
 
 @dataclass
@@ -97,10 +105,11 @@ class _Walk:
     seen: set = field(default_factory=set)
     active: set = field(default_factory=set)  # the variables, locals, module outputs and lookups being followed
     lookups: dict[tuple, tuple[tuple[Ref, ...], Ref | None] | None] = field(default_factory=dict)
+    budget: _Budget = field(default_factory=_Budget)  # shared by every `read`: a walk that fans out stops, never hangs
 
     def read(self, inst: Inst, value: Any) -> dict[Ref, None]:
-        """What `value` points at, with a fresh `seen` and the lookups this walk has already followed."""
-        return _follow(inst, value, (), _Walk(self.pattern, active=self.active, lookups=self.lookups))
+        """What `value` points at, with a fresh `seen` and the lookups and budget this walk shares."""
+        return _follow(inst, value, (), _Walk(self.pattern, active=self.active, lookups=self.lookups, budget=self.budget))
 
 
 def sources(inst: Inst, obj: Any, pattern: re.Pattern[str]) -> dict[Ref, None]:
@@ -114,17 +123,20 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
     text = obj if isinstance(obj, str) else str(obj)
     out: dict[Ref, None] = {}
     for m in walk.pattern.finditer(text):
-        own = m["path"] or m["outpath"] or ""
+        own = m["path"] or m["outpath"] or m["dspath"] or ""
         if m["head"] not in (None, "var", "local"):
             own = INSTANCE.sub("", own)  # `module.net[0].x`, `aws_subnet.a[0].vpc_id`: every instance has the same shape
         path = (*segments(own), *unread)  # `merge(local.a, local.b).vpc_id` reads `vpc_id` of each
-        if len(path) > MAX_PATH or (key := (id(inst), m[0], path)) in walk.seen:
+        if len(path) > MAX_PATH or (key := (id(inst), m[0], path)) in walk.seen or walk.budget.left <= 0:
             continue
         walk.seen.add(key)
+        walk.budget.left -= 1
         head, second = m["head"], m["second"]
         if m["kind"]:
             out[Ref(f"{inst.prefix}{m['remote']}", _render(m["out"], path),
                     state_of(inst, m["kind"], m["state"], m["index"]), _tier((m["out"], *path)))] = None
+        elif m["ds"] and path and path[0] in TAGS:
+            out |= _read_through(inst, inst.mod.data.get((m["ds_type"], m["ds"])), path, walk)
         elif m["ds"]:
             within, picked = _looked_up(inst, m["ds"], m["ds_type"], walk)
             out[picked or _lookup(inst, m, within)] = None
@@ -136,9 +148,19 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
                 walk.active.discard(hop)
         elif resource := inst.mod.resources.get((head, second)):
             if path and path[0] in READ_THROUGH:
-                out |= _follow(inst, norm_keys(resource.body).get(path[0], ""), path[1:], walk)
+                out |= _read_through(inst, resource, path, walk)
             else:
                 out[Ref(f"{inst.prefix}{head}.{second}")] = None
+    return out
+
+
+def _read_through(inst: Inst, block: Any, path: tuple[str | None, ...], walk: _Walk) -> dict[Ref, None]:
+    """What the argument `path[0]` of a resource or lookup block is written as, read along the rest of the path: only
+    its part of an object literal (`tags.peer_vpc_id` reads that one tag)."""
+    value = norm_keys(block.body).get(path[0], "") if block else ""
+    out: dict[Ref, None] = {}
+    for part, rest in _dig(value, path[1:]):
+        out |= _follow(inst, part, rest, walk)
     return out
 
 

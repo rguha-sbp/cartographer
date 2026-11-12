@@ -909,3 +909,35 @@ def test_settings_that_many_module_calls_agree_on_are_read_once_per_instance(tmp
     _counted(monkeypatch, tf_modules.Inst, "value", 1000)
     facts = tf_extract.extract(Path("."), tmp_path)
     assert [(n["name"], n["remote"]) for n in facts["networks"]] == [("vpc", True)]
+
+
+def test_a_lookup_by_one_tag_reads_only_that_tag(tmp_path: Path) -> None:
+    facts = _extract(tmp_path,
+        'resource "aws_vpc" "spoke" { cidr_block = "10.1.0.0/16" }\n'
+        'resource "aws_vpc" "hub" {\n  cidr_block = "10.0.0.0/16"\n'
+        '  tags = { Name = "hub", spoke_id = aws_vpc.spoke.id, peer_id = "vpc-0abc" }\n}\n'
+        'data "aws_vpc" "peer" { id = aws_vpc.hub.tags.peer_id }\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.peer.id }\n'
+        'data "aws_subnet" "peer_private" { vpc_id = aws_vpc.hub.tags.peer_id }\n'
+        'resource "aws_lambda_function" "f" {\n  vpc_config {\n    subnet_ids = [data.aws_subnet.peer_private.id]\n  }\n}\n')
+    assert _placed(facts) == {"aws_lambda_function.f": "data.aws_vpc.peer"}
+
+
+def test_a_tag_of_a_lookup_names_no_network(tmp_path: Path) -> None:
+    facts = _extract(tmp_path,
+        'data "aws_vpc" "hub" {\n  tags = { Name = "hub" }\n}\n'
+        'data "aws_subnet" "peer_private" { vpc_id = data.aws_vpc.hub.tags.peer_vpc_id }\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.hub.id }\n'
+        'resource "aws_lambda_function" "f" {\n  vpc_config {\n    subnet_ids = [data.aws_subnet.peer_private.id]\n  }\n}\n')
+    assert _placed(facts) == {}
+    assert "fits no network this stack knows" in _reason(facts, "aws_lambda_function.f")
+
+
+@pytest.mark.parametrize("level", ["[local.l{n}.a, local.l{n}.b, local.l{n}.c]", "merge(local.l{n}.a, local.l{n}.b, local.l{n}.c)"])
+def test_paths_that_fan_out_at_every_level_stop_at_the_read_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, level: str) -> None:
+    from cartographer.clouds import refs
+    _counted(monkeypatch, refs, "_follow", 3 * refs.MAX_READS)
+    chain = "".join(f"  l{i} = {level.format(n=i + 1)}\n" for i in range(20))
+    facts = _extract(tmp_path, f'locals {{\n{chain}  l20 = "x"\n}}\n'
+                     'resource "aws_security_group" "s" { vpc_id = local.l0.vpc_id }\n')
+    assert facts["networks"] == []

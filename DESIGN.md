@@ -259,9 +259,10 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     reads nothing more, and `Inst.value` keeps each result, so many reads stay linear. With the same unresolved
     `resource_group_name` text (`var.rg_name`) on both, an Azure lookup and the network it names agree; each side is
     first read through the resource arguments it names (`azurerm_resource_group.rg.name` is `"rg"`). A reference to a
-    resource's `tags` reads the tag value, never the resource (`refs.READ_THROUGH`), so a lookup by a tag of a local
-    network stays external. A chain of more than `refs.MAX_HOPS` (100) locals, variables, outputs and lookups reads
-    nothing more. A subnet lookup whose
+    resource's or lookup's `tags` reads only that tag's value as written in the block, never the block
+    (`refs.READ_THROUGH`), so a lookup by a tag of a local network stays external. A chain of more than
+    `refs.MAX_HOPS` (100) locals, variables, outputs and lookups, or a walk past `refs.MAX_READS` (10,000) distinct
+    references, reads nothing more. A subnet lookup whose
     `vpc_id`, `vpc-id` filter or `virtual_network_name` reads one network of this stack, a looked-up network or a
     remote network (`aws_vpc.main.id`, `aws_subnet.a[0].vpc_id`, `data.aws_vpc.shared.id`) is in it, and that network
     is a network fact even when nothing else names it; when these name no network this stack knows, the subnet is
