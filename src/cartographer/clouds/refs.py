@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from cartographer.clouds.hcl_scan import literals, member_keys
 from cartographer.clouds.remote_state import LITERAL_INDEX, State, remote_key, state_of
 from cartographer.tf_modules import bare, declared_provider
 from cartographer.tf_policies import norm_keys, unq
@@ -42,8 +43,6 @@ IDENTIFYING = re.compile(rf"(?:(?:vpc|vnet|virtual_network|network)_)?(?:{SUFFIX
 RESOURCE_ARG = re.compile(r"(?!(?:var|local|module|data)\.)([\w-]+)\.([\w-]+)\.([\w-]+)")  # `type.name.argument`
 INDEX = re.compile(r"\[[^\]]*\]")
 PART = re.compile(r"\[[^\]]*\]|[^.\[]+")  # the words and indexes of a `_render`ed name
-MEMBER = re.compile(r'(?:^|[{,\s])([\w-]+|"[^"]*")\s*=\s*$')  # `key = ` before a value in an object inside a function
-INTERPOLATION = re.compile(r"\$\{[^}]*\}")
 TIER_WORD = re.compile(rf"(?<![a-z])(?:{'|'.join(TIERS)})")  # a tier word that starts a word: never `republic`
 
 if TYPE_CHECKING:
@@ -130,15 +129,14 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
     """`sources`, where `unread` is the attribute path a reference that is all of `obj` still has to read."""
     text = obj if isinstance(obj, str) else str(obj)
     out: dict[Ref, None] = {}
-    for m in walk.pattern.finditer(text):
+    matches = list(walk.pattern.finditer(text))
+    keys = member_keys(text, {m.start() for m in matches}) if unread else {}
+    for m in matches:
         own = m["path"] or m["outpath"] or m["dspath"] or ""
         if m["head"] not in (None, "var", "local"):
             own = INSTANCE.sub("", own)  # `module.net[0].x`, `aws_subnet.a[0].vpc_id`: every instance has the same shape
-        rest = unread
-        if unread and (member := MEMBER.search(text[:m.start()])):  # `merge({vpc_id = x, subnet_ids = y}).vpc_id`
-            if unread[0] is not None and unread[0] != unq(member[1]):
-                continue  # reads `x` only
-            rest = unread[1:]
+        if (rest := _under(keys.get(m.start(), ()), unread)) is None:
+            continue  # `merge({vpc_id = x, subnet_ids = y}).vpc_id` reads `x` only
         path = (*segments(own), *rest)  # `merge(local.a, local.b).vpc_id` reads `vpc_id` of each
         if len(path) > MAX_PATH or (key := (id(inst), m[0], path)) in walk.seen or walk.budget.left <= 0:
             continue
@@ -167,6 +165,16 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
             else:
                 out[Ref(f"{inst.prefix}{head}.{second}")] = None
     return out
+
+
+def _under(keys: tuple[str, ...], unread: tuple[str | None, ...]) -> tuple[str | None, ...] | None:
+    """What of `unread` a reference that is the member value at `keys` still reads, or None when the path names
+    another member. A path shorter than the keys reads the whole object: no key is left to compare."""
+    for key in keys[:len(unread)]:
+        if unread[0] is not None and unread[0] != key:
+            return None
+        unread = unread[1:]
+    return unread
 
 
 def _read_through(inst: Inst, block: Any, path: tuple[str | None, ...], walk: _Walk) -> dict[Ref, None]:
@@ -453,7 +461,17 @@ def derive(name: str) -> str:
 
 
 def tier_in(name: str) -> str | None:
-    """The tier word nearest the end of a name, outside interpolations: a subnet's own tier follows its network's
-    (`private_vpc_public_subnet` is public), and `private-${var.public_zone}` is private."""
-    words = TIER_WORD.findall(INTERPOLATION.sub("", name).lower())
+    """The tier word nearest the end of a name: a subnet's own tier follows its network's (`private_vpc_public_subnet`
+    is public)."""
+    words = TIER_WORD.findall(name.lower())
     return words[-1] if words else None
+
+
+def named_tier(body: dict) -> str | None:
+    """The tier the literal text of a local subnet's `name` and `Name` tag gives: the tier of each string literal,
+    outside interpolations (`"private-${var.public_zone}"` is private, `format("%s-public", var.p)` is public). Literals
+    that give different tiers give none: `var.private ? "private" : "public"` can be either."""
+    tags = body.get("tags")
+    names = [body.get("name", ""), *(v for k, v in tags.items() if unq(k) == "Name")] if isinstance(tags, dict) else [body.get("name", "")]
+    tiers = {tier for name in names for part in literals(str(name)) if (tier := tier_in(part))}
+    return tiers.pop() if len(tiers) == 1 else None

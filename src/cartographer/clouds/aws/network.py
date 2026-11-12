@@ -8,15 +8,14 @@ from cartographer.clouds.refs import (
     CIDR,
     Ref,
     collect_remote,
+    named_tier,
     network_fact,
     place_remote,
     placement_facts,
     sources,
-    tier_in,
     token,
     unplaced,
 )
-from cartographer.tf_policies import unq
 from cartographer.tf_values import find
 
 if TYPE_CHECKING:
@@ -33,9 +32,7 @@ def _local_tier(res: Res) -> tuple[str, str]:
     body = res.block.body
     if str(body.get("map_public_ip_on_launch")).strip('"').lower() == "true":
         return "public", "map_public_ip_on_launch"
-    tags = body.get("tags")
-    tagged = [v for k, v in tags.items() if unq(k) == "Name"] if isinstance(tags, dict) else []
-    named = tier_in(" ".join(map(str, [body.get("name", ""), *tagged])))
+    named = named_tier(body)
     return (named, "name") if named else ("private", "default")
 
 

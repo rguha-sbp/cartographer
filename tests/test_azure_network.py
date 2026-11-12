@@ -107,6 +107,7 @@ def test_remote_networks_from_data_sources_and_outputs_have_names_and_no_cidrs()
 def test_interpolated_subnet_names_still_inform_the_tier():
     assert tier_of("interpolated_tier_names", "azurerm_private_endpoint.pa") == ("public", "azurerm_subnet.a name")
     assert tier_of("interpolated_tier_names", "azurerm_private_endpoint.pb") == ("isolated", "azurerm_subnet.b name")
+    assert tier_of("interpolated_tier_names", "azurerm_private_endpoint.pc") == ("public", "azurerm_subnet.c name")  # format()
 
 
 def test_a_remote_network_named_by_a_name_output_drops_the_name_suffix_and_is_placed():

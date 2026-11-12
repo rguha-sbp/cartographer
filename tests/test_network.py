@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import pytest
@@ -1011,6 +1012,15 @@ TRS = 'data "terraform_remote_state" "{0}" {{\n  backend = "s3"\n  config = {{ b
      "local.net.private_subnet_ids[0]", "vpc"),
     ("merge(data.terraform_remote_state.net.outputs.vpcs, { dr = data.terraform_remote_state.dr.outputs.vpc })",
      "local.net.blue.private_subnet_ids[0]", "vpcs.blue"),
+    (("merge({ vpc_id = try(var.overrides.vpc_id, data.terraform_remote_state.net.outputs.vpc_id), "
+      "private_subnet_ids = try(var.overrides.subnets, data.terraform_remote_state.net.outputs.private_subnet_ids) }, var.overrides)"),
+     "local.net.private_subnet_ids[0]", "vpc"),
+    (("merge({ private_subnet_ids = var.overrides == {} ? data.terraform_remote_state.net.outputs.private_subnet_ids "
+      ": data.terraform_remote_state.dr.outputs.private_subnet_ids, vpc_id = data.terraform_remote_state.net.outputs.vpc_id }, {})"),
+     "local.net.private_subnet_ids[0]", "vpc"),
+    (("merge({ a = { vpc_id = data.terraform_remote_state.net.outputs.vpc_id, "
+      "private_subnet_ids = data.terraform_remote_state.net.outputs.private_subnet_ids } }, {})"),
+     "local.net.a.private_subnet_ids[0]", "vpc"),
 ])
 def test_a_path_reads_only_the_member_of_an_object_inside_a_function_it_names(tmp_path: Path, local: str, subnet: str, network: str) -> None:
     facts = _extract(tmp_path, TRS.format("net") + TRS.format("dr") +
@@ -1021,14 +1031,27 @@ def test_a_path_reads_only_the_member_of_an_object_inside_a_function_it_names(tm
     assert [n["name"] for n in facts["networks"]] == [network]
 
 
+def test_a_path_through_a_large_object_inside_a_function_reads_in_linear_time(tmp_path: Path) -> None:
+    members = ", ".join(f"k{i} = data.terraform_remote_state.net.outputs.vpcs.v{i}" for i in range(3000))
+    started = time.monotonic()
+    facts = _extract(tmp_path, TRS.format("net") + f"locals {{\n  net = merge({{ {members} }}, {{}})\n}}\n"
+        'resource "aws_security_group" "g" { vpc_id = local.net.k5.id }\n'
+        'resource "aws_instance" "i" { subnet_id = local.net.k5.private_subnet_ids[0] }\n')
+    assert time.monotonic() - started < 3  # one scan of the text, not one per reference: 9 s before
+    assert [n["name"] for n in facts["networks"]] == ["vpcs.v5"]
+
+
 @pytest.mark.parametrize(("name", "tier"), [
     ('"private-${var.public_zone}"', "private"),
     ('"${var.private_prefix}-public"', "public"),
     ('var.is_private ? "private" : "public"', "private"),  # no literal name: the default
     ('"app-isolated-republic"', "isolated"),
+    ('format("%s-public-%s", var.p, "a")', "public"),
+    ('join("-", [var.p, "public"])', "public"),
+    ('"private-${lookup({ a = "x" }, var.public)}"', "private"),
 ])
 def test_a_local_subnet_tier_comes_from_the_literal_words_of_its_name(tmp_path: Path, name: str, tier: str) -> None:
-    facts = _extract(tmp_path,
+    facts = _extract(tmp_path, 'variable "p" {}\nvariable "public" {}\n'
         'resource "aws_vpc" "v" { cidr_block = "10.0.0.0/16" }\n'
         f'resource "aws_subnet" "a" {{\n  vpc_id = aws_vpc.v.id\n  tags = {{ Name = {name} }}\n}}\n'
         'resource "aws_instance" "i" { subnet_id = aws_subnet.a.id }\n')

@@ -13,11 +13,11 @@ from cartographer.clouds.refs import (
     Ref,
     blocks,
     collect_remote,
+    named_tier,
     network_fact,
     place_remote,
     placement_facts,
     sources,
-    tier_in,
     token,
     unplaced,
 )
@@ -197,9 +197,7 @@ class Network:
             return "private", f"{s.address} {self.outbound[s.address]}"
         if self.literal(s.owner, s.body.get("default_outbound_access_enabled")) == "false":
             return "isolated", f"{s.address} default_outbound_access_enabled = false"
-        tags = s.body.get("tags")
-        tagged = [v for k, v in tags.items() if unq(k) == "Name"] if isinstance(tags, dict) else []
-        named = tier_in(" ".join(unq(x) for x in (s.body.get("name", ""), *tagged)))
+        named = named_tier(s.body)
         return (named, f"{s.address} name") if named else ("private", f"{s.address} default")
 
     def placements(self) -> list[dict]:
