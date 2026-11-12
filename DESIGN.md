@@ -246,10 +246,10 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     (`merge(local.a, local.b).vpc_id`) reads from each reference in it. A resource's `vpc_id` or
     `virtual_network_name` (`aws_subnet.a.vpc_id`) reads what that argument reads. After a remote output it is named `[*]`, so every key of
     `vpcs[each.key]` reads one network `vpcs[*]`. The index of a module call (`module.net[0]`) is skipped: every
-    instance has the same outputs. A remote subnet's tier comes from the end of its path: a key in brackets after
-    the last name when that key names a tier (`vpc_subnets["private"]`), else the last name
+    instance has the same outputs. A remote subnet's tier comes from the end of its path: the key in brackets it
+    ends with (before any index) when that key names a tier (`vpc_subnets["private"]`), else the last name
     (`private_subnet_ids["eu-west-1a"]` and `vpcs["private-net"].public_subnet_ids` are private and public); a key
-    or object name before the last name never sets the tier, and an index or identifier attribute (`id`, `ids`,
+    or object name before the last name never sets the tier (`vpcs["private-net"]["subnet_ids"]` gives none), and an index or identifier attribute (`id`, `ids`,
     `arn`, `name`) is skipped. `refs.Key` keeps a bracketed key apart from an attribute for this.
   - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module and a
     literal index (`data.aws_vpc.x[0]` is network `x[0]`). A lookup is the resource of this stack it picks

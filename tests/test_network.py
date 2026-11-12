@@ -473,6 +473,8 @@ def test_a_quoted_local_keeps_the_attribute_path(tmp_path: Path) -> None:
     ("private_vpc.id", "private_vpc.subnet_ids", None),
     ("shared_vpc_id", "shared_vpc_private_subnet.id", "private"),
     ("shared_vpc_id", 'shared_vpc_subnets["private"].id', "private"),
+    ('vpcs["private-net"].vpc_id', 'vpcs["private-net"]["subnet_ids"][0]', None),
+    ('vpcs["private-net"].vpc_id', 'vpcs["private-net"].subnet_ids["eu-west-1a"]', None),
 ])
 def test_only_the_last_name_of_a_remote_path_sets_the_tier(tmp_path: Path, vpc: str, path: str, tier: str | None) -> None:
     (tmp_path / "main.tf").write_text(

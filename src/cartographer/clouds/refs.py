@@ -284,15 +284,13 @@ def _lookup(inst: Inst, m: re.Match[str], within: tuple[Ref, ...]) -> Ref:
 
 
 def _tier(path: tuple[str | None, ...]) -> str | None:
-    """The tier the end of a path gives: a key after the last name when it names a tier (`subnets["private"]`), else
-    that last name (`private_subnet_ids["eu-west-1a"]`). A key or name before the last name never sets the tier; an
-    index and an identifier attribute (`.id`) are skipped."""
-    for p in reversed(path):
-        if p is None or p.isdecimal() or IDENTIFIER.fullmatch(p):
-            continue
-        if (tier := tier_in(p)) or not isinstance(p, Key):
-            return tier
-    return None
+    """The tier the end of a path gives: its last key in brackets when that key names a tier (`subnets["private"]`),
+    else its last name (`private_subnet_ids["eu-west-1a"]`). No other key or name sets the tier (`vpcs["private-net"]
+    ["subnet_ids"]` gives none); an index and an identifier attribute (`.id`) are skipped."""
+    words = [p for p in path if p is not None and not p.isdecimal() and not IDENTIFIER.fullmatch(p)]
+    if words and isinstance(words[-1], Key) and (tier := tier_in(words[-1])):
+        return tier
+    return tier_in(next((p for p in reversed(words) if not isinstance(p, Key)), ""))
 
 
 def _dig(value: Any, path: tuple[str | None, ...]) -> list[tuple[Any, tuple[str | None, ...]]]:
