@@ -3,11 +3,13 @@ Only `.tf` text is read: a remote state is compared by what its data block says,
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from collections.abc import Iterator
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from cartographer.clouds.remote_state import LITERAL_INDEX, State, remote_key, state_of
 from cartographer.tf_policies import norm_keys, unq
+from cartographer.tf_values import find
 
 TIERS = ("isolated", "private", "public")
 SUBNET_WORDS = (*TIERS, "subnet", "subnets")  # the words of a name that say it is a subnet
@@ -42,7 +44,7 @@ class Ref:
     name: str | None = None  # the output or lookup and the path it reads: `vpcs.blue.id`, `vpc_ids[0]`, `nets[*]`
     state: State | str | None = None
     tier: str | None = None  # the subnet tier the last name in the path gives (`vpcs["private-net"].public_subnet_ids`: public)
-    within: tuple[str, ...] = ()  # a lookup's: the keys of what its selectors read (`aws_vpc.main`, a looked-up VPC)
+    within: tuple[Ref, ...] = ()  # a lookup's: what its selectors read (`aws_vpc.main`, a looked-up VPC)
     looks_up: str | None = None  # a lookup's data source type: `aws_vpc`, `aws_subnets`
 
     @property
@@ -76,68 +78,94 @@ def token(heads: str, data: str) -> re.Pattern[str]:
     )
 
 
+@dataclass
+class _Walk:
+    """One `sources` call: the pattern it follows, the (instance, reference, path) it has read, and what each lookup
+    reads (`_looked_up`), shared so a lookup that many paths reach is followed once."""
+
+    pattern: re.Pattern[str]
+    seen: set = field(default_factory=set)
+    lookups: dict[tuple, tuple[list[Ref], list[Ref]] | None] = field(default_factory=dict)
+
+
 def sources(inst: Inst, obj: Any, pattern: re.Pattern[str]) -> dict[Ref, None]:
     """Resources and remote references `obj` points at, followed through locals, module variables and outputs. An
     attribute path (`var.base.networking.vpc_id`) reads only its part of an object literal, across every hop."""
-    return _follow(inst, obj, (), pattern, set())
+    return _follow(inst, obj, (), _Walk(pattern))
 
 
-def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], pattern: re.Pattern[str], seen: set) -> dict[Ref, None]:
+def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -> dict[Ref, None]:
     """`sources`, where `unread` is the attribute path a reference that is all of `obj` still has to read."""
     text = obj if isinstance(obj, str) else str(obj)
     out: dict[Ref, None] = {}
-    for m in pattern.finditer(text):
+    for m in walk.pattern.finditer(text):
         own = m["path"] or m["outpath"] or ""
         if m["head"] == "module":
             own = INSTANCE.sub("", own)  # `module.net[0].x`: every instance of a module has the same outputs
         path = (*segments(own), *unread)  # `merge(local.a, local.b).vpc_id` reads `vpc_id` of each
-        if len(path) > MAX_PATH or (key := (id(inst), m[0], path)) in seen:
+        if len(path) > MAX_PATH or (key := (id(inst), m[0], path)) in walk.seen:
             continue
-        seen.add(key)
+        walk.seen.add(key)
         head, second = m["head"], m["second"]
         if m["kind"]:
             out[Ref(f"{inst.prefix}{m['remote']}", _render(m["out"], path),
                     state_of(inst, m["kind"], m["state"], m["index"]), _tier((m["out"], *path)))] = None
         elif m["ds"]:
-            found = _looked_up(inst, m["ds"], m["ds_type"], pattern, seen)
-            same = {r: None for r in found if not r.remote and r.address.split(".")[-2] == m["ds_type"].removesuffix("s")}
-            out |= same or {_lookup(inst, m, tuple(r.key() for r in found)): None}
+            found, whole = _looked_up(inst, m["ds"], m["ds_type"], walk)
+            same = {r: None for r in whole if not r.remote and r.address.split(".")[-2] == m["ds_type"].removesuffix("s")}
+            out |= same or {_lookup(inst, m, tuple(found)): None}
         elif head == "var" and inst.parent is not None:
             for args in inst.args:
                 if second in args:
-                    out |= _follow_parts(inst.parent, _dig(args[second], path), pattern, seen)
+                    out |= _follow_parts(inst.parent, _dig(args[second], path), walk)
         elif head == "local" and second in inst.mod.locals:
-            out |= _follow_parts(inst, _dig(inst.mod.locals[second], path), pattern, seen)
+            out |= _follow_parts(inst, _dig(inst.mod.locals[second], path), walk)
         elif head == "module" and second in inst.children and path and path[0] in inst.children[second].mod.outputs:
             child = inst.children[second]
-            out |= _follow_parts(child, _dig(child.mod.outputs[path[0]], path[1:]), pattern, seen)
-        elif (head, second) in inst.mod.resources:
-            body = norm_keys(inst.mod.resources[(head, second)].body)
-            if path and path[0] in NETWORK_ARGS and path[0] in body:  # `aws_subnet.a.vpc_id` is the subnet's VPC
-                out |= _follow(inst, body[path[0]], path[1:], pattern, seen)
+            out |= _follow_parts(child, _dig(child.mod.outputs[path[0]], path[1:]), walk)
+        elif resource := inst.mod.resources.get((head, second)):
+            if path and path[0] in NETWORK_ARGS and path[0] in (body := norm_keys(resource.body)):
+                out |= _follow(inst, body[path[0]], path[1:], walk)  # `aws_subnet.a.vpc_id` is the subnet's VPC
             else:
                 out[Ref(f"{inst.prefix}{head}.{second}")] = None
     return out
 
 
-def _follow_parts(inst: Inst, parts: list[tuple[Any, tuple[str | None, ...]]], pattern: re.Pattern[str],
-                  seen: set) -> dict[Ref, None]:
-    return {ref: None for value, unread in parts for ref in _follow(inst, value, unread, pattern, seen)}
+def _follow_parts(inst: Inst, parts: list[tuple[Any, tuple[str | None, ...]]], walk: _Walk) -> dict[Ref, None]:
+    return {ref: None for value, unread in parts for ref in _follow(inst, value, unread, walk)}
 
 
-def _looked_up(inst: Inst, name: str, ds_type: str, pattern: re.Pattern[str], seen: set) -> list[Ref]:
-    """What the lookup `data.<ds_type>.<name>` reads through its `SELECTORS` (`id = aws_vpc.main.id`). A resource of
-    this stack of type `ds_type` (`aws_subnet` for `aws_subnets`) is what the lookup finds, so it is no external
-    network; anything else holds what it finds (the VPC of a subnet). Each lookup follows its selectors with its own
-    copy of `seen`, so a second read of it finds the same references."""
-    block, visit = inst.mod.data.get((ds_type, name)), (id(inst), ds_type, name)
-    if block is None or visit in seen:
-        return []
-    selectors = {k: v for k, v in norm_keys(block.body).items() if k in SELECTORS}
-    return list(_follow(inst, selectors, (), pattern, {*seen, visit}))
+def _looked_up(inst: Inst, name: str, ds_type: str, walk: _Walk) -> tuple[list[Ref], list[Ref]]:
+    """What the lookup `data.<ds_type>.<name>` reads through its `SELECTORS`, and what a selector that is one whole
+    reference reads (`id = aws_vpc.main.id`, not `"${aws_vpc.main.tags.Name}-peer"`): only such a selector can find a
+    resource of this stack itself. Each lookup is followed once per walk, with its own `seen`, so every path that reaches
+    it finds the same references; a lookup that reads itself reads nothing the second time."""
+    visit = (id(inst), ds_type, name)
+    if visit not in walk.lookups:
+        walk.lookups[visit] = None
+        block = inst.mod.data.get((ds_type, name))
+        selectors = {k: v for k, v in norm_keys(block.body).items() if k in SELECTORS} if block else {}
+
+        def read(value: Any) -> list[Ref]:
+            return list(_follow(inst, value, (), _Walk(walk.pattern, lookups=walk.lookups)))
+
+        walk.lookups[visit] = (read(selectors), read(list(_whole(selectors, walk.pattern))))
+    return walk.lookups[visit] or ([], [])
 
 
-def _lookup(inst: Inst, m: re.Match[str], within: tuple[str, ...]) -> Ref:
+def _whole(value: Any, pattern: re.Pattern[str]) -> Iterator[str]:
+    """The strings in `value` that are one reference and nothing else: `${aws_vpc.main.id}`, `"${local.vpc_id}"`."""
+    if isinstance(value, (dict, list)):
+        for v in value.values() if isinstance(value, dict) else value:
+            yield from _whole(v, pattern)
+        return
+    expr = unq(value)
+    expr = expr[2:-1] if expr.startswith("${") and expr.endswith("}") and expr.count("${") == 1 else expr
+    if (m := pattern.match(expr)) and re.fullmatch(PATH, expr[m.end():]):
+        yield expr
+
+
+def _lookup(inst: Inst, m: re.Match[str], within: tuple[Ref, ...]) -> Ref:
     """What a lookup that selects no resource of its own type in this stack reads: an external network, one for
     each literal index of a `count` or `for_each` lookup, or a subnet `within` the resources its selectors read."""
     index = LITERAL_INDEX.fullmatch(m["ds_index"] or "")
@@ -183,20 +211,40 @@ def add_remote(networks: dict[str, dict], ref: Ref, res: Res) -> None:
     networks.setdefault(ref.key(), network_fact(network_name(ref.name or ""), [], ref, res))
 
 
-def place_remote(networks: dict[str, dict], ref: Ref, ties: dict[str, str], address: str) -> tuple[str, str, str] | None:
+def place_remote(networks: dict[str, dict], ref: Ref, why: dict[str, str], address: str) -> tuple[str, str, str] | None:
     """(network key, tier, what decided the tier) for a subnet another stack or a lookup gives to the resource at
-    `address`, None when either is unknown. When two networks fit equally well, `ties` gets why for `address`.
-    A lookup `within` a network this stack knows is in that network; otherwise `_candidates` rank the networks."""
-    if not ref.tier:
-        return None
+    `address`. A lookup `within` a network this stack knows is in that network; otherwise `_candidates` rank the
+    networks. When no network fits, two fit equally well, or the subnet name gives no tier, the result is None and
+    `why` gets the reason for `address`."""
     via = ref.name or ""
-    candidates = {key: () for key in ref.within if key in networks} if ref.within else _candidates(networks, ref)
+    candidates = {k: () for r in ref.within if (k := r.key()) in networks} if ref.within else _candidates(networks, ref)
     ranked = sorted(candidates, key=candidates.__getitem__, reverse=True)
-    if len(ranked) > 1 and candidates[ranked[0]] == candidates[ranked[1]]:
-        ties.setdefault(address, f"{via} fits networks {' and '.join(sorted(networks[k]['address'] for k in ranked[:2]))} "
-                                 "equally well")
-        return None
-    return (ranked[0], ref.tier, via) if ranked else None
+    if not ranked:
+        why.setdefault(address, f"{via} fits no network this stack knows")
+    elif len(ranked) > 1 and candidates[ranked[0]] == candidates[ranked[1]]:
+        why.setdefault(address, f"{via} fits networks {' and '.join(sorted(networks[k]['address'] for k in ranked[:2]))} "
+                                "equally well")
+    elif not ref.tier:
+        why.setdefault(address, f"{via} is in {networks[ranked[0]]['address']}, its name gives no subnet tier")
+    else:
+        return ranked[0], ref.tier, via
+    return None
+
+
+def collect_remote(networks: dict[str, dict], resources: list[Res], network_key: re.Pattern[str],
+                   subnet_key: re.Pattern[str], pattern: re.Pattern[str]) -> None:
+    """Record the remote networks the resources name: in a network argument (`vpc_id`), or as what a subnet lookup is
+    in (`vpc-id = data.aws_vpc.shared.id`)."""
+    for r in resources:
+        for value in find(r.block.body, network_key):
+            for ref in sources(r.inst, value, pattern):
+                if ref.remote:
+                    add_remote(networks, ref, r)
+        for value in find(r.block.body, subnet_key):
+            for ref in sources(r.inst, value, pattern):
+                for net in ref.within:
+                    if net.remote:
+                        add_remote(networks, net, r)
 
 
 def _candidates(networks: dict[str, dict], ref: Ref) -> dict[str, tuple]:
@@ -256,10 +304,10 @@ def placement_facts(found: dict[tuple[str, str, str], tuple[str, Res]]) -> list[
             for (address, network, tier), (via, r) in sorted(found.items())]
 
 
-def unplaced(ties: dict[str, str], placements: list[dict]) -> dict[str, str]:
-    """The ties of resources that no placement fact places: those resources are marked, with why."""
+def unplaced(why: dict[str, str], placements: list[dict]) -> dict[str, str]:
+    """Why each resource that no placement fact places has a subnet that could not be placed: it is marked."""
     placed = {p["resource"] for p in placements}
-    return {address: why for address, why in ties.items() if address not in placed}
+    return {address: reason for address, reason in why.items() if address not in placed}
 
 
 def blocks(value: Any) -> list[dict]:

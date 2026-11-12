@@ -17,6 +17,7 @@ from cartographer.verify_shared import (
     cloud_warnings,
     code_hit,
     declared_icon,
+    empty_notes,
     fix_groups,
     isolated_ids,
     needs_attention,
@@ -169,6 +170,7 @@ def verify(facts: dict, curated: dict, repo_root: Path) -> tuple[dict, str]:
     fix_groups(out, notes)
     warnings += cloud_warnings(out)
     check_network(out, facts, facts_by_id, repo_root, notes)
+    notes += empty_notes(out)
     out["assumptions"], bad_assumptions = check_assumptions(curated, set(tf_of), kept_edges)
     covered = {frozenset((e["src"], e["dst"])) for e in kept_edges}
     unshown = _unshown(facts, kept_nodes, covered)

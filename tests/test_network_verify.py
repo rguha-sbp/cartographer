@@ -5,7 +5,7 @@ import pytest
 
 from cartographer import tf_extract, tf_verify, verify_description
 from cartographer.curated_format import FRAME_KINDS
-from cartographer.verify_shared import cloud_warnings
+from cartographer.verify_shared import cloud_warnings, group_claims
 
 REPO = Path(__file__).parent / "fixtures" / "network"
 FACTS = tf_extract.extract(Path("infra"), REPO)
@@ -432,3 +432,22 @@ def test_networks_in_a_parent_loop_end_up_at_the_top_level() -> None:
     fix_network_groups({"groups": alone}, [])  # its own parent: no other network holds it, and verify ends
     assert groups[0]["parent"] is None
     assert alone[0]["parent"] == "c"
+
+
+def test_the_empty_group_notes_follow_the_moves() -> None:
+    _, emptied = _verify(_boxes([_node("vm", LOCAL_VM, "shared")], _node("fn", SHARED_FN, "vpc")))
+    assert "group shared: no nodes" not in emptied  # fn moved in as vm moved out
+    _, moved_out = _verify(_boxes([_node("vm", LOCAL_VM, "shared")]))
+    assert "group shared: no nodes, the layout drops it" in moved_out
+
+
+@pytest.mark.parametrize("change", ["nest", "external"])
+def test_a_regrouped_or_unmarked_network_needs_attention(change: str) -> None:
+    curated = _boxes([_node("fn", SHARED_FN, "shared")])
+    shared = _group_of(curated, "shared")
+    if change == "nest":
+        shared["parent"] = "vpc"
+    else:
+        _group_of(curated, "vpc")["external"] = True
+    verified, _ = _verify(copy.deepcopy(curated))
+    assert not group_claims(curated) <= group_claims(verified)  # so needs_attention and --strict see the change

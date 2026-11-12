@@ -251,18 +251,23 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     a trailing index or identifier attribute (`id`, `ids`, `arn`, `name`) is skipped.
   - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module and a
     literal index (`data.aws_vpc.x[0]` is network `x[0]`). A lookup whose `id`, `name`, `filter`, `tags`, `vpc_id` or
-    `virtual_network_name` reads a network this stack creates is that local network; `depends_on`,
-    `resource_group_name` and other arguments do not select. A subnet lookup whose selectors read one network of this
+    `virtual_network_name` is one whole reference to a network this stack creates (`id = aws_vpc.main.id`) is that
+    local network; a selector that builds a value from it (`"${aws_vpc.main.tags.Name}-peer"`) keeps the lookup
+    external, and `depends_on`, `resource_group_name` and other arguments do not select. Each lookup is followed once
+    per reference walk. A subnet lookup whose selectors read one network of this
     stack, a looked-up network or a remote network (`vpc_id = aws_vpc.main.id`, `aws_subnet.a.vpc_id`,
-    `data.aws_vpc.shared.id`) is in it. An attribute of a subnet lookup
+    `data.aws_vpc.shared.id`) is in it, and that network is a network fact even when nothing else names it. An attribute of a subnet lookup
     (`data.aws_subnet.x.vpc_id`) is no network.
   - A remote subnet output places a resource in a remote network whose name parts without indexes start the
     subnet's, and whose indexes are the subnet's or none. The last network part equals the subnet's part or is the
     first words of it when the other words are about subnets (`shared-vpc` for `shared_vpc_private_subnet_ids[0]`,
     `vpc` for `vpc_subnets["private"]`, but `vpcs.blue` never for `vpcs["blue-east"].private_subnet_ids`). Order: one of the same state first, then one with the subnet's indexes, then the longest name, then
     for a lookup one of the same module. A subnet name that names no network (`private_subnet_ids`) fits every network
-    of its state with fitting indexes. Two networks that fit equally well give no placement, and the resource is marked with why.
-- The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.
+    of its state with fitting indexes. A remote subnet gives no placement, and the resource is marked with why, when
+    no network fits, when two fit equally well, or when its name gives no tier.
+- The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything, a node
+  has no edge, or verify changed a group claim: cidrs, a subnet tier, a group parent, an `external` marker or a node
+  inside a network. The empty group notes come after verify has moved the nodes.
 
 ## tf_layout.py (stage 4)
 

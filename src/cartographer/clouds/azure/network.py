@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any
 from cartographer.clouds.refs import (
     CIDR,
     Ref,
-    add_remote,
     blocks,
+    collect_remote,
     network_fact,
     place_remote,
     placement_facts,
@@ -59,7 +59,7 @@ class Network:
         self.public: dict[str, str] = {}
         self.outbound: dict[str, str] = {}
         self.ambiguous: dict[str, str] = {}  # resource -> why a subnet reference could not be placed
-        self.ties: dict[str, str] = {}  # resource -> why its remote subnet fits two networks equally well
+        self.unplaced: dict[str, str] = {}  # resource -> why a remote subnet of it is not placed
 
     def refs(self, inst: Inst, obj: Any) -> dict[Ref, None]:
         return sources(inst, obj, TOKEN)
@@ -83,11 +83,7 @@ class Network:
         for r in self.ex.res:
             if r.type == "azurerm_virtual_network":
                 self.nets[r.address] = network_fact(r.address.rsplit(".", 1)[1], self.cidrs(r), Ref(r.address), r)
-        for r in self.ex.res:
-            for value in find(r.block.body, NETWORK_KEY):
-                for ref in self.refs(r.inst, value):
-                    if ref.remote:
-                        add_remote(self.nets, ref, r)
+        collect_remote(self.nets, self.ex.res, NETWORK_KEY, SUBNET_KEY, TOKEN)
 
     def collect_subnets(self) -> None:
         for r in self.ex.res:
@@ -214,7 +210,7 @@ class Network:
                     found.setdefault((r.address, s.network, tier), (via, r))
             for value in find(r.block.body, SUBNET_KEY):
                 for ref in self.refs(r.inst, value):
-                    if ref.remote and (placed := place_remote(self.nets, ref, self.ties, r.address)):
+                    if ref.remote and (placed := place_remote(self.nets, ref, self.unplaced, r.address)):
                         found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
         return placement_facts(found)
 
@@ -226,4 +222,4 @@ def network_facts(ex: Extractor) -> dict:
     net.collect_evidence()
     placements = net.placements()
     return {"networks": dict(sorted(net.nets.items())), "placements": placements,
-            "unplaced": net.ambiguous | unplaced(net.ties, placements)}
+            "unplaced": net.ambiguous | unplaced(net.unplaced, placements)}

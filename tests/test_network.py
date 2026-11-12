@@ -694,3 +694,74 @@ def test_a_path_after_a_function_reads_each_reference_in_it(tmp_path: Path) -> N
         '    peer_vpc_id = data.tfe_outputs.net.values.db_vpc_id\n  }\n  cfg = merge(local.a, {})\n}\n'
         'resource "aws_security_group" "s" { vpc_id = local.cfg.vpc_id }\n')
     assert [n["name"] for n in facts["networks"]] == ["app-vpc"]
+
+
+PEER_BY_NAME = {
+    "aws": ('resource "aws_vpc" "main" {\n  cidr_block = "10.0.0.0/16"\n  tags = { Name = "core" }\n}\n'
+            'data "aws_vpc" "peer" {\n  filter {\n    name = "tag:Name"\n'
+            '    values = ["${aws_vpc.main.tags.Name}-peer"]\n  }\n}\n'
+            'data "aws_subnets" "peer_private" {\n  filter {\n    name = "vpc-id"\n    values = [data.aws_vpc.peer.id]\n  }\n}\n'
+            'resource "aws_lambda_function" "fn" {\n  vpc_config { subnet_ids = data.aws_subnets.peer_private.ids }\n}\n'),
+    "azure": ('resource "azurerm_virtual_network" "hub" {\n  name = "hub"\n  address_space = ["10.0.0.0/16"]\n}\n'
+              'data "azurerm_virtual_network" "spoke" { name = "${azurerm_virtual_network.hub.name}-spoke" }\n'
+              'data "azurerm_subnet" "spoke_private" {\n  name = "private"\n'
+              '  virtual_network_name = data.azurerm_virtual_network.spoke.name\n}\n'
+              'resource "azurerm_private_endpoint" "fn" { subnet_id = data.azurerm_subnet.spoke_private.id }\n'),
+}
+
+
+@pytest.mark.parametrize("cloud", sorted(PEER_BY_NAME))
+def test_a_lookup_that_builds_its_name_from_a_local_network_is_another_network(tmp_path: Path, cloud: str) -> None:
+    facts = _extract(tmp_path, PEER_BY_NAME[cloud])
+    placed = _placed(facts)
+    assert len(facts["networks"]) == 2
+    assert list(placed.values()) in (["data.aws_vpc.peer"], ["data.azurerm_virtual_network.spoke"])
+
+
+def test_a_lookup_that_many_paths_reach_is_followed_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from cartographer.clouds import refs
+
+    levels = 12  # each lookup reads both lookups of the next level: 2**12 paths reach the last one
+    tf = 'resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }\n'
+    for i in range(levels):
+        below = f"[data.aws_subnet.a{i + 1}.id, data.aws_subnet.b{i + 1}.id]" if i < levels - 1 else "[aws_vpc.main.id]"
+        tf += "".join(f'data "aws_subnet" "{x}{i}" {{\n  filter {{\n    name = "x"\n    values = {below}\n  }}\n}}\n'
+                      for x in "ab")
+    calls = 0
+    follow = refs._follow
+
+    def counted(*args: object) -> dict:
+        nonlocal calls
+        calls += 1
+        return follow(*args)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(refs, "_follow", counted)
+    _extract(tmp_path, tf + 'resource "aws_instance" "i" { subnet_id = data.aws_subnet.a0.id }\n')
+    assert calls < 2000
+
+
+def test_a_subnet_lookup_in_a_vpc_only_it_names_is_in_that_vpc(tmp_path: Path) -> None:
+    facts = _extract(tmp_path,
+        'data "aws_vpc" "shared" {\n  tags = { Name = "shared" }\n}\n'
+        'data "aws_subnet" "private" { vpc_id = data.aws_vpc.shared.id }\n'
+        'resource "aws_instance" "i" { subnet_id = data.aws_subnet.private.id }\n')
+    assert _placed(facts) == {"aws_instance.i": "data.aws_vpc.shared"}
+
+
+def _reason(facts: dict, address: str) -> str | None:
+    return next(r.get("reason") for r in facts["resources"] if r["address"] == address)
+
+
+def test_a_subnet_lookup_whose_name_gives_no_tier_is_marked(tmp_path: Path) -> None:
+    facts = _extract(tmp_path, S3_STATE +
+        'data "aws_subnets" "app" {\n  filter {\n    name = "vpc-id"\n'
+        '    values = [data.terraform_remote_state.net.outputs.vpc_id]\n  }\n}\n'
+        'resource "aws_instance" "i" { subnet_id = data.aws_subnets.app.ids[0] }\n')
+    assert facts["placements"] == []
+    assert _reason(facts, "aws_instance.i") == "app is in data.terraform_remote_state.net.outputs.vpc_id, its name gives no subnet tier"
+
+
+def test_a_remote_subnet_that_fits_no_network_is_marked(tmp_path: Path) -> None:
+    facts = _extract(tmp_path, S3_STATE +
+        'resource "aws_instance" "i" { subnet_id = data.terraform_remote_state.net.outputs.private_subnet_ids[0] }\n')
+    assert _reason(facts, "aws_instance.i") == "private_subnet_ids[0] fits no network this stack knows"

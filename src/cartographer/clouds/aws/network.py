@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from cartographer.clouds.refs import (
     CIDR,
     Ref,
-    add_remote,
+    collect_remote,
     network_fact,
     place_remote,
     placement_facts,
@@ -44,7 +44,7 @@ class Network:
         self.ex = ex
         self.by_address = {r.address: r for r in ex.res}
         self.vpcs: dict[str, dict] = {}
-        self.ties: dict[str, str] = {}  # resource -> why its subnet fits two networks equally well
+        self.unplaced: dict[str, str] = {}  # resource -> why a remote subnet of it is not placed
 
     def cidrs(self, vpc: Res) -> list[str]:
         """Every CIDR of a local VPC, or none when any of them is not a literal."""
@@ -63,17 +63,13 @@ class Network:
         for r in self.ex.res:
             if r.type == "aws_vpc":
                 self.vpcs[r.address] = network_fact(r.address.rsplit(".", 1)[1], self.cidrs(r), Ref(r.address), r)
-        for r in self.ex.res:
-            for value in find(r.block.body, VPC_KEY):
-                for ref in sources(r.inst, value, TOKEN):
-                    if ref.remote:
-                        add_remote(self.vpcs, ref, r)
+        collect_remote(self.vpcs, self.ex.res, VPC_KEY, SUBNET_KEY, TOKEN)
 
     def place(self, ref: Ref, address: str) -> tuple[str, str, str] | None:
         """(network key, tier, what decided the tier) for a subnet reference of the resource at `address`, None when
         either is unknown."""
         if ref.remote:
-            return place_remote(self.vpcs, ref, self.ties, address)
+            return place_remote(self.vpcs, ref, self.unplaced, address)
         subnet = self.by_address[ref.address]
         if subnet.type != "aws_subnet":
             return None
@@ -98,4 +94,4 @@ def network_facts(ex: Extractor) -> dict:
     net.collect_vpcs()
     placements = net.placements()
     return {"networks": dict(sorted(net.vpcs.items())), "placements": placements,
-            "unplaced": unplaced(net.ties, placements)}
+            "unplaced": unplaced(net.unplaced, placements)}

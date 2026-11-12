@@ -186,10 +186,13 @@ def check_claims(curated: dict, notes: list[str], supported: Supported,
 
 
 def group_claims(diagram: dict) -> set[tuple]:
-    """Network claims the diagram makes: network cidrs, subnet tiers and parents, nodes inside a network."""
+    """Group claims the diagram makes: network cidrs, subnet tiers, group parents, external networks, nodes inside a
+    network."""
     groups = {g["id"]: g for g in diagram["groups"]}
     claims = {("cidrs", g["id"], tuple(g["cidrs"])) for g in diagram["groups"] if g.get("cidrs")}
     claims |= {("subnet", g["id"], g.get("tier"), g["parent"]) for g in diagram["groups"] if g["kind"] == "subnet"}
+    claims |= {("parent", g["id"], g["parent"]) for g in diagram["groups"]}
+    claims |= {("external", g["id"]) for g in diagram["groups"] if g.get("external")}
     claims |= {("inside", n["id"], n["group"]) for n in diagram["nodes"] if enclosing(groups, n["group"], "network")}
     return claims
 
@@ -206,7 +209,11 @@ def fix_groups(curated: dict, notes: list[str]) -> None:
             item["group"] = None
     fix_clouds(curated, notes)
     fix_network_groups(curated, notes)
-    notes += [f"group {gid}: no nodes, the layout drops it" for gid in empty_blocks(curated)]
+
+
+def empty_notes(diagram: dict) -> list[str]:
+    """A note for each group that holds no node once verify has moved the nodes."""
+    return [f"group {gid}: no nodes, the layout drops it" for gid in empty_blocks(diagram)]
 
 
 def isolated_ids(diagram: dict) -> list[str]:
