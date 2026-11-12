@@ -229,3 +229,31 @@ def test_a_vm_is_placed_or_marked_through_a_nic_in_a_remote_or_looked_up_subnet(
     assert [(p["resource"], p["network"]) for p in facts["placements"]] == [("azurerm_linux_virtual_machine.vm2", hub)]
     reason = next(r.get("reason") for r in facts["resources"] if r["address"] == "azurerm_linux_virtual_machine.vm")
     assert "spoke_private_subnet_id fits no network this stack knows" in reason
+
+
+@pytest.mark.parametrize(("vnet_rg", "lookup_rg"), [
+    ("azurerm_resource_group.rg.name", "azurerm_virtual_network.main.resource_group_name"),
+    ('"rg"', "azurerm_resource_group.rg.name"),
+])
+def test_a_lookup_whose_resource_group_reads_the_same_name_is_the_local_vnet(tmp_path: Path, vnet_rg: str, lookup_rg: str) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "azurerm_resource_group" "rg" {\n  name = "rg"\n}\n'
+        f'resource "azurerm_virtual_network" "main" {{\n  name = "main"\n  resource_group_name = {vnet_rg}\n'
+        '  address_space = ["10.0.0.0/16"]\n}\n'
+        f'data "azurerm_virtual_network" "me" {{\n  name = azurerm_virtual_network.main.name\n  resource_group_name = {lookup_rg}\n}}\n'
+        'resource "azurerm_virtual_network_peering" "p" {\n  virtual_network_name = "other"\n'
+        '  remote_virtual_network_id = data.azurerm_virtual_network.me.id\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [(n["address"], n["remote"]) for n in facts["networks"]] == [("azurerm_virtual_network.main", False)]
+
+
+def test_a_lookup_by_a_tag_of_a_local_vnet_is_external(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "azurerm_virtual_network" "main" {\n  name = "main"\n  resource_group_name = "rg"\n'
+        '  address_space = ["10.0.0.0/16"]\n  tags = { peer = "dr" }\n}\n'
+        'data "azurerm_virtual_network" "dr" {\n  name = azurerm_virtual_network.main.tags["peer"]\n  resource_group_name = "rg"\n}\n'
+        'resource "azurerm_virtual_network_peering" "p" {\n  virtual_network_name = azurerm_virtual_network.main.name\n'
+        '  remote_virtual_network_id = data.azurerm_virtual_network.dr.id\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [(n["address"], n["remote"]) for n in facts["networks"]] == [
+        ("azurerm_virtual_network.main", False), ("data.azurerm_virtual_network.dr", True)]

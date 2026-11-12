@@ -27,12 +27,16 @@ AGREE = {"azurerm_virtual_network": ("resource_group_name",),
          "azurerm_subnet": ("resource_group_name", "virtual_network_name")}
 IN_NETWORK = ("vpc_id", "vpc-id", "virtual_network_name")  # what names the network a subnet lookup is in
 NETWORK_LOOKUPS = ("aws_vpc", "azurerm_virtual_network")  # lookups that find a network, not a subnet
-NETWORK_ARGS = ("vpc_id", "virtual_network_name")  # the argument by which a resource names its network
+# the arguments a reference reads through to what they are written as: `aws_subnet.a.vpc_id` is the subnet's VPC, and
+# `aws_vpc.main.tags.peer_vpc_id` is the value of a tag, never the VPC itself
+READ_THROUGH = ("vpc_id", "virtual_network_name", "tags", "tags_all")
+MAX_HOPS = 100  # locals, variables, outputs and lookups nested deeper only come from generated code; they read nothing
 MAX_PATH = 16  # longer attribute paths only come from a local or variable that reads itself
 SUFFIX = r"ids?|name|arn"  # the attributes that identify a resource rather than read a part of it
 IDENTIFIER = re.compile(rf"(?:{SUFFIX})")
 # a last attribute that identifies the network itself: `id`, `vpc_id`, `vnet_name`
 IDENTIFYING = re.compile(rf"(?:(?:vpc|vnet|virtual_network|network)_)?(?:{SUFFIX})")
+RESOURCE_ARG = re.compile(r"(?!(?:var|local|module|data)\.)([\w-]+)\.([\w-]+)\.([\w-]+)")  # `type.name.argument`
 INDEX = re.compile(r"\[[^\]]*\]")
 PART = re.compile(r"\[[^\]]*\]|[^.\[]+")  # the words and indexes of a `_render`ed name
 
@@ -66,7 +70,7 @@ class Ref:
 def _render(name: str, path: tuple[str | None, ...]) -> str:
     """A name and the path read after it: a list index in brackets, an index that is no literal as `[*]`, an
     attribute or object key after a dot (`vpcs["blue"].id` -> `vpcs.blue.id`)."""
-    return name + "".join("[*]" if p is None else f"[{p}]" if p.isdigit() else f".{p}" for p in path)
+    return name + "".join("[*]" if p is None else f"[{p}]" if p.isdecimal() else f".{p}" for p in path)
 
 
 def segments(path: str) -> tuple[str | None, ...]:
@@ -91,12 +95,12 @@ class _Walk:
 
     pattern: re.Pattern[str]
     seen: set = field(default_factory=set)
-    active: set = field(default_factory=set)  # the variables, locals and module outputs being followed
+    active: set = field(default_factory=set)  # the variables, locals, module outputs and lookups being followed
     lookups: dict[tuple, tuple[tuple[Ref, ...], Ref | None] | None] = field(default_factory=dict)
 
     def read(self, inst: Inst, value: Any) -> dict[Ref, None]:
         """What `value` points at, with a fresh `seen` and the lookups this walk has already followed."""
-        return _follow(inst, value, (), _Walk(self.pattern, lookups=self.lookups))
+        return _follow(inst, value, (), _Walk(self.pattern, active=self.active, lookups=self.lookups))
 
 
 def sources(inst: Inst, obj: Any, pattern: re.Pattern[str]) -> dict[Ref, None]:
@@ -125,14 +129,14 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
             within, picked = _looked_up(inst, m["ds"], m["ds_type"], walk)
             out[picked or _lookup(inst, m, within)] = None
         elif (hops := _hops(inst, head, second, path)) is not None:
-            if (hop := (id(inst), head, second)) not in walk.active:  # a local that reads itself reads nothing more
+            if (hop := (id(inst), head, second)) not in walk.active and len(walk.active) < MAX_HOPS:  # a local that reads itself reads nothing more
                 walk.active.add(hop)
                 for where, value, rest in hops:
                     out |= _follow(where, value, rest, walk)
                 walk.active.discard(hop)
         elif resource := inst.mod.resources.get((head, second)):
-            if path and path[0] in NETWORK_ARGS and path[0] in (body := norm_keys(resource.body)):
-                out |= _follow(inst, body[path[0]], path[1:], walk)  # `aws_subnet.a.vpc_id` is the subnet's VPC
+            if path and path[0] in READ_THROUGH:
+                out |= _follow(inst, norm_keys(resource.body).get(path[0], ""), path[1:], walk)
             else:
                 out[Ref(f"{inst.prefix}{head}.{second}")] = None
     return out
@@ -155,12 +159,14 @@ def _looked_up(inst: Inst, name: str, ds_type: str, walk: _Walk) -> tuple[tuple[
     picks, if any. Each lookup is followed once per walk, so every path that reaches it finds the same references; a
     lookup that reads itself reads nothing the second time."""
     visit = (id(inst), ds_type, name)
-    if visit not in walk.lookups:
+    if visit not in walk.lookups and len(walk.active) < MAX_HOPS:
         walk.lookups[visit] = None
+        walk.active.add(visit)
         block = inst.mod.data.get((ds_type, name))
         body = norm_keys(block.body) if block else {}
         walk.lookups[visit] = (tuple(walk.read(inst, list(_selected(body, IN_NETWORK)))), _picked(inst, body, ds_type, walk))
-    return walk.lookups[visit] or ((), None)
+        walk.active.discard(visit)
+    return walk.lookups.get(visit) or ((), None)
 
 
 def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
@@ -214,11 +220,26 @@ def _provider(inst: Inst, body: dict, kind: str) -> tuple[int | None, str]:
 
 
 def _agree(inst: Inst, value: Any, owner: Inst, other: Any) -> bool:
-    """True when two arguments give the same literal, or are the same expression in one module instance."""
+    """True when two arguments, each as it is written (`_written`), give the same literal, or are the same expression
+    in one module instance."""
+    value, other = _written(inst, value), _written(owner, other)
     literal = inst.value(value)
     if isinstance(literal, str):
         return literal == owner.value(other)
     return inst is owner and value is not None and value == other
+
+
+def _written(inst: Inst, value: Any) -> Any:
+    """What an argument is written as: a whole reference to an argument another resource of the module sets
+    (`azurerm_virtual_network.main.resource_group_name`, `azurerm_resource_group.rg.name`) is that argument's value."""
+    for _ in range(MAX_HOPS):
+        m = RESOURCE_ARG.fullmatch(bare(value))
+        resource = inst.mod.resources.get((m[1], m[2])) if m else None
+        body = norm_keys(resource.body) if resource else {}
+        if not m or m[3] not in body:
+            break
+        value = body[m[3]]
+    return value
 
 
 def _lookup(inst: Inst, m: re.Match[str], within: tuple[Ref, ...]) -> Ref:
@@ -234,7 +255,7 @@ def _lookup(inst: Inst, m: re.Match[str], within: tuple[Ref, ...]) -> Ref:
 def _tier(path: tuple[str | None, ...]) -> str | None:
     """The tier the last name of a path gives; a key or object name before it never sets the tier. A list index, a
     non-literal index and an identifier attribute (`.id`) are no name."""
-    return tier_in(next((p for p in reversed(path) if p is not None and not p.isdigit() and not IDENTIFIER.fullmatch(p)), ""))
+    return tier_in(next((p for p in reversed(path) if p is not None and not p.isdecimal() and not IDENTIFIER.fullmatch(p)), ""))
 
 
 def _dig(value: Any, path: tuple[str | None, ...]) -> list[tuple[Any, tuple[str | None, ...]]]:
@@ -244,7 +265,7 @@ def _dig(value: Any, path: tuple[str | None, ...]) -> list[tuple[Any, tuple[str 
     for i, attr in enumerate(path):
         if attr is None and isinstance(value, (list, dict)):
             return [part for v in (value if isinstance(value, list) else value.values()) for part in _dig(v, path[i + 1:])]
-        if attr is not None and isinstance(value, list) and attr.isdigit():
+        if attr is not None and isinstance(value, list) and attr.isdecimal():
             value = value[int(attr)] if int(attr) < len(value) else ""
         elif attr is not None and isinstance(value, dict):
             value = next((v for k, v in value.items() if unq(k) == attr), "")
@@ -329,13 +350,13 @@ def _candidates(networks: dict[str, dict], ref: Ref) -> dict[str, tuple]:
 
 def _starts(network: list[str], subnet: list[str]) -> bool:
     """True when a network's parts start a subnet's: all but the last part equal, and the last part equal or the first
-    words of a part whose other words are about subnets (`shared-vpc` of `shared-vpc-private-subnet`, `vpc` of
-    `vpc-subnets`, but not `blue` of `blue-east`)."""
+    words of a part whose other words are all about subnets (`shared-vpc` of `shared-vpc-private-subnet`, `vpc` of
+    `vpc-subnets`, but not `blue` of `blue-east` or `blue-vpc` of `blue-vpc-east-private-subnet`)."""
     last = len(network) - 1
     if len(network) > len(subnet) or network[:last] != subnet[:last]:
         return False
     head, part = network[last], subnet[last]
-    return part == head or (part.startswith(head + "-") and not set(part[len(head) + 1:].split("-")).isdisjoint(SUBNET_WORDS))
+    return part == head or (part.startswith(head + "-") and set(part[len(head) + 1:].split("-")) <= set(SUBNET_WORDS))
 
 
 def _names_network(stem: str) -> bool:

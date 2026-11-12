@@ -257,7 +257,11 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     network (`"${aws_vpc.main.tags.Name}-peer"`) or another provider keeps it external: a peer or DR network is often
     found by the tags of a local one. Each lookup is followed once per reference walk, a local that reads itself
     reads nothing more, and `Inst.value` keeps each result, so many reads stay linear. With the same unresolved
-    `resource_group_name` text (`var.rg_name`) on both, an Azure lookup and the network it names agree. A subnet lookup whose
+    `resource_group_name` text (`var.rg_name`) on both, an Azure lookup and the network it names agree; each side is
+    first read through the resource arguments it names (`azurerm_resource_group.rg.name` is `"rg"`). A reference to a
+    resource's `tags` reads the tag value, never the resource (`refs.READ_THROUGH`), so a lookup by a tag of a local
+    network stays external. A chain of more than `refs.MAX_HOPS` (100) locals, variables, outputs and lookups reads
+    nothing more. A subnet lookup whose
     `vpc_id`, `vpc-id` filter or `virtual_network_name` reads one network of this stack, a looked-up network or a
     remote network (`aws_vpc.main.id`, `aws_subnet.a[0].vpc_id`, `data.aws_vpc.shared.id`) is in it, and that network
     is a network fact even when nothing else names it; when these name no network this stack knows, the subnet is
@@ -265,7 +269,7 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     (`data.aws_subnet.x.vpc_id`) is no network.
   - A remote subnet output places a resource in a remote network whose name parts without indexes start the
     subnet's, and whose indexes are the subnet's or none. The last network part equals the subnet's part or is the
-    first words of it when the other words are about subnets (`shared-vpc` for `shared_vpc_private_subnet_ids[0]`,
+    first words of it when all the other words are subnet words (`shared-vpc` for `shared_vpc_private_subnet_ids[0]`,
     `vpc` for `vpc_subnets["private"]`, but `vpcs.blue` never for `vpcs["blue-east"].private_subnet_ids`). Order: one of the same state first, then one with the subnet's indexes, then the longest name, then
     for a lookup one of the same module. A subnet name that names no network (`private_subnet_ids`) fits every network
     of its state with fitting indexes. A remote subnet gives no placement, and the resource is marked with why, when

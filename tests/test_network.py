@@ -852,11 +852,46 @@ def test_a_local_that_reads_itself_several_times_takes_linear_time(tmp_path: Pat
     assert _placed(facts) == {}
 
 
-def test_a_long_chain_of_locals_is_followed_to_its_end(tmp_path: Path) -> None:
-    chain = "".join(f"  a{i} = local.a{i + 1}\n" for i in range(500))
-    facts = _extract(tmp_path, S3_STATE + f"locals {{\n{chain}  a500 = data.terraform_remote_state.net.outputs.vpc_id\n}}\n"
+@pytest.mark.parametrize(("length", "names"), [(90, ["vpc"]), (500, [])])
+def test_a_chain_of_locals_is_followed_up_to_the_hop_limit(tmp_path: Path, length: int, names: list[str]) -> None:
+    chain = "".join(f"  a{i} = local.a{i + 1}\n" for i in range(length))
+    facts = _extract(tmp_path, S3_STATE + f"locals {{\n{chain}  a{length} = data.terraform_remote_state.net.outputs.vpc_id\n}}\n"
                      'resource "aws_security_group" "s" { vpc_id = local.a0 }\n')
-    assert [n["name"] for n in facts["networks"]] == ["vpc"]
+    assert [n["name"] for n in facts["networks"]] == names
+
+
+def test_a_long_chain_of_lookups_does_not_crash(tmp_path: Path) -> None:
+    chain = "".join(f'data "aws_vpc" "v{i}" {{ id = data.aws_vpc.v{i - 1}.id }}\n' for i in range(1, 300))
+    facts = _extract(tmp_path, 'resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }\n'
+                     'data "aws_vpc" "v0" { id = aws_vpc.main.id }\n' + chain +
+                     'resource "aws_security_group" "s" { vpc_id = data.aws_vpc.v299.id }\n')
+    assert next(n["address"] for n in facts["networks"]) == "aws_vpc.main"
+
+
+def test_a_lookup_by_a_tag_of_a_local_network_is_external(tmp_path: Path) -> None:
+    facts = _extract(tmp_path,
+        'resource "aws_vpc" "main" {\n  cidr_block = "10.0.0.0/16"\n  tags = { peer_vpc_id = "vpc-0123" }\n}\n'
+        'data "aws_vpc" "peer" { id = aws_vpc.main.tags.peer_vpc_id }\n'
+        'data "aws_subnets" "peer_private" {\n  filter {\n    name = "vpc-id"\n    values = [data.aws_vpc.peer.id]\n  }\n}\n'
+        'resource "aws_lambda_function" "f" {\n  vpc_config {\n    subnet_ids = data.aws_subnets.peer_private.ids\n  }\n}\n')
+    assert [(n["address"], n["remote"]) for n in facts["networks"]] == [("aws_vpc.main", False), ("data.aws_vpc.peer", True)]
+    assert _placed(facts) == {"aws_lambda_function.f": "data.aws_vpc.peer"}
+
+
+def test_a_subnet_name_with_a_word_beyond_the_network_name_fits_no_network(tmp_path: Path) -> None:
+    facts = _extract(tmp_path, _tfe("net") +
+        'resource "aws_security_group" "s" { vpc_id = data.tfe_outputs.net.values.blue_vpc_id }\n'
+        'resource "aws_lambda_function" "f" {\n  vpc_config {\n'
+        '    subnet_ids = data.tfe_outputs.net.values.blue_vpc_east_private_subnet_ids\n  }\n}\n')
+    assert _placed(facts) == {}
+    assert "fits no network this stack knows" in _reason(facts, "aws_lambda_function.f")
+
+
+def test_a_quoted_key_of_non_ascii_digits_does_not_crash(tmp_path: Path) -> None:
+    facts = _extract(tmp_path, 'resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }\n'
+                     'locals { l = [{ vpc = aws_vpc.main.id }] }\n'
+                     'resource "aws_security_group" "s" { vpc_id = local.l["\u00b2"].vpc }\n')
+    assert [n["address"] for n in facts["networks"]] == ["aws_vpc.main"]
 
 
 def test_settings_that_many_module_calls_agree_on_are_read_once_per_instance(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
