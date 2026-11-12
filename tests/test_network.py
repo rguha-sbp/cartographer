@@ -725,7 +725,7 @@ def test_a_lookup_that_many_paths_reach_is_followed_once(tmp_path: Path, monkeyp
     tf = 'resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }\n'
     for i in range(levels):
         below = f"[data.aws_subnet.a{i + 1}.id, data.aws_subnet.b{i + 1}.id]" if i < levels - 1 else "[aws_vpc.main.id]"
-        tf += "".join(f'data "aws_subnet" "{x}{i}" {{\n  filter {{\n    name = "x"\n    values = {below}\n  }}\n}}\n'
+        tf += "".join(f'data "aws_subnet" "{x}{i}" {{\n  filter {{\n    name = "vpc-id"\n    values = {below}\n  }}\n}}\n'
                       for x in "ab")
     calls = 0
     follow = refs._follow
@@ -765,3 +765,66 @@ def test_a_remote_subnet_that_fits_no_network_is_marked(tmp_path: Path) -> None:
     facts = _extract(tmp_path, S3_STATE +
         'resource "aws_instance" "i" { subnet_id = data.terraform_remote_state.net.outputs.private_subnet_ids[0] }\n')
     assert _reason(facts, "aws_instance.i") == "private_subnet_ids[0] fits no network this stack knows"
+
+
+LOCAL_VNET = ('resource "azurerm_resource_group" "rg" { name = "rg-app" }\n'
+              'resource "azurerm_virtual_network" "main" {\n  name = "vnet-app"\n'
+              '  resource_group_name = azurerm_resource_group.rg.name\n  address_space = ["10.0.0.0/16"]\n}\n')
+PEER_VPC = ('resource "aws_vpc" "main" {\n  cidr_block = "10.0.0.0/16"\n  tags = { Name = "core" }\n}\n'
+            'provider "aws" {\n  alias = "dr"\n}\n')
+
+
+@pytest.mark.parametrize(("tf", "local"), [
+    (PEER_VPC + 'data "aws_vpc" "x" {\n  tags = { PeerOf = aws_vpc.main.id }\n}\n', False),
+    (PEER_VPC + 'data "aws_vpc" "x" {\n  tags = { Name = aws_vpc.main.tags.Name }\n}\n', False),
+    (PEER_VPC + 'data "aws_vpc" "x" {\n  filter {\n    name = "tag:Name"\n    values = [aws_vpc.main.tags.Name]\n  }\n}\n',
+     False),
+    (PEER_VPC + 'data "aws_vpc" "x" {\n  provider = aws.dr\n  id = aws_vpc.main.id\n}\n', False),
+    (PEER_VPC + 'data "aws_vpc" "x" {\n  id = aws_vpc.main.id\n}\n', True),
+    (LOCAL_VNET + 'data "azurerm_virtual_network" "x" {\n  name = azurerm_virtual_network.main.name\n'
+     '  resource_group_name = "rg-app-dr"\n}\n', False),
+    (LOCAL_VNET + 'data "azurerm_virtual_network" "x" {\n  name = azurerm_virtual_network.main.name\n'
+     '  resource_group_name = azurerm_resource_group.rg.name\n}\n', True),
+], ids=["tag-value", "tag-name", "name-filter", "other-provider", "id", "azure-other-rg", "azure-same-rg"])
+def test_only_a_selector_that_picks_a_local_network_with_its_provider_makes_a_lookup_local(
+        tmp_path: Path, tf: str, local: bool) -> None:
+    kind = "azurerm_virtual_network" if "azurerm" in tf else "aws_vpc"
+    arg = "virtual_network_name = data.azurerm_virtual_network.x.name" if "azurerm" in tf else "vpc_id = data.aws_vpc.x.id"
+    facts = _extract(tmp_path, tf + f'resource "{kind}_peering" "p" {{ {arg} }}\n')
+    assert [n["remote"] for n in facts["networks"]] == ([False] if local else [False, True])
+
+
+def test_a_remote_output_that_picks_a_subnet_names_no_network(tmp_path: Path) -> None:
+    facts = _extract(tmp_path, S3_STATE +
+        'data "aws_subnet" "private" { id = data.terraform_remote_state.net.outputs.app_subnet_id }\n'
+        'resource "aws_instance" "web" { subnet_id = data.aws_subnet.private.id }\n')
+    assert facts["networks"] == []
+
+
+def test_a_subnet_lookup_whose_network_selector_names_no_known_network_is_ranked_by_name(tmp_path: Path) -> None:
+    facts = _extract(tmp_path,
+        'data "aws_vpc" "shared" { tags = { Name = "shared" } }\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.shared.id }\n'
+        'data "aws_subnet" "anchor" { tags = { Name = "anchor" } }\n'
+        'data "aws_subnets" "shared_private" {\n  filter {\n    name = "vpc-id"\n'
+        '    values = [data.aws_subnet.anchor.vpc_id]\n  }\n}\n'
+        'resource "aws_instance" "i" { subnet_id = data.aws_subnets.shared_private.ids[0] }\n')
+    assert _placed(facts) == {"aws_instance.i": "data.aws_vpc.shared"}
+
+
+def test_the_network_argument_of_a_counted_resource_is_followed(tmp_path: Path) -> None:
+    facts = _extract(tmp_path,
+        'resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }\n'
+        'resource "aws_subnet" "a" {\n  count = 2\n  vpc_id = aws_vpc.main.id\n}\n'
+        'resource "aws_subnet" "b" {\n  vpc_id = aws_subnet.a[0].vpc_id\n  tags = { Name = "public-b" }\n}\n'
+        'resource "aws_instance" "i" { subnet_id = aws_subnet.b.id }\n')
+    assert _placed(facts) == {"aws_instance.i": "aws_vpc.main"}
+
+
+def test_a_resource_with_one_placed_and_one_unplaced_subnet_is_marked(tmp_path: Path) -> None:
+    facts = _extract(tmp_path, S3_STATE +
+        'resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }\n'
+        'resource "aws_subnet" "a" { vpc_id = aws_vpc.main.id }\n'
+        'resource "aws_lb" "l" {\n  subnets = [aws_subnet.a.id, data.terraform_remote_state.net.outputs.private_subnet_ids[0]]\n}\n')
+    assert _placed(facts) == {"aws_lb.l": "aws_vpc.main"}
+    assert "private_subnet_ids[0] fits no network this stack knows" in _reason(facts, "aws_lb.l")

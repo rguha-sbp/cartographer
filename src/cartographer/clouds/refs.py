@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from cartographer.clouds.remote_state import LITERAL_INDEX, State, remote_key, state_of
+from cartographer.tf_modules import bare, declared_provider
 from cartographer.tf_policies import norm_keys, unq
 from cartographer.tf_values import find
 
@@ -16,10 +17,15 @@ SUBNET_WORDS = (*TIERS, "subnet", "subnets")  # the words of a name that say it 
 CIDR = re.compile(r"\d{1,3}(\.\d{1,3}){3}/\d{1,2}")
 PATH = r"(?:\.[\w-]+|\[[^\]]*\])*"  # the attributes and indexes after a reference: `.vpc`, `["blue"]`, `[0]`
 SEGMENT = re.compile(r'\.([\w-]+)|\[\s*(?:"([^"]*)"|(\d+)|([^\]]*))\s*\]')
-INSTANCE = re.compile(r"^(?:\[[^\]]*\])+")  # the index of a module call with `count` or `for_each`
+INSTANCE = re.compile(r"^(?:\[[^\]]*\])+")  # the index of a module call or resource with `count` or `for_each`
 MODULE_PREFIX = re.compile(r'(?:module\.[\w-]+(?:\[(?:"[^"]*"|[^\]"]*)\])?\.)*')  # `module.a["k"].module.b.`
-# the arguments by which a lookup selects its network or subnet, or the network its subnet is in
-SELECTORS = ("id", "name", "filter", "tags", "vpc_id", "virtual_network_name")
+# the arguments and `filter` names by which a lookup picks one resource of the type it looks up: only these can make
+# it a resource of this stack, and only together with the same provider and the same `AGREE` arguments
+PICKS = {"aws_vpc": ("id", "vpc-id"), "aws_subnet": ("id", "subnet-id"), "aws_subnets": ("subnet-id",),
+         "azurerm_virtual_network": ("name",), "azurerm_subnet": ("name",)}
+AGREE = {"azurerm_virtual_network": ("resource_group_name",),
+         "azurerm_subnet": ("resource_group_name", "virtual_network_name")}
+IN_NETWORK = ("vpc_id", "vpc-id", "virtual_network_name")  # what names the network a subnet lookup is in
 NETWORK_LOOKUPS = ("aws_vpc", "azurerm_virtual_network")  # lookups that find a network, not a subnet
 NETWORK_ARGS = ("vpc_id", "virtual_network_name")  # the argument by which a resource names its network
 MAX_PATH = 16  # longer attribute paths only come from a local or variable that reads itself
@@ -44,7 +50,7 @@ class Ref:
     name: str | None = None  # the output or lookup and the path it reads: `vpcs.blue.id`, `vpc_ids[0]`, `nets[*]`
     state: State | str | None = None
     tier: str | None = None  # the subnet tier the last name in the path gives (`vpcs["private-net"].public_subnet_ids`: public)
-    within: tuple[Ref, ...] = ()  # a lookup's: what its selectors read (`aws_vpc.main`, a looked-up VPC)
+    within: tuple[Ref, ...] = ()  # a subnet lookup's: what names its network (`aws_vpc.main`, a looked-up VPC)
     looks_up: str | None = None  # a lookup's data source type: `aws_vpc`, `aws_subnets`
 
     @property
@@ -85,7 +91,11 @@ class _Walk:
 
     pattern: re.Pattern[str]
     seen: set = field(default_factory=set)
-    lookups: dict[tuple, tuple[list[Ref], list[Ref]] | None] = field(default_factory=dict)
+    lookups: dict[tuple, tuple[tuple[Ref, ...], Ref | None] | None] = field(default_factory=dict)
+
+    def read(self, inst: Inst, value: Any) -> dict[Ref, None]:
+        """What `value` points at, with a fresh `seen` and the lookups this walk has already followed."""
+        return _follow(inst, value, (), _Walk(self.pattern, lookups=self.lookups))
 
 
 def sources(inst: Inst, obj: Any, pattern: re.Pattern[str]) -> dict[Ref, None]:
@@ -100,8 +110,8 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
     out: dict[Ref, None] = {}
     for m in walk.pattern.finditer(text):
         own = m["path"] or m["outpath"] or ""
-        if m["head"] == "module":
-            own = INSTANCE.sub("", own)  # `module.net[0].x`: every instance of a module has the same outputs
+        if m["head"] not in (None, "var", "local"):
+            own = INSTANCE.sub("", own)  # `module.net[0].x`, `aws_subnet.a[0].vpc_id`: every instance has the same shape
         path = (*segments(own), *unread)  # `merge(local.a, local.b).vpc_id` reads `vpc_id` of each
         if len(path) > MAX_PATH or (key := (id(inst), m[0], path)) in walk.seen:
             continue
@@ -111,9 +121,8 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
             out[Ref(f"{inst.prefix}{m['remote']}", _render(m["out"], path),
                     state_of(inst, m["kind"], m["state"], m["index"]), _tier((m["out"], *path)))] = None
         elif m["ds"]:
-            found, whole = _looked_up(inst, m["ds"], m["ds_type"], walk)
-            same = {r: None for r in whole if not r.remote and r.address.split(".")[-2] == m["ds_type"].removesuffix("s")}
-            out |= same or {_lookup(inst, m, tuple(found)): None}
+            within, picked = _looked_up(inst, m["ds"], m["ds_type"], walk)
+            out[picked or _lookup(inst, m, within)] = None
         elif head == "var" and inst.parent is not None:
             for args in inst.args:
                 if second in args:
@@ -135,34 +144,75 @@ def _follow_parts(inst: Inst, parts: list[tuple[Any, tuple[str | None, ...]]], w
     return {ref: None for value, unread in parts for ref in _follow(inst, value, unread, walk)}
 
 
-def _looked_up(inst: Inst, name: str, ds_type: str, walk: _Walk) -> tuple[list[Ref], list[Ref]]:
-    """What the lookup `data.<ds_type>.<name>` reads through its `SELECTORS`, and what a selector that is one whole
-    reference reads (`id = aws_vpc.main.id`, not `"${aws_vpc.main.tags.Name}-peer"`): only such a selector can find a
-    resource of this stack itself. Each lookup is followed once per walk, with its own `seen`, so every path that reaches
-    it finds the same references; a lookup that reads itself reads nothing the second time."""
+def _looked_up(inst: Inst, name: str, ds_type: str, walk: _Walk) -> tuple[tuple[Ref, ...], Ref | None]:
+    """What names the network of the lookup `data.<ds_type>.<name>` (`IN_NETWORK`), and the resource of this stack it
+    picks, if any. Each lookup is followed once per walk, so every path that reaches it finds the same references; a
+    lookup that reads itself reads nothing the second time."""
     visit = (id(inst), ds_type, name)
     if visit not in walk.lookups:
         walk.lookups[visit] = None
         block = inst.mod.data.get((ds_type, name))
-        selectors = {k: v for k, v in norm_keys(block.body).items() if k in SELECTORS} if block else {}
-
-        def read(value: Any) -> list[Ref]:
-            return list(_follow(inst, value, (), _Walk(walk.pattern, lookups=walk.lookups)))
-
-        walk.lookups[visit] = (read(selectors), read(list(_whole(selectors, walk.pattern))))
-    return walk.lookups[visit] or ([], [])
+        body = norm_keys(block.body) if block else {}
+        walk.lookups[visit] = (tuple(walk.read(inst, list(_selected(body, IN_NETWORK)))), _picked(inst, body, ds_type, walk))
+    return walk.lookups[visit] or ((), None)
 
 
-def _whole(value: Any, pattern: re.Pattern[str]) -> Iterator[str]:
-    """The strings in `value` that are one reference and nothing else: `${aws_vpc.main.id}`, `"${local.vpc_id}"`."""
-    if isinstance(value, (dict, list)):
-        for v in value.values() if isinstance(value, dict) else value:
-            yield from _whole(v, pattern)
-        return
-    expr = unq(value)
-    expr = expr[2:-1] if expr.startswith("${") and expr.endswith("}") and expr.count("${") == 1 else expr
-    if (m := pattern.match(expr)) and re.fullmatch(PATH, expr[m.end():]):
-        yield expr
+def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
+    """The resource of this stack a lookup picks: every `PICKS` selector it sets is one whole reference (`id =
+    aws_vpc.main.id`, never `"${aws_vpc.main.tags.Name}-peer"`), they all read the same one resource of the looked-up
+    type, and that resource uses the same provider and the same `AGREE` arguments. A tag or a name filter picks
+    nothing: a peer or DR network is often found by the tags of a local one."""
+    picks = list(_selected(body, PICKS.get(ds_type, ())))
+    if not picks or not all(_whole(v, walk.pattern) for v in picks):
+        return None
+    kind = ds_type.removesuffix("s")
+    found = set.intersection(*({r for r in walk.read(inst, v) if not r.remote and r.address.split(".")[-2] == kind}
+                               for v in picks))
+    if len(found) != 1:
+        return None
+    ref = found.pop()
+    owner, resource = next((i, i.mod.resources[key]) for i in _root(inst).walk()
+                           if (key := tuple(ref.address.removeprefix(i.prefix).split("."))) in i.mod.resources
+                           and ref.address.startswith(i.prefix))
+    other = norm_keys(resource.body)
+    provider = _provider(inst, body, kind)  # key "": the calls of one instance give it different providers
+    same = provider[1] != "" and provider == _provider(owner, other, kind) and all(
+        _agree(inst, body.get(arg), owner, other.get(arg), walk) for arg in AGREE.get(ds_type, ()))
+    return ref if same else None
+
+
+def _selected(body: dict, names: tuple[str, ...]) -> Iterator[Any]:
+    """The values of the arguments and `filter` blocks of a lookup that `names` names, each list item on its own."""
+    found = [body[n] for n in names if n in body]
+    found += [f.get("values") for f in blocks(body.get("filter")) if unq(str(f.get("name", ""))) in names]
+    for value in found:
+        yield from value if isinstance(value, list) else [value]
+
+
+def _whole(value: Any, pattern: re.Pattern[str]) -> bool:
+    """True when `value` is one reference and nothing else: `${aws_vpc.main.id}`, `"${local.vpc_id}"`."""
+    expr = bare(value)
+    return bool((m := pattern.match(expr)) and re.fullmatch(PATH, expr[m.end():]))
+
+
+def _root(inst: Inst) -> Inst:
+    while inst.parent is not None:
+        inst = inst.parent
+    return inst
+
+
+def _provider(inst: Inst, body: dict, kind: str) -> tuple[int | None, str]:
+    """The provider a block uses: the instance that declares it and its key there."""
+    owner, key = declared_provider(inst, bare(body.get("provider", kind.split("_")[0])))
+    return id(owner) if owner else None, key
+
+
+def _agree(inst: Inst, value: Any, owner: Inst, other: Any, walk: _Walk) -> bool:
+    """True when two arguments give the same literal, or are the same text in one module that reads the same thing."""
+    literal = inst.value(value)
+    if isinstance(literal, str):
+        return literal == owner.value(other)
+    return inst is owner and value == other and bool(walk.read(inst, value))
 
 
 def _lookup(inst: Inst, m: re.Match[str], within: tuple[Ref, ...]) -> Ref:
@@ -211,23 +261,23 @@ def add_remote(networks: dict[str, dict], ref: Ref, res: Res) -> None:
     networks.setdefault(ref.key(), network_fact(network_name(ref.name or ""), [], ref, res))
 
 
-def place_remote(networks: dict[str, dict], ref: Ref, why: dict[str, str], address: str) -> tuple[str, str, str] | None:
+def place_remote(networks: dict[str, dict], ref: Ref, why: dict[str, list[str]], address: str) -> tuple[str, str, str] | None:
     """(network key, tier, what decided the tier) for a subnet another stack or a lookup gives to the resource at
     `address`. A lookup `within` a network this stack knows is in that network; otherwise `_candidates` rank the
     networks. When no network fits, two fit equally well, or the subnet name gives no tier, the result is None and
     `why` gets the reason for `address`."""
     via = ref.name or ""
-    candidates = {k: () for r in ref.within if (k := r.key()) in networks} if ref.within else _candidates(networks, ref)
+    candidates = {k: () for r in ref.within if (k := r.key()) in networks} or _candidates(networks, ref)
     ranked = sorted(candidates, key=candidates.__getitem__, reverse=True)
     if not ranked:
-        why.setdefault(address, f"{via} fits no network this stack knows")
+        reason = f"{via} fits no network this stack knows"
     elif len(ranked) > 1 and candidates[ranked[0]] == candidates[ranked[1]]:
-        why.setdefault(address, f"{via} fits networks {' and '.join(sorted(networks[k]['address'] for k in ranked[:2]))} "
-                                "equally well")
+        reason = f"{via} fits networks {' and '.join(sorted(networks[k]['address'] for k in ranked[:2]))} equally well"
     elif not ref.tier:
-        why.setdefault(address, f"{via} is in {networks[ranked[0]]['address']}, its name gives no subnet tier")
+        reason = f"{via} is in {networks[ranked[0]]['address']}, its name gives no subnet tier"
     else:
         return ranked[0], ref.tier, via
+    why.setdefault(address, []).append(reason)
     return None
 
 
@@ -304,10 +354,10 @@ def placement_facts(found: dict[tuple[str, str, str], tuple[str, Res]]) -> list[
             for (address, network, tier), (via, r) in sorted(found.items())]
 
 
-def unplaced(why: dict[str, str], placements: list[dict]) -> dict[str, str]:
-    """Why each resource that no placement fact places has a subnet that could not be placed: it is marked."""
-    placed = {p["resource"] for p in placements}
-    return {address: reason for address, reason in why.items() if address not in placed}
+def unplaced(why: dict[str, list[str]]) -> dict[str, str]:
+    """Why each resource has a subnet that could not be placed, every reason once: it is marked, also when another
+    of its subnets is placed."""
+    return {address: "; ".join(dict.fromkeys(reasons)) for address, reasons in why.items()}
 
 
 def blocks(value: Any) -> list[dict]:

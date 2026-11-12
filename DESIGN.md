@@ -250,13 +250,16 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     (`vpcs["private-net"].public_subnet_ids` is public); a key or object name before it never sets the tier, and
     a trailing index or identifier attribute (`id`, `ids`, `arn`, `name`) is skipped.
   - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module and a
-    literal index (`data.aws_vpc.x[0]` is network `x[0]`). A lookup whose `id`, `name`, `filter`, `tags`, `vpc_id` or
-    `virtual_network_name` is one whole reference to a network this stack creates (`id = aws_vpc.main.id`) is that
-    local network; a selector that builds a value from it (`"${aws_vpc.main.tags.Name}-peer"`) keeps the lookup
-    external, and `depends_on`, `resource_group_name` and other arguments do not select. Each lookup is followed once
-    per reference walk. A subnet lookup whose selectors read one network of this
-    stack, a looked-up network or a remote network (`vpc_id = aws_vpc.main.id`, `aws_subnet.a.vpc_id`,
-    `data.aws_vpc.shared.id`) is in it, and that network is a network fact even when nothing else names it. An attribute of a subnet lookup
+    literal index (`data.aws_vpc.x[0]` is network `x[0]`). A lookup is the resource of this stack it picks
+    (`refs.PICKS`): its `id` or its `vpc-id` / `subnet-id` filter for AWS, its `name` for Azure, each one whole
+    reference that reads the same one resource of the looked-up type, with the same provider and, for Azure, the same
+    `resource_group_name` (and `virtual_network_name` for a subnet). A tag, a name filter, a value built from a local
+    network (`"${aws_vpc.main.tags.Name}-peer"`) or another provider keeps it external: a peer or DR network is often
+    found by the tags of a local one. Each lookup is followed once per reference walk. A subnet lookup whose
+    `vpc_id`, `vpc-id` filter or `virtual_network_name` reads one network of this stack, a looked-up network or a
+    remote network (`aws_vpc.main.id`, `aws_subnet.a[0].vpc_id`, `data.aws_vpc.shared.id`) is in it, and that network
+    is a network fact even when nothing else names it; when these name no network this stack knows, the subnet is
+    ranked by its name like a remote subnet. Its other selectors name no network. An attribute of a subnet lookup
     (`data.aws_subnet.x.vpc_id`) is no network.
   - A remote subnet output places a resource in a remote network whose name parts without indexes start the
     subnet's, and whose indexes are the subnet's or none. The last network part equals the subnet's part or is the
@@ -264,7 +267,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     `vpc` for `vpc_subnets["private"]`, but `vpcs.blue` never for `vpcs["blue-east"].private_subnet_ids`). Order: one of the same state first, then one with the subnet's indexes, then the longest name, then
     for a lookup one of the same module. A subnet name that names no network (`private_subnet_ids`) fits every network
     of its state with fitting indexes. A remote subnet gives no placement, and the resource is marked with why, when
-    no network fits, when two fit equally well, or when its name gives no tier.
+    no network fits, when two fit equally well, or when its name gives no tier. Every reason is kept, also when
+    another subnet of the resource is placed or the resource is already marked.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything, a node
   has no edge, or verify changed a group claim: cidrs, a subnet tier, a group parent, an `external` marker or a node
   inside a network. The empty group notes come after verify has moved the nodes.

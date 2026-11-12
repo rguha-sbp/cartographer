@@ -188,8 +188,9 @@ class Extractor:
         for cloud in self.clouds:
             found = cloud.network_facts(self)
             for address, reason in found.get("unplaced", {}).items():
-                if not (res := self.resolution[address]).marked:
-                    self.resolution[address] = replace(res, marked=True, reason=reason)
+                res = self.resolution[address]  # a resource already marked keeps its reason and gets this one
+                self.resolution[address] = replace(res, marked=True, reason="; ".join(
+                    filter(None, (res.reason if res.marked else None, reason))))
             ids = {}
             for key, n in found["networks"].items():  # key: what placements name the network by
                 ids[key] = f"n{len(networks) + 1}"

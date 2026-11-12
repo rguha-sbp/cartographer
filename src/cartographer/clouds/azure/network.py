@@ -58,8 +58,7 @@ class Network:
         self.subnets: dict[str, Subnet] = {}
         self.public: dict[str, str] = {}
         self.outbound: dict[str, str] = {}
-        self.ambiguous: dict[str, str] = {}  # resource -> why a subnet reference could not be placed
-        self.unplaced: dict[str, str] = {}  # resource -> why a remote subnet of it is not placed
+        self.unplaced: dict[str, list[str]] = {}  # resource -> why subnet references of it could not be placed
 
     def refs(self, inst: Inst, obj: Any) -> dict[Ref, None]:
         return sources(inst, obj, TOKEN)
@@ -106,8 +105,8 @@ class Network:
             nic = self.by_address.get(ref.address)
             if nic is not None and nic.type == "azurerm_network_interface":
                 found |= {s.address: s for s in self.direct_subnets(nic)}
-                if nic.address in self.ambiguous:
-                    self.ambiguous.setdefault(r.address, self.ambiguous[nic.address])
+                if nic.address in self.unplaced:
+                    self.unplaced.setdefault(r.address, []).extend(self.unplaced[nic.address])
         found |= {s.address: s for s in self.direct_subnets(r)}
         self._subnet_refs[r.address] = list(found.values())
         return self._subnet_refs[r.address]
@@ -132,7 +131,8 @@ class Network:
             return [self.subnets[ref.address]]
         inline = [s for s in self.subnets.values() if s.address.startswith(f"{ref.address}.subnet[")]
         if len(inline) > 1 and len(named := [s for s in inline if self.quoted_in(s, value)]) != 1:
-            self.ambiguous.setdefault(r.address, f"{ref.address} has {len(inline)} inline subnets and the reference does not single out one")
+            self.unplaced.setdefault(r.address, []).append(
+                f"{ref.address} has {len(inline)} inline subnets and the reference does not single out one")
             return []
         return named if len(inline) > 1 else inline
 
@@ -222,4 +222,4 @@ def network_facts(ex: Extractor) -> dict:
     net.collect_evidence()
     placements = net.placements()
     return {"networks": dict(sorted(net.nets.items())), "placements": placements,
-            "unplaced": net.ambiguous | unplaced(net.unplaced, placements)}
+            "unplaced": unplaced(net.unplaced)}

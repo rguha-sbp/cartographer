@@ -44,7 +44,7 @@ class Network:
         self.ex = ex
         self.by_address = {r.address: r for r in ex.res}
         self.vpcs: dict[str, dict] = {}
-        self.unplaced: dict[str, str] = {}  # resource -> why a remote subnet of it is not placed
+        self.unplaced: dict[str, list[str]] = {}  # resource -> why remote subnets of it are not placed
 
     def cidrs(self, vpc: Res) -> list[str]:
         """Every CIDR of a local VPC, or none when any of them is not a literal."""
@@ -94,4 +94,4 @@ def network_facts(ex: Extractor) -> dict:
     net.collect_vpcs()
     placements = net.placements()
     return {"networks": dict(sorted(net.vpcs.items())), "placements": placements,
-            "unplaced": unplaced(net.unplaced, placements)}
+            "unplaced": unplaced(net.unplaced)}
