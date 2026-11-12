@@ -941,3 +941,50 @@ def test_paths_that_fan_out_at_every_level_stop_at_the_read_budget(tmp_path: Pat
     facts = _extract(tmp_path, f'locals {{\n{chain}  l20 = "x"\n}}\n'
                      'resource "aws_security_group" "s" { vpc_id = local.l0.vpc_id }\n')
     assert facts["networks"] == []
+
+
+NET_MODULE = ('variable "subnet_ids" { default = [] }\nvariable "vpc" { default = null }\n'
+              'resource "aws_vpc" "v" { cidr_block = "10.0.0.0/16" }\n'
+              'output "vpc_id" { value = aws_vpc.v.id }\noutput "app_subnet_ids" { value = var.subnet_ids }\n'
+              'output "app_vpc" { value = var.vpc }\n')
+
+
+def test_a_subnet_lookup_reached_through_one_module_output_reads_another(tmp_path: Path) -> None:
+    (tmp_path / "net").mkdir()
+    (tmp_path / "net" / "main.tf").write_text(NET_MODULE)
+    facts = _extract(tmp_path,
+        'module "net" {\n  source = "./net"\n  subnet_ids = [data.aws_subnet.shared_private.id]\n}\n'
+        'data "aws_vpc" "shared" {\n  tags = { Name = "shared" }\n}\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.shared.id }\n'
+        'data "aws_subnet" "shared_private" { vpc_id = module.net.vpc_id }\n'
+        'resource "aws_instance" "direct" { subnet_id = data.aws_subnet.shared_private.id }\n'
+        'resource "aws_instance" "via_module" { subnet_id = module.net.app_subnet_ids[0] }\n')
+    assert _placed(facts) == {"aws_instance.direct": "module.net.aws_vpc.v", "aws_instance.via_module": "module.net.aws_vpc.v"}
+
+
+def test_a_lookup_reached_through_one_module_output_picks_a_vpc_of_another(tmp_path: Path) -> None:
+    (tmp_path / "net").mkdir()
+    (tmp_path / "net" / "main.tf").write_text(NET_MODULE)
+    facts = _extract(tmp_path,
+        'module "net" {\n  source = "./net"\n  vpc = data.aws_vpc.self.id\n}\n'
+        'data "aws_vpc" "self" { id = module.net.vpc_id }\n'
+        'resource "aws_security_group" "sg" { vpc_id = module.net.app_vpc }\n')
+    assert [n["address"] for n in facts["networks"]] == ["module.net.aws_vpc.v"]
+
+
+@pytest.mark.parametrize(("vpc", "subnet", "via"), [
+    ("shared_vpc_id", 'shared_vpc_private_subnet_ids["eu-west-1a"]', "shared_vpc_private_subnet_ids.eu-west-1a"),
+    ('vpcs["public-net"].vpc_id', 'vpcs["public-net"].private_subnet_ids["a"]', "vpcs.public-net.private_subnet_ids.a"),
+])
+def test_a_literal_key_after_a_remote_subnet_output_keeps_the_tier_of_its_name(tmp_path: Path, vpc: str, subnet: str, via: str) -> None:
+    facts = _extract(tmp_path, _tfe("network").replace("shared_vpc_id", vpc)
+                     + f'resource "aws_instance" "a" {{ subnet_id = data.tfe_outputs.net.values.{subnet} }}\n')
+    assert [(p["tier"], p["via"]) for p in facts["placements"]] == [("private", via)]
+
+
+def test_a_subnet_lookup_with_a_literal_key_takes_its_tier_from_its_name(tmp_path: Path) -> None:
+    facts = _extract(tmp_path,
+        'resource "aws_vpc" "v" { cidr_block = "10.0.0.0/16" }\n'
+        'data "aws_subnet" "private" {\n  for_each = toset(["a"])\n  vpc_id = aws_vpc.v.id\n}\n'
+        'resource "aws_instance" "i" { subnet_id = data.aws_subnet.private["a"].id }\n')
+    assert [(p["tier"], p["via"]) for p in facts["placements"]] == [("private", "private.a")]

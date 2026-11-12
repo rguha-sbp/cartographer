@@ -47,6 +47,11 @@ if TYPE_CHECKING:
     from cartographer.tf_modules import Inst, Res
 
 
+class Key(str):
+    """An object key read in brackets (`vpcs["blue"]`, `subnet_ids["eu-west-1a"]`): part of a network name, never the
+    name that gives a subnet tier."""
+
+
 @dataclass(frozen=True)
 class Ref:
     """A local resource (`name` None), a data source lookup (`name` its name, no `state`), or a remote output
@@ -78,7 +83,7 @@ def _render(name: str, path: tuple[str | None, ...]) -> str:
 
 def segments(path: str) -> tuple[str | None, ...]:
     """The attributes and literal indexes of a reference's path; None for an index that is no literal (`[each.key]`)."""
-    return tuple(next((g for g in m.groups()[:3] if g is not None), None) for m in SEGMENT.finditer(path))
+    return tuple(m[1] or (Key(m[2]) if m[2] is not None else m[3]) for m in SEGMENT.finditer(path))
 
 
 def token(heads: str, data: str) -> re.Pattern[str]:
@@ -141,7 +146,9 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
             within, picked = _looked_up(inst, m["ds"], m["ds_type"], walk)
             out[picked or _lookup(inst, m, within)] = None
         elif (hops := _hops(inst, head, second, path)) is not None:
-            if (hop := (id(inst), head, second)) not in walk.active and len(walk.active) < MAX_HOPS:  # a local that reads itself reads nothing more
+            # a local that reads itself reads nothing more; each module output is its own hop, as Terraform orders them
+            hop = (id(inst), head, second, path[0] if head == "module" else None)
+            if hop not in walk.active and len(walk.active) < MAX_HOPS:
                 walk.active.add(hop)
                 for where, value, rest in hops:
                     out |= _follow(where, value, rest, walk)
@@ -205,9 +212,11 @@ def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
     if len(found) != 1:
         return None
     ref = found.pop()
-    owner, resource = next((i, i.mod.resources[key]) for i in _root(inst).walk()
-                           if (key := tuple(ref.address.removeprefix(i.prefix).split("."))) in i.mod.resources
-                           and ref.address.startswith(i.prefix))
+    owner, resource = next(((i, i.mod.resources[key]) for i in _root(inst).walk()
+                            if (key := tuple(ref.address.removeprefix(i.prefix).split("."))) in i.mod.resources
+                            and ref.address.startswith(i.prefix)), (None, None))
+    if owner is None:
+        return None
     other = norm_keys(resource.body)
     provider = _provider(inst, body, kind)  # key "": the calls of one instance give it different providers
     same = provider[1] != "" and provider == _provider(owner, other, kind) and all(
@@ -268,16 +277,22 @@ def _lookup(inst: Inst, m: re.Match[str], within: tuple[Ref, ...]) -> Ref:
     """What a lookup that selects no resource of its own type in this stack reads: an external network, one for
     each literal index of a `count` or `for_each` lookup, or a subnet `within` the resources its selectors read."""
     index = LITERAL_INDEX.fullmatch(m["ds_index"] or "")
-    key = (index[0].strip('"'),) if index else ()
+    key = (Key(index[0].strip('"')),) if index else ()
     suffix = f"[{index[0]}]" if index else ""
     return Ref(f"{inst.prefix}{m['lookup']}{suffix}", _render(m["ds"], key), tier=_tier((m["ds"], *key)),
                within=within, looks_up=m["ds_type"])
 
 
 def _tier(path: tuple[str | None, ...]) -> str | None:
-    """The tier the last name of a path gives; a key or object name before it never sets the tier. A list index, a
-    non-literal index and an identifier attribute (`.id`) are no name."""
-    return tier_in(next((p for p in reversed(path) if p is not None and not p.isdecimal() and not IDENTIFIER.fullmatch(p)), ""))
+    """The tier the end of a path gives: a key after the last name when it names a tier (`subnets["private"]`), else
+    that last name (`private_subnet_ids["eu-west-1a"]`). A key or name before the last name never sets the tier; an
+    index and an identifier attribute (`.id`) are skipped."""
+    for p in reversed(path):
+        if p is None or p.isdecimal() or IDENTIFIER.fullmatch(p):
+            continue
+        if (tier := tier_in(p)) or not isinstance(p, Key):
+            return tier
+    return None
 
 
 def _dig(value: Any, path: tuple[str | None, ...]) -> list[tuple[Any, tuple[str | None, ...]]]:

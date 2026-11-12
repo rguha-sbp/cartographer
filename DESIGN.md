@@ -246,9 +246,11 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     (`merge(local.a, local.b).vpc_id`) reads from each reference in it. A resource's `vpc_id` or
     `virtual_network_name` (`aws_subnet.a.vpc_id`) reads what that argument reads. After a remote output it is named `[*]`, so every key of
     `vpcs[each.key]` reads one network `vpcs[*]`. The index of a module call (`module.net[0]`) is skipped: every
-    instance has the same outputs. A remote subnet's tier comes only from the last name of its path
-    (`vpcs["private-net"].public_subnet_ids` is public); a key or object name before it never sets the tier, and
-    a trailing index or identifier attribute (`id`, `ids`, `arn`, `name`) is skipped.
+    instance has the same outputs. A remote subnet's tier comes from the end of its path: a key in brackets after
+    the last name when that key names a tier (`vpc_subnets["private"]`), else the last name
+    (`private_subnet_ids["eu-west-1a"]` and `vpcs["private-net"].public_subnet_ids` are private and public); a key
+    or object name before the last name never sets the tier, and an index or identifier attribute (`id`, `ids`,
+    `arn`, `name`) is skipped. `refs.Key` keeps a bracketed key apart from an attribute for this.
   - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module and a
     literal index (`data.aws_vpc.x[0]` is network `x[0]`). A lookup is the resource of this stack it picks
     (`refs.PICKS`): its `id` or its `vpc-id` / `subnet-id` filter for AWS, its `name` for Azure, each one whole
@@ -256,7 +258,9 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     `resource_group_name` (and `virtual_network_name` for a subnet). A tag, a name filter, a value built from a local
     network (`"${aws_vpc.main.tags.Name}-peer"`) or another provider keeps it external: a peer or DR network is often
     found by the tags of a local one. Each lookup is followed once per reference walk, a local that reads itself
-    reads nothing more, and `Inst.value` keeps each result, so many reads stay linear. With the same unresolved
+    reads nothing more, and `Inst.value` keeps each result, so many reads stay linear. Each module output is its own
+    step in that guard, as Terraform orders outputs one by one: a lookup reached through `module.net.app_subnet_ids`
+    still reads `module.net.vpc_id`. With the same unresolved
     `resource_group_name` text (`var.rg_name`) on both, an Azure lookup and the network it names agree; each side is
     first read through the resource arguments it names (`azurerm_resource_group.rg.name` is `"rg"`). A reference to a
     resource's or lookup's `tags` reads only that tag's value as written in the block, never the block
