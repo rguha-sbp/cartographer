@@ -81,6 +81,7 @@ class Inst:
     instances: list[str] | None = None
     provider_map: dict[str, str] = field(default_factory=dict)  # a provider key of this module -> the parent's key; "" when calls disagree
     children: dict[str, Inst] = field(default_factory=dict)
+    _values: dict[tuple, str | None | object] = field(default_factory=dict, repr=False)  # `value` per (expr, depth, agree)
 
     def walk(self) -> Iterator[Inst]:
         yield self
@@ -98,7 +99,11 @@ class Inst:
         head = _head(expr, depth)
         if not isinstance(head, tuple):
             return head
-        kind, name = head
+        if (key := (head, depth, agree)) not in self._values:  # every call path of a deep module tree asks again
+            self._values[key] = self._read(*head, depth, agree)
+        return self._values[key]
+
+    def _read(self, kind: str, name: str, depth: int, agree: bool) -> str | None | object:
         calls = self.args if kind == "var" and self.parent is not None else []
         passed = [a[name] for a in calls if name in a]
         options = [(self.parent, v) for v in (passed if agree else passed[:1])]

@@ -828,3 +828,49 @@ def test_a_resource_with_one_placed_and_one_unplaced_subnet_is_marked(tmp_path: 
         'resource "aws_lb" "l" {\n  subnets = [aws_subnet.a.id, data.terraform_remote_state.net.outputs.private_subnet_ids[0]]\n}\n')
     assert _placed(facts) == {"aws_lb.l": "aws_vpc.main"}
     assert "private_subnet_ids[0] fits no network this stack knows" in _reason(facts, "aws_lb.l")
+
+
+def _counted(monkeypatch: pytest.MonkeyPatch, owner: object, name: str, limit: int) -> None:
+    """Fail the test when `owner.name` runs more than `limit` times, so an exponential walk fails fast."""
+    calls = 0
+    real = getattr(owner, name)
+
+    def counted(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        assert calls <= limit, f"{name} ran more than {limit} times"
+        return real(*args, **kwargs)
+    monkeypatch.setattr(owner, name, counted)
+
+
+def test_a_local_that_reads_itself_several_times_takes_linear_time(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from cartographer.clouds import refs
+    _counted(monkeypatch, refs, "_follow", 1000)
+    facts = _extract(tmp_path,
+        'locals {\n  a = "${local.a.x}-${local.a.y}-${local.a.z}"\n}\n'
+        'resource "aws_lambda_function" "f" {\n  vpc_config {\n    subnet_ids = [local.a]\n  }\n}\n')
+    assert _placed(facts) == {}
+
+
+def test_a_long_chain_of_locals_is_followed_to_its_end(tmp_path: Path) -> None:
+    chain = "".join(f"  a{i} = local.a{i + 1}\n" for i in range(500))
+    facts = _extract(tmp_path, S3_STATE + f"locals {{\n{chain}  a500 = data.terraform_remote_state.net.outputs.vpc_id\n}}\n"
+                     'resource "aws_security_group" "s" { vpc_id = local.a0 }\n')
+    assert [n["name"] for n in facts["networks"]] == ["vpc"]
+
+
+def test_settings_that_many_module_calls_agree_on_are_read_once_per_instance(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from cartographer import tf_modules
+    calls = "".join(f'module "c{i}" {{\n  source = "./m"\n  ws = var.ws\n}}\n' for i in range(6))
+    path = tmp_path
+    for _ in range(5):
+        (path / "main.tf").write_text('variable "ws" {}\n' + calls)
+        path = path / "m"
+        path.mkdir()
+    (path / "main.tf").write_text(
+        'variable "ws" {}\ndata "tfe_outputs" "net" {\n  organization = "o"\n  workspace = var.ws\n}\n'
+        'resource "aws_security_group" "s" { vpc_id = data.tfe_outputs.net.values.vpc_id }\n')
+    (tmp_path / "main.tf").write_text(calls.replace("var.ws", '"net"'))
+    _counted(monkeypatch, tf_modules.Inst, "value", 1000)
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [(n["name"], n["remote"]) for n in facts["networks"]] == [("vpc", True)]

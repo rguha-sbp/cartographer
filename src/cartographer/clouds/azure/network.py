@@ -100,16 +100,19 @@ class Network:
         if r.address in self._subnet_refs:
             return self._subnet_refs[r.address]
         found: dict[str, Subnet] = {}
-        attached = (ref for value in find(r.block.body, NIC_ATTACHMENT) for ref in self.refs(r.inst, value))
-        for ref in attached:
-            nic = self.by_address.get(ref.address)
-            if nic is not None and nic.type == "azurerm_network_interface":
-                found |= {s.address: s for s in self.direct_subnets(nic)}
-                if nic.address in self.unplaced:
-                    self.unplaced.setdefault(r.address, []).extend(self.unplaced[nic.address])
+        for nic in self.nics(r):
+            found |= {s.address: s for s in self.direct_subnets(nic)}
+            if nic.address in self.unplaced:
+                self.unplaced.setdefault(r.address, []).extend(self.unplaced[nic.address])
         found |= {s.address: s for s in self.direct_subnets(r)}
         self._subnet_refs[r.address] = list(found.values())
         return self._subnet_refs[r.address]
+
+    def nics(self, r: Res) -> list[Res]:
+        """The network interfaces a VM or scale set attaches."""
+        attached = (self.by_address.get(ref.address) for value in find(r.block.body, NIC_ATTACHMENT)
+                    for ref in self.refs(r.inst, value))
+        return [nic for nic in attached if nic is not None and nic.type == "azurerm_network_interface"]
 
     def direct_subnets(self, r: Res, body: Any = None) -> list[Subnet]:
         return [s for value in find(r.block.body if body is None else body, SUBNET_KEY)
@@ -208,8 +211,8 @@ class Network:
                 if s.network in self.nets:
                     tier, via = self.tier(s)
                     found.setdefault((r.address, s.network, tier), (via, r))
-            for value in find(r.block.body, SUBNET_KEY):
-                for ref in self.refs(r.inst, value):
+            for x in (r, *self.nics(r)):  # a VM is in the subnets of the network interfaces it attaches
+                for ref in (ref for value in find(x.block.body, SUBNET_KEY) for ref in self.refs(x.inst, value)):
                     if ref.remote and (placed := place_remote(self.nets, ref, self.unplaced, r.address)):
                         found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
         return placement_facts(found)

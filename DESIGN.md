@@ -255,7 +255,9 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     reference that reads the same one resource of the looked-up type, with the same provider and, for Azure, the same
     `resource_group_name` (and `virtual_network_name` for a subnet). A tag, a name filter, a value built from a local
     network (`"${aws_vpc.main.tags.Name}-peer"`) or another provider keeps it external: a peer or DR network is often
-    found by the tags of a local one. Each lookup is followed once per reference walk. A subnet lookup whose
+    found by the tags of a local one. Each lookup is followed once per reference walk, a local that reads itself
+    reads nothing more, and `Inst.value` keeps each result, so many reads stay linear. With the same unresolved
+    `resource_group_name` text (`var.rg_name`) on both, an Azure lookup and the network it names agree. A subnet lookup whose
     `vpc_id`, `vpc-id` filter or `virtual_network_name` reads one network of this stack, a looked-up network or a
     remote network (`aws_vpc.main.id`, `aws_subnet.a[0].vpc_id`, `data.aws_vpc.shared.id`) is in it, and that network
     is a network fact even when nothing else names it; when these name no network this stack knows, the subnet is
@@ -268,7 +270,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     for a lookup one of the same module. A subnet name that names no network (`private_subnet_ids`) fits every network
     of its state with fitting indexes. A remote subnet gives no placement, and the resource is marked with why, when
     no network fits, when two fit equally well, or when its name gives no tier. Every reason is kept, also when
-    another subnet of the resource is placed or the resource is already marked.
+    another subnet of the resource is placed or the resource is already marked. An Azure VM or scale set is placed
+    or marked through the remote or looked-up subnets of the network interfaces it attaches, as for local subnets.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything, a node
   has no edge, or verify changed a group claim: cidrs, a subnet tier, a group parent, an `external` marker or a node
   inside a network. The empty group notes come after verify has moved the nodes.

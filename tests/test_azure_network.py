@@ -195,3 +195,37 @@ def test_a_hub_lookup_that_shares_a_resource_group_with_a_local_vnet_stays_exter
         ("azurerm_virtual_network.spoke", False), ("data.azurerm_virtual_network.hub", True)]
     hub = next(n["id"] for n in facts["networks"] if n["remote"])
     assert [(p["resource"], p["network"], p["tier"]) for p in facts["placements"]] == [("azurerm_private_endpoint.pe", hub, "private")]
+
+
+def test_a_lookup_of_a_local_vnet_whose_resource_group_is_the_same_variable_is_that_vnet(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'variable "rg_name" {}\n'
+        'resource "azurerm_virtual_network" "main" {\n  name = "main"\n  resource_group_name = var.rg_name\n'
+        '  address_space = ["10.0.0.0/16"]\n}\n'
+        'data "azurerm_virtual_network" "same" {\n  name = azurerm_virtual_network.main.name\n'
+        '  resource_group_name = var.rg_name\n}\n'
+        'resource "azurerm_subnet" "app_private" {\n  name = "app-private"\n  resource_group_name = var.rg_name\n'
+        '  virtual_network_name = data.azurerm_virtual_network.same.name\n  address_prefixes = ["10.0.1.0/24"]\n}\n'
+        'resource "azurerm_private_endpoint" "pe" { subnet_id = azurerm_subnet.app_private.id }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [(n["address"], n["remote"]) for n in facts["networks"]] == [("azurerm_virtual_network.main", False)]
+    assert [(p["resource"], p["tier"]) for p in facts["placements"]] == [("azurerm_private_endpoint.pe", "private")]
+
+
+def test_a_vm_is_placed_or_marked_through_a_nic_in_a_remote_or_looked_up_subnet(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'data "azurerm_virtual_network" "hub" {\n  name = "hub"\n  resource_group_name = "hub-rg"\n}\n'
+        'data "azurerm_subnet" "hub_private" {\n  name = "private"\n'
+        '  virtual_network_name = data.azurerm_virtual_network.hub.name\n  resource_group_name = "hub-rg"\n}\n'
+        'data "tfe_outputs" "net" {\n  organization = "o"\n  workspace = "w"\n}\n'
+        'resource "azurerm_network_interface" "nic" {\n  ip_configuration {\n'
+        '    subnet_id = data.tfe_outputs.net.values.spoke_private_subnet_id\n  }\n}\n'
+        'resource "azurerm_linux_virtual_machine" "vm" { network_interface_ids = [azurerm_network_interface.nic.id] }\n'
+        'resource "azurerm_network_interface" "nic2" {\n  ip_configuration {\n'
+        '    subnet_id = data.azurerm_subnet.hub_private.id\n  }\n}\n'
+        'resource "azurerm_linux_virtual_machine" "vm2" { network_interface_ids = [azurerm_network_interface.nic2.id] }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    hub = next(n["id"] for n in facts["networks"] if n["address"] == "data.azurerm_virtual_network.hub")
+    assert [(p["resource"], p["network"]) for p in facts["placements"]] == [("azurerm_linux_virtual_machine.vm2", hub)]
+    reason = next(r.get("reason") for r in facts["resources"] if r["address"] == "azurerm_linux_virtual_machine.vm")
+    assert "spoke_private_subnet_id fits no network this stack knows" in reason

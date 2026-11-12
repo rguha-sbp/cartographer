@@ -91,6 +91,7 @@ class _Walk:
 
     pattern: re.Pattern[str]
     seen: set = field(default_factory=set)
+    active: set = field(default_factory=set)  # the variables, locals and module outputs being followed
     lookups: dict[tuple, tuple[tuple[Ref, ...], Ref | None] | None] = field(default_factory=dict)
 
     def read(self, inst: Inst, value: Any) -> dict[Ref, None]:
@@ -123,15 +124,12 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
         elif m["ds"]:
             within, picked = _looked_up(inst, m["ds"], m["ds_type"], walk)
             out[picked or _lookup(inst, m, within)] = None
-        elif head == "var" and inst.parent is not None:
-            for args in inst.args:
-                if second in args:
-                    out |= _follow_parts(inst.parent, _dig(args[second], path), walk)
-        elif head == "local" and second in inst.mod.locals:
-            out |= _follow_parts(inst, _dig(inst.mod.locals[second], path), walk)
-        elif head == "module" and second in inst.children and path and path[0] in inst.children[second].mod.outputs:
-            child = inst.children[second]
-            out |= _follow_parts(child, _dig(child.mod.outputs[path[0]], path[1:]), walk)
+        elif (hops := _hops(inst, head, second, path)) is not None:
+            if (hop := (id(inst), head, second)) not in walk.active:  # a local that reads itself reads nothing more
+                walk.active.add(hop)
+                for where, value, rest in hops:
+                    out |= _follow(where, value, rest, walk)
+                walk.active.discard(hop)
         elif resource := inst.mod.resources.get((head, second)):
             if path and path[0] in NETWORK_ARGS and path[0] in (body := norm_keys(resource.body)):
                 out |= _follow(inst, body[path[0]], path[1:], walk)  # `aws_subnet.a.vpc_id` is the subnet's VPC
@@ -140,8 +138,16 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
     return out
 
 
-def _follow_parts(inst: Inst, parts: list[tuple[Any, tuple[str | None, ...]]], walk: _Walk) -> dict[Ref, None]:
-    return {ref: None for value, unread in parts for ref in _follow(inst, value, unread, walk)}
+def _hops(inst: Inst, head: str, second: str, path: tuple[str | None, ...]) -> list[tuple[Inst, Any, tuple]] | None:
+    """Where a variable, local or module output that `inst` reads is defined: each (instance, value, the path still
+    to read there); None when `head.second` is none of these."""
+    if head == "var" and inst.parent is not None:
+        return [(inst.parent, *part) for args in inst.args if second in args for part in _dig(args[second], path)]
+    if head == "local" and second in inst.mod.locals:
+        return [(inst, *part) for part in _dig(inst.mod.locals[second], path)]
+    if head == "module" and second in inst.children and path and path[0] in (child := inst.children[second]).mod.outputs:
+        return [(child, *part) for part in _dig(child.mod.outputs[path[0]], path[1:])]
+    return None
 
 
 def _looked_up(inst: Inst, name: str, ds_type: str, walk: _Walk) -> tuple[tuple[Ref, ...], Ref | None]:
@@ -177,7 +183,7 @@ def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
     other = norm_keys(resource.body)
     provider = _provider(inst, body, kind)  # key "": the calls of one instance give it different providers
     same = provider[1] != "" and provider == _provider(owner, other, kind) and all(
-        _agree(inst, body.get(arg), owner, other.get(arg), walk) for arg in AGREE.get(ds_type, ()))
+        _agree(inst, body.get(arg), owner, other.get(arg)) for arg in AGREE.get(ds_type, ()))
     return ref if same else None
 
 
@@ -207,12 +213,12 @@ def _provider(inst: Inst, body: dict, kind: str) -> tuple[int | None, str]:
     return id(owner) if owner else None, key
 
 
-def _agree(inst: Inst, value: Any, owner: Inst, other: Any, walk: _Walk) -> bool:
-    """True when two arguments give the same literal, or are the same text in one module that reads the same thing."""
+def _agree(inst: Inst, value: Any, owner: Inst, other: Any) -> bool:
+    """True when two arguments give the same literal, or are the same expression in one module instance."""
     literal = inst.value(value)
     if isinstance(literal, str):
         return literal == owner.value(other)
-    return inst is owner and value == other and bool(walk.read(inst, value))
+    return inst is owner and value is not None and value == other
 
 
 def _lookup(inst: Inst, m: re.Match[str], within: tuple[Ref, ...]) -> Ref:
