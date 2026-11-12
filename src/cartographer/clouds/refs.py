@@ -445,4 +445,7 @@ def derive(name: str) -> str:
 
 
 def tier_in(name: str) -> str | None:
-    return next((t for t in TIERS if t in name.lower()), None)
+    """The tier word nearest the end of a name: a subnet's own tier follows its network's (`private_vpc_public_subnet`
+    is public)."""
+    found = {name.lower().rfind(t): t for t in TIERS if t in name.lower()}
+    return found[max(found)] if found else None

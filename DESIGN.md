@@ -250,7 +250,9 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     ends with (before any index) when that key names a tier (`vpc_subnets["private"]`), else the last name
     (`private_subnet_ids["eu-west-1a"]` and `vpcs["private-net"].public_subnet_ids` are private and public); a key
     or object name before the last name never sets the tier (`vpcs["private-net"]["subnet_ids"]` gives none), and an index or identifier attribute (`id`, `ids`,
-    `arn`, `name`) is skipped. `refs.Key` keeps a bracketed key apart from an attribute for this.
+    `arn`, `name`) is skipped. `refs.Key` keeps a bracketed key apart from an attribute for this. In a
+    name with more than one tier word, the one nearest the end decides (`private_vpc_public_subnet_ids` is public), for
+    remote, looked-up and local subnets alike.
   - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module and a
     literal index (`data.aws_vpc.x[0]` is network `x[0]`). A lookup is the resource of this stack it picks
     (`refs.PICKS`): its `id` or its `vpc-id` / `subnet-id` filter for AWS, its `name` for Azure, each one whole

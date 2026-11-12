@@ -475,6 +475,8 @@ def test_a_quoted_local_keeps_the_attribute_path(tmp_path: Path) -> None:
     ("shared_vpc_id", 'shared_vpc_subnets["private"].id', "private"),
     ('vpcs["private-net"].vpc_id', 'vpcs["private-net"]["subnet_ids"][0]', None),
     ('vpcs["private-net"].vpc_id', 'vpcs["private-net"].subnet_ids["eu-west-1a"]', None),
+    ("private_vpc_id", "private_vpc_public_subnet_ids[0]", "public"),
+    ("private_net_id", "private_net_isolated_subnet_ids", "isolated"),
 ])
 def test_only_the_last_name_of_a_remote_path_sets_the_tier(tmp_path: Path, vpc: str, path: str, tier: str | None) -> None:
     (tmp_path / "main.tf").write_text(
@@ -990,3 +992,11 @@ def test_a_subnet_lookup_with_a_literal_key_takes_its_tier_from_its_name(tmp_pat
         'data "aws_subnet" "private" {\n  for_each = toset(["a"])\n  vpc_id = aws_vpc.v.id\n}\n'
         'resource "aws_instance" "i" { subnet_id = data.aws_subnet.private["a"].id }\n')
     assert [(p["tier"], p["via"]) for p in facts["placements"]] == [("private", "private.a")]
+
+
+def test_a_subnet_lookup_takes_the_tier_word_nearest_the_end_of_its_name(tmp_path: Path) -> None:
+    facts = _extract(tmp_path,
+        'data "aws_vpc" "isolated_vpc" {\n  tags = { Name = "isolated" }\n}\n'
+        'data "aws_subnet" "isolated_vpc_public" { vpc_id = data.aws_vpc.isolated_vpc.id }\n'
+        'resource "aws_instance" "lb" { subnet_id = data.aws_subnet.isolated_vpc_public.id }\n')
+    assert [(p["tier"], p["via"]) for p in facts["placements"]] == [("public", "isolated_vpc_public")]
