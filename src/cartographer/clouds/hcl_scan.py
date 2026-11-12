@@ -56,13 +56,16 @@ def member_keys(text: str, starts: set[int]) -> dict[int, tuple[str, ...]]:
     return {i: tuple(f.key for f in stack if f.kind == "{" and f.key is not None) for i, stack in _scan(text) if i in starts}
 
 
-def literals(text: str) -> list[str]:
+def literals(text: str, under: str | None = None) -> list[str]:
     """The string literals of an HCL value, each without its interpolations: `"private-${var.zone}"` -> `private-`,
-    `${format("%s-public", var.p)}` -> `%s-public`. Text with no quotes and no interpolation is one literal."""
+    `${format("%s-public", var.p)}` -> `%s-public`. Text with no quotes and no interpolation is one literal. With
+    `under`, only the literals in the value of an object member with that key: `Name` of
+    `merge(local.tags, {Name = "app-public"})` -> `app-public`."""
     if '"' not in text and "${" not in text:
-        return [text]
+        return [text] if under is None else []
     parts: dict[int, list[str]] = {}
     for i, stack in _scan(text):
-        if stack and stack[-1].kind == '"' and text[i] not in '"\\' and not text.startswith(TEMPLATES, i):
+        if (stack and stack[-1].kind == '"' and text[i] not in '"\\' and not text.startswith(TEMPLATES, i)
+                and (under is None or next((f.key for f in reversed(stack) if f.kind == "{"), None) == under)):
             parts.setdefault(stack[-1].start, []).append(text[i])
     return ["".join(p) for p in parts.values()]

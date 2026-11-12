@@ -1056,3 +1056,32 @@ def test_a_local_subnet_tier_comes_from_the_literal_words_of_its_name(tmp_path: 
         f'resource "aws_subnet" "a" {{\n  vpc_id = aws_vpc.v.id\n  tags = {{ Name = {name} }}\n}}\n'
         'resource "aws_instance" "i" { subnet_id = aws_subnet.a.id }\n')
     assert [p["tier"] for p in facts["placements"]] == [tier]
+
+
+def test_a_peer_lookup_whose_name_starts_a_subnet_output_never_takes_it_from_its_state(tmp_path: Path) -> None:
+    facts = _extract(tmp_path, TRS.format("net") +
+        'data "aws_vpc" "private" { tags = { Name = "private-peer" } }\n'
+        'resource "aws_security_group" "g" { vpc_id = data.terraform_remote_state.net.outputs.vpc_id }\n'
+        'resource "aws_vpc_peering_connection" "p" {\n  vpc_id = data.terraform_remote_state.net.outputs.vpc_id\n'
+        '  peer_vpc_id = data.aws_vpc.private.id\n}\n'
+        'resource "aws_instance" "i" { subnet_id = data.terraform_remote_state.net.outputs.private_subnet_ids[0] }\n')
+    assert _placed(facts, "name") == {"aws_instance.i": "vpc"}
+
+
+@pytest.mark.parametrize("vpc_id", ['lookup(local.vpcs.blue, "vpc_id", null)', 'local.vpc_ids["blue"]'])
+def test_a_subnet_output_beside_a_network_in_an_object_is_never_a_network(tmp_path: Path, vpc_id: str) -> None:
+    facts = _extract(tmp_path, TRS.format("net") +
+        'locals {\n  vpcs = { blue = {\n    vpc_id = data.terraform_remote_state.net.outputs.blue_vpc_id\n'
+        '    private_subnet_ids = data.terraform_remote_state.net.outputs.blue_private_subnet_ids\n  } }\n'
+        '  vpc_ids = { for k, v in local.vpcs : k => v.vpc_id }\n}\n'
+        f'resource "aws_security_group" "g" {{ vpc_id = {vpc_id} }}\n')
+    assert [n["name"] for n in facts["networks"]] == ["blue-vpc"]
+
+
+@pytest.mark.parametrize("tags", ['merge(var.tags, { Name = "app-public-a" })',
+                                  'merge({ Team = "private" }, { Name = "app-public-a" })'])  # only the Name key counts
+def test_a_local_subnet_tier_comes_from_a_name_tag_inside_a_function(tmp_path: Path, tags: str) -> None:
+    facts = _extract(tmp_path, 'variable "tags" {}\nresource "aws_vpc" "v" { cidr_block = "10.0.0.0/16" }\n'
+        f'resource "aws_subnet" "a" {{\n  vpc_id = aws_vpc.v.id\n  tags = {tags}\n}}\n'
+        'resource "aws_instance" "i" { subnet_id = aws_subnet.a.id }\n')
+    assert [p["tier"] for p in facts["placements"]] == ["public"]

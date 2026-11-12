@@ -362,11 +362,12 @@ def place_remote(networks: dict[str, dict], ref: Ref, why: dict[str, list[str]],
 def collect_remote(networks: dict[str, dict], resources: list[Res], network_key: re.Pattern[str],
                    subnet_key: re.Pattern[str], pattern: re.Pattern[str]) -> None:
     """Record the remote networks the resources name: in a network argument (`vpc_id`), or as what a subnet lookup is
-    in (`vpc-id = data.aws_vpc.shared.id`)."""
+    in (`vpc-id = data.aws_vpc.shared.id`). A subnet output is never a network, also when a projection the walk does not
+    follow (`lookup(local.net, "vpc_id", null)`, a `for` expression) reads the subnet outputs beside the network."""
     for r in resources:
         for value in find(r.block.body, network_key):
             for ref in sources(r.inst, value, pattern):
-                if ref.remote:
+                if ref.remote and not (ref.state and subnet_key.fullmatch(INDEX.sub("", ref.name or "").rsplit(".", 1)[-1])):
                     add_remote(networks, ref, r)
         for value in find(r.block.body, subnet_key):
             for ref in sources(r.inst, value, pattern):
@@ -380,11 +381,11 @@ def _candidates(networks: dict[str, dict], ref: Ref) -> dict[str, tuple]:
     starts the subnet's (`shared-vpc` for `shared-vpc-private-subnet`, `vpcs.blue` for `vpcs.blue.private-subnet`,
     never `vpcs.blue` for `vpcs.blue-east.private-subnet`) and its indexes are the subnet's or none. A remote output's
     subnet only fits a network of its own state or a lookup; one whose name names no network (`private_subnet_ids`)
-    fits every network of its own state. Rank: own state, then the subnet's indexes, then the longest name, then for
-    a lookup one its own module looks up."""
+    fits every network of its own state. Rank: own state, then the subnet's indexes, then the longest name it names,
+    then for a lookup one its own module looks up: a peer lookup named `private` never takes `private_subnet_ids`
+    from the network of their state."""
     stem, indexes = _stem(network_name(ref.name or ""))
-    named: dict[str, tuple] = {}
-    unnamed: dict[str, tuple] = {}
+    fits: dict[str, tuple] = {}
     for key, n in networks.items():
         own = ref.state is not None and key == remote_key(ref.state, n["name"])
         lookup = key == n["address"]
@@ -393,10 +394,10 @@ def _candidates(networks: dict[str, dict], ref: Ref) -> dict[str, tuple]:
             continue
         rank = (own, own_indexes == indexes)
         if _starts(name.split("."), stem.split(".")):
-            named[key] = (*rank, len(name), ref.state is None and lookup and _module(key) == _module(ref.address))
+            fits[key] = (*rank, len(name), ref.state is None and lookup and _module(key) == _module(ref.address))
         elif own and not _names_network(stem):
-            unnamed[key] = rank
-    return named or unnamed
+            fits[key] = (*rank, 0, False)
+    return fits
 
 
 def _starts(network: list[str], subnet: list[str]) -> bool:
@@ -470,8 +471,10 @@ def tier_in(name: str) -> str | None:
 def named_tier(body: dict) -> str | None:
     """The tier the literal text of a local subnet's `name` and `Name` tag gives: the tier of each string literal,
     outside interpolations (`"private-${var.public_zone}"` is private, `format("%s-public", var.p)` is public). Literals
-    that give different tiers give none: `var.private ? "private" : "public"` can be either."""
+    that give different tiers give none: `var.private ? "private" : "public"` can be either. The `Name` tag can sit in a
+    function: `merge(local.tags, {Name = "app-public"})`."""
     tags = body.get("tags")
-    names = [body.get("name", ""), *(v for k, v in tags.items() if unq(k) == "Name")] if isinstance(tags, dict) else [body.get("name", "")]
-    tiers = {tier for name in names for part in literals(str(name)) if (tier := tier_in(part))}
+    tagged = ([lit for k, v in tags.items() if unq(k) == "Name" for lit in literals(str(v))] if isinstance(tags, dict)
+              else literals(str(tags or ""), under="Name"))
+    tiers = {tier for part in (*literals(str(body.get("name", ""))), *tagged) if (tier := tier_in(part))}
     return tiers.pop() if len(tiers) == 1 else None

@@ -258,7 +258,7 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     name with more than one tier word, the one nearest the end decides (`private_vpc_public_subnet_ids` is public), for
     remote, looked-up and local subnets alike. Only a word that starts a tier word counts (`republic` is none). A local
     subnet's `name` and `Name` tag give the tier of their string literals, outside interpolations, found by the same
-    scan: `private-${var.public_zone}` is private and `format("%s-public", var.p)` is public. Literals with different
+    scan, also a `Name` key inside a function (`tags = merge(local.tags, {Name = "app-public"})`): `private-${var.public_zone}` is private and `format("%s-public", var.p)` is public. Literals with different
     tiers give none (`var.p ? "private" : "public"`), so the subnet takes the default.
   - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module and a
     literal index (`data.aws_vpc.x[0]` is network `x[0]`). A lookup is the resource of this stack it picks
@@ -286,7 +286,10 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     first words of it when all the other words are subnet words (`shared-vpc` for `shared_vpc_private_subnet_ids[0]`,
     `vpc` for `vpc_subnets["private"]`, but `vpcs.blue` never for `vpcs["blue-east"].private_subnet_ids`). Order: one of the same state first, then one with the subnet's indexes, then the longest name, then
     for a lookup one of the same module. A subnet name that names no network (`private_subnet_ids`) fits every network
-    of its state with fitting indexes. A remote subnet gives no placement, and the resource is marked with why, when
+    of its state with fitting indexes, and that fit still comes before a lookup whose name starts the subnet's (a
+    peer lookup `private` never takes `private_subnet_ids`). A remote output whose name is a subnet output
+    (`private_subnet_ids`) is never a network, also when a `vpc_id` reads it through a projection the walk does not
+    follow (`lookup(local.net, "vpc_id", null)`, a `for` expression). A remote subnet gives no placement, and the resource is marked with why, when
     no network fits, when two fit equally well, or when its name gives no tier. Every reason is kept, also when
     another subnet of the resource is placed or the resource is already marked. An Azure VM or scale set is placed
     or marked through the remote or looked-up subnets of the network interfaces it attaches, as for local subnets.
