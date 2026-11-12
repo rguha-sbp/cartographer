@@ -422,3 +422,13 @@ def test_a_network_under_a_plain_group_in_a_network_moves_beside_the_outer_netwo
     fix_network_groups({"groups": groups}, notes)
     assert {g["id"]: g["parent"] for g in groups}["inner"] == "acct"
     assert notes == ["group inner: network inside network group outer, moved beside it"]
+
+
+def test_networks_in_a_parent_loop_end_up_at_the_top_level() -> None:
+    from cartographer.verify_shared import fix_network_groups
+
+    groups, alone = [_group("a", "network", "b"), _group("b", "network", "a")], [_group("c", "network", "c")]
+    fix_network_groups({"groups": groups}, [])
+    fix_network_groups({"groups": alone}, [])  # its own parent: no other network holds it, and verify ends
+    assert groups[0]["parent"] is None
+    assert alone[0]["parent"] == "c"
