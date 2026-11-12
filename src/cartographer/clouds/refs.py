@@ -42,6 +42,9 @@ IDENTIFYING = re.compile(rf"(?:(?:vpc|vnet|virtual_network|network)_)?(?:{SUFFIX
 RESOURCE_ARG = re.compile(r"(?!(?:var|local|module|data)\.)([\w-]+)\.([\w-]+)\.([\w-]+)")  # `type.name.argument`
 INDEX = re.compile(r"\[[^\]]*\]")
 PART = re.compile(r"\[[^\]]*\]|[^.\[]+")  # the words and indexes of a `_render`ed name
+MEMBER = re.compile(r'(?:^|[{,\s])([\w-]+|"[^"]*")\s*=\s*$')  # `key = ` before a value in an object inside a function
+INTERPOLATION = re.compile(r"\$\{[^}]*\}")
+TIER_WORD = re.compile(rf"(?<![a-z])(?:{'|'.join(TIERS)})")  # a tier word that starts a word: never `republic`
 
 if TYPE_CHECKING:
     from cartographer.tf_modules import Inst, Res
@@ -131,7 +134,12 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
         own = m["path"] or m["outpath"] or m["dspath"] or ""
         if m["head"] not in (None, "var", "local"):
             own = INSTANCE.sub("", own)  # `module.net[0].x`, `aws_subnet.a[0].vpc_id`: every instance has the same shape
-        path = (*segments(own), *unread)  # `merge(local.a, local.b).vpc_id` reads `vpc_id` of each
+        rest = unread
+        if unread and (member := MEMBER.search(text[:m.start()])):  # `merge({vpc_id = x, subnet_ids = y}).vpc_id`
+            if unread[0] is not None and unread[0] != unq(member[1]):
+                continue  # reads `x` only
+            rest = unread[1:]
+        path = (*segments(own), *rest)  # `merge(local.a, local.b).vpc_id` reads `vpc_id` of each
         if len(path) > MAX_PATH or (key := (id(inst), m[0], path)) in walk.seen or walk.budget.left <= 0:
             continue
         walk.seen.add(key)
@@ -445,7 +453,7 @@ def derive(name: str) -> str:
 
 
 def tier_in(name: str) -> str | None:
-    """The tier word nearest the end of a name: a subnet's own tier follows its network's (`private_vpc_public_subnet`
-    is public)."""
-    found = {name.lower().rfind(t): t for t in TIERS if t in name.lower()}
-    return found[max(found)] if found else None
+    """The tier word nearest the end of a name, outside interpolations: a subnet's own tier follows its network's
+    (`private_vpc_public_subnet` is public), and `private-${var.public_zone}` is private."""
+    words = TIER_WORD.findall(INTERPOLATION.sub("", name).lower())
+    return words[-1] if words else None

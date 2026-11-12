@@ -1000,3 +1000,36 @@ def test_a_subnet_lookup_takes_the_tier_word_nearest_the_end_of_its_name(tmp_pat
         'data "aws_subnet" "isolated_vpc_public" { vpc_id = data.aws_vpc.isolated_vpc.id }\n'
         'resource "aws_instance" "lb" { subnet_id = data.aws_subnet.isolated_vpc_public.id }\n')
     assert [(p["tier"], p["via"]) for p in facts["placements"]] == [("public", "isolated_vpc_public")]
+
+
+TRS = 'data "terraform_remote_state" "{0}" {{\n  backend = "s3"\n  config = {{ bucket = "b", key = "{0}.tfstate" }}\n}}\n'
+
+
+@pytest.mark.parametrize(("local", "subnet", "network"), [
+    (("merge({ vpc_id = data.terraform_remote_state.net.outputs.vpc_id, "
+      "private_subnet_ids = data.terraform_remote_state.net.outputs.private_subnet_ids }, var.overrides)"),
+     "local.net.private_subnet_ids[0]", "vpc"),
+    ("merge(data.terraform_remote_state.net.outputs.vpcs, { dr = data.terraform_remote_state.dr.outputs.vpc })",
+     "local.net.blue.private_subnet_ids[0]", "vpcs.blue"),
+])
+def test_a_path_reads_only_the_member_of_an_object_inside_a_function_it_names(tmp_path: Path, local: str, subnet: str, network: str) -> None:
+    facts = _extract(tmp_path, TRS.format("net") + TRS.format("dr") +
+        f'variable "overrides" {{ default = {{}} }}\nlocals {{\n  net = {local}\n}}\n'
+        f'resource "aws_security_group" "g" {{ vpc_id = {subnet.replace("private_subnet_ids[0]", "vpc_id")} }}\n'
+        f'resource "aws_instance" "i" {{ subnet_id = {subnet} }}\n')
+    assert _placed(facts, "name") == {"aws_instance.i": network}
+    assert [n["name"] for n in facts["networks"]] == [network]
+
+
+@pytest.mark.parametrize(("name", "tier"), [
+    ('"private-${var.public_zone}"', "private"),
+    ('"${var.private_prefix}-public"', "public"),
+    ('var.is_private ? "private" : "public"', "private"),  # no literal name: the default
+    ('"app-isolated-republic"', "isolated"),
+])
+def test_a_local_subnet_tier_comes_from_the_literal_words_of_its_name(tmp_path: Path, name: str, tier: str) -> None:
+    facts = _extract(tmp_path,
+        'resource "aws_vpc" "v" { cidr_block = "10.0.0.0/16" }\n'
+        f'resource "aws_subnet" "a" {{\n  vpc_id = aws_vpc.v.id\n  tags = {{ Name = {name} }}\n}}\n'
+        'resource "aws_instance" "i" { subnet_id = aws_subnet.a.id }\n')
+    assert [p["tier"] for p in facts["placements"]] == [tier]

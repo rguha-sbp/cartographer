@@ -243,7 +243,9 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     is `network`, but `network.app_vpc_id` is `network.app-vpc`. An attribute path
     through locals, variables and module outputs reads object keys and list indexes; an index that is no literal
     reads the rest of the path from every element. A path after a value that is no single reference
-    (`merge(local.a, local.b).vpc_id`) reads from each reference in it. A resource's `vpc_id` or
+    (`merge(local.a, local.b).vpc_id`) reads from each reference in it, except a reference that is the value of an
+    object member inside it (`merge({vpc_id = x, subnet_ids = y}, var.o).vpc_id`), which is read only when the path
+    starts with its key. A resource's `vpc_id` or
     `virtual_network_name` (`aws_subnet.a.vpc_id`) reads what that argument reads. After a remote output it is named `[*]`, so every key of
     `vpcs[each.key]` reads one network `vpcs[*]`. The index of a module call (`module.net[0]`) is skipped: every
     instance has the same outputs. A remote subnet's tier comes from the end of its path: the key in brackets it
@@ -252,7 +254,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     or object name before the last name never sets the tier (`vpcs["private-net"]["subnet_ids"]` gives none), and an index or identifier attribute (`id`, `ids`,
     `arn`, `name`) is skipped. `refs.Key` keeps a bracketed key apart from an attribute for this. In a
     name with more than one tier word, the one nearest the end decides (`private_vpc_public_subnet_ids` is public), for
-    remote, looked-up and local subnets alike.
+    remote, looked-up and local subnets alike. Only a word that starts a tier word counts (`republic` is none), and
+    never one inside an interpolation (`private-${var.public_zone}` is private).
   - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module and a
     literal index (`data.aws_vpc.x[0]` is network `x[0]`). A lookup is the resource of this stack it picks
     (`refs.PICKS`): its `id` or its `vpc-id` / `subnet-id` filter for AWS, its `name` for Azure, each one whole
