@@ -9,11 +9,12 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from cartographer.tf_values import UNRESOLVED
+
 if TYPE_CHECKING:
     from cartographer.tf_extract import Extractor
     from cartographer.tf_modules import Res
 
-UNRESOLVED = object()  # the attribute exists but is not a literal (reference, local, var without default)
 # attribute path such as "sku.tier" -> literal, None (absent) or UNRESOLVED; `present=True` -> whether any block sets it
 # to something other than null; `every=True` -> the values of that path in every repeated block
 Getter = Callable[..., str | None | bool | object]
@@ -87,9 +88,10 @@ class Cloud(ABC):
         self.deployed_types = deployed_types  # compute, store and queue types a C4 Deployment view places or omits
 
     def network_facts(self, ex: Extractor) -> dict:
-        """{"networks": [...], "placements": [...]} without ids; a placement names its network by address.
+        """{"networks": {key: fact}, "placements": [...]} without ids; a placement names its network by key: the address,
+        or for a remote network `Ref.key`, so one output read from two stacks gives two networks.
         An optional "unplaced" maps a resource address to the reason it could not be placed; the resource is then marked."""
-        return {"networks": [], "placements": []}
+        return {"networks": {}, "placements": []}
 
     def permission_edges(self, ex: Extractor) -> None:
         """Add permission edges through `ex.add` and `ex.services`."""

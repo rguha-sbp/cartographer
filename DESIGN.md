@@ -177,6 +177,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   prompt, schema and facts, so build refuses it as stale and it needs a new curation.
 - `kind` in groups: `cloud | region | account | network | subnet | null`. Frame kinds carry `cloud`. A null kind is a plain
   dashed role group. There is one top-level `cloud` frame per cloud present, side by side. The tool never draws resource groups.
+- `external` in groups: set by verify, never by the curator. On a network frame whose nodes run only in networks this
+  stack does not create, the frame title shows it as `<label> (External)`. The frame stays in the stack's account.
 - `column` in groups: integer 0 to 3, required. It places the role groups that are directly in the account from left to right.
   The tool ignores it for frames and for groups nested in another group, which follow their parent.
 - Node `icon`: a qualified name. Set it only when no resource of the node resolves to one (a non-cloud provider) or for a
@@ -214,7 +216,86 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
   - dropped edges with reason
   - `unshown` facts of kind iam/trigger/route between two shown nodes that no curated edge covers (recall hints)
   - IAM-only vs code-only mismatches for code-cited edges
-- The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything or a node has no edge.
+- Networks (`tf_network_check.check_boxes`): a network group stands for the network facts its evidence cites. In a
+  Terraform diagram a network group that cites none gets a note, and its nodes are not checked. Networks do not nest:
+  a network group inside another network group moves beside the outermost network group around it, with a note. One pass per node (`_place`) decides
+  its network group, then its subnet group. A node with placement facts inside a network group that stands for
+  networks must be placed in one of them (any tier); otherwise verify moves it to the one network group that stands
+  for a network it runs in, or, when there is not exactly one, to the nearest ancestor that is not a network or
+  subnet group, with a note. A placed node outside every network group gets a note only. Inside its network group,
+  a node in a subnet group without a placement of that tier, or one just moved there, goes to a subnet group of a
+  tier it runs in, else to the network group itself; a node without placements leaves the network. Nodes without placement facts (security groups, gateways) are not checked. After the
+  moves, a group that stands only for remote networks and still holds a node gets `external`. Verify drops any curated
+  `external` first, in both modes, with a note. A network group that cites more than one network fact gets a note:
+  it stands for all of them, which is right only when they are one network that extract keys twice. Dropping a wrong `cidrs` claim keeps the citation.
+  - Extract reads only `.tf` text. A remote output's network is identified by the state its data block names plus the
+    network name derived from the output. The state is a `State(kind, settings, index)` value: `backend`,
+    `workspace` (dropped when `"default"` on `terraform_remote_state`), `organization`, the `hostname` and any default `organization` of the `tfe` provider a `tfe_outputs` block uses, and every `config` leaf as a
+    dotted path, resolved to literals through `var.` and `local.` and compared exactly as written. A setting that does
+    not resolve, calls of one module instance that disagree (also on which `tfe` provider they pass), a non-literal index or a data block without settings
+    make the identity the data source's full address, module prefix included, so separate modules get separate networks. The calls that one
+    module instance stands for share that instance's network, as they share its nodes. A `terraform_remote_state`
+    with the `remote` backend and only `organization`, `workspaces.name` and `hostname` reads the workspace a
+    `tfe_outputs` block reads, so it gets that block's identity. Settings resolve with `Inst.value(agree=True)`.
+  - An index or attribute after a remote output is part of the network name. Its attributes and keys are
+    joined by `.`, and each loses `_id`, `_ids`, `_name` and `_arn`; a list index stays in brackets: `vpcs["blue"]` is `vpcs.blue`, `vpc_ids[0]` is `vpc[0]`. A
+    last attribute that only identifies the network (`id`, `vpc_id`, `vnet_name`) names no network: `network.vpc_id`
+    is `network`, but `network.app_vpc_id` is `network.app-vpc`. An attribute path
+    through locals, variables and module outputs reads object keys and list indexes; an index that is no literal
+    reads the rest of the path from every element. A path after a value that is no single reference
+    (`merge(local.a, local.b).vpc_id`) reads from each reference in it, except a reference that is the value of an
+    object member inside it (`merge({vpc_id = x, subnet_ids = y}, var.o).vpc_id`), which is read only when the path
+    starts with its keys, outermost first (`merge({a = {vpc_id = x}}).a.vpc_id`), also inside a condition or a call
+    (`vpc_id = try(var.o.vpc_id, x)`). `clouds/hcl_scan.py` finds these keys in one pass over the expression text that
+    tracks brackets, strings and interpolations; a `for` expression adds no key. A resource's `vpc_id` or
+    `virtual_network_name` (`aws_subnet.a.vpc_id`) reads what that argument reads. After a remote output it is named `[*]`, so every key of
+    `vpcs[each.key]` reads one network `vpcs[*]`. The index of a module call (`module.net[0]`) is skipped: every
+    instance has the same outputs. A remote subnet's tier comes from the end of its path: the key in brackets it
+    ends with (before any index) when that key names a tier (`vpc_subnets["private"]`), else the last name
+    (`private_subnet_ids["eu-west-1a"]` and `vpcs["private-net"].public_subnet_ids` are private and public); a key
+    or object name before the last name never sets the tier (`vpcs["private-net"]["subnet_ids"]` gives none), and an index or identifier attribute (`id`, `ids`,
+    `arn`, `name`) is skipped. `refs.Key` keeps a bracketed key apart from an attribute for this. In a
+    name with more than one tier word, the one nearest the end decides (`private_vpc_public_subnet_ids` is public), for
+    remote, looked-up and local subnets alike. Only a word that starts a tier word counts (`republic` is none). A local
+    subnet's `name` and `Name` tag give the tier of their string literals, outside interpolations, found by the same
+    scan, also a `Name` key inside a function (`tags = merge(local.tags, {Name = "app-public"})`): `private-${var.public_zone}` is private and `format("%s-public", var.p)` is public. Literals with different
+    tiers give none (`var.p ? "private" : "public"`), so the subnet takes the default.
+  - A data source lookup (`data.aws_vpc.<name>`) is identified by its full address, including the module and a
+    literal index (`data.aws_vpc.x[0]` is network `x[0]`). A lookup is the resource of this stack it picks
+    (`refs.PICKS`): its `id` or its `vpc-id` / `subnet-id` filter for AWS, its `name` for Azure, each one whole
+    reference that reads the same one resource of the looked-up type, with the same provider and, for Azure, the same
+    `resource_group_name` (and `virtual_network_name` for a subnet). A tag, a name filter, a value built from a local
+    network (`"${aws_vpc.main.tags.Name}-peer"`) or another provider keeps it external: a peer or DR network is often
+    found by the tags of a local one. Each lookup is followed once per reference walk, a local that reads itself
+    reads nothing more, and `Inst.value` keeps each result, so many reads stay linear. Each module output is its own
+    step in that guard, as Terraform orders outputs one by one: a lookup reached through `module.net.app_subnet_ids`
+    still reads `module.net.vpc_id`. With the same unresolved
+    `resource_group_name` text (`var.rg_name`) on both, an Azure lookup and the network it names agree; each side is
+    first read through the resource arguments it names (`azurerm_resource_group.rg.name` is `"rg"`). A reference to a
+    resource's or lookup's `tags` reads only that tag's value as written in the block, never the block
+    (`refs.READ_THROUGH`), so a lookup by a tag of a local network stays external. A chain of more than
+    `refs.MAX_HOPS` (100) locals, variables, outputs and lookups, or a walk past `refs.MAX_READS` (10,000) distinct
+    references, reads nothing more. A subnet lookup whose
+    `vpc_id`, `vpc-id` filter or `virtual_network_name` reads one network of this stack, a looked-up network or a
+    remote network (`aws_vpc.main.id`, `aws_subnet.a[0].vpc_id`, `data.aws_vpc.shared.id`) is in it, and that network
+    is a network fact even when nothing else names it; when these name no network this stack knows, the subnet is
+    ranked by its name like a remote subnet. Its other selectors name no network. An attribute of a subnet lookup
+    (`data.aws_subnet.x.vpc_id`) is no network.
+  - A remote subnet output places a resource in a remote network whose name parts without indexes start the
+    subnet's, and whose indexes are the subnet's or none. The last network part equals the subnet's part or is the
+    first words of it when all the other words are subnet words (`shared-vpc` for `shared_vpc_private_subnet_ids[0]`,
+    `vpc` for `vpc_subnets["private"]`, but `vpcs.blue` never for `vpcs["blue-east"].private_subnet_ids`). Order: one of the same state first, then one with the subnet's indexes, then the longest name, then
+    for a lookup one of the same module. A subnet name that names no network (`private_subnet_ids`) fits every network
+    of its state with fitting indexes, and that fit still comes before a lookup whose name starts the subnet's (a
+    peer lookup `private` never takes `private_subnet_ids`). A remote output whose name is a subnet output
+    (`private_subnet_ids`) is never a network, also when a `vpc_id` reads it through a projection the walk does not
+    follow (`lookup(local.net, "vpc_id", null)`, a `for` expression). A remote subnet gives no placement, and the resource is marked with why, when
+    no network fits, when two fit equally well, or when its name gives no tier. Every reason is kept, also when
+    another subnet of the resource is placed or the resource is already marked. An Azure VM or scale set is placed
+    or marked through the remote or looked-up subnets of the network interfaces it attaches, as for local subnets.
+- The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything, a node
+  has no edge, or verify changed a group claim: cidrs, a subnet tier, a group parent, an `external` marker or a node
+  inside a network. The empty group notes come after verify has moved the nodes.
 
 ## tf_layout.py (stage 4)
 

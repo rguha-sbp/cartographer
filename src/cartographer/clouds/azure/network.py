@@ -8,7 +8,19 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from cartographer.clouds.refs import CIDR, Ref, blocks, derive, sources, tier_in, token
+from cartographer.clouds.refs import (
+    CIDR,
+    Ref,
+    blocks,
+    collect_remote,
+    named_tier,
+    network_fact,
+    place_remote,
+    placement_facts,
+    sources,
+    token,
+    unplaced,
+)
 from cartographer.tf_policies import unq
 from cartographer.tf_values import find, text
 
@@ -23,7 +35,6 @@ SUBNET_KEY = re.compile(r"(?!virtual_network_subnet_ids?$)(\w*_)?subnet_ids?")
 NIC_ATTACHMENT = re.compile(r"network_interface(_ids?)?")
 FRONTEND = "frontend_ip_configuration"
 PUBLIC_IP_KEY = re.compile(r"public_ip_address(_id)?")
-NAME_SUFFIXES = "ids?|name"
 RESERVED_PUBLIC = {"GatewaySubnet", "AzureBastionSubnet", "AzureFirewallSubnet"}
 NOT_PLACED = {"azurerm_subnet", "azurerm_virtual_network"}
 TOKEN = token(r"azurerm_\w+", "azurerm_(?:virtual_network|subnet)")
@@ -47,7 +58,7 @@ class Network:
         self.subnets: dict[str, Subnet] = {}
         self.public: dict[str, str] = {}
         self.outbound: dict[str, str] = {}
-        self.ambiguous: dict[str, str] = {}  # resource -> why a subnet reference could not be placed
+        self.unplaced: dict[str, list[str]] = {}  # resource -> why subnet references of it could not be placed
 
     def refs(self, inst: Inst, obj: Any) -> dict[Ref, None]:
         return sources(inst, obj, TOKEN)
@@ -58,35 +69,26 @@ class Network:
         return self._body_refs[r.address]
 
     def literal(self, res: Res, expr: Any) -> str | None:
-        found = self.ex.value(res.inst, expr)
+        found = res.inst.value(expr)
         return found if isinstance(found, str) else None
 
     def cidrs(self, vnet: Res) -> list[str]:
         """Every address prefix of a local virtual network, or none when any of them is not a literal."""
         raw = vnet.block.body.get("address_space")
-        found = [self.ex.value(vnet.inst, v) for v in (raw if isinstance(raw, list) else [raw])]
+        found = [vnet.inst.value(v) for v in (raw if isinstance(raw, list) else [raw])]
         return list(dict.fromkeys(found)) if all(isinstance(v, str) and CIDR.fullmatch(v) for v in found) else []  # type: ignore[arg-type]
-
-    @staticmethod
-    def _net(address: str, name: str, cidrs: list[str], remote: bool, res: Res) -> dict:
-        return {"address": address, "name": name, "cidrs": cidrs, "remote": remote,
-                "file": res.block.file, "line": res.block.line}
 
     def collect_networks(self) -> None:
         for r in self.ex.res:
             if r.type == "azurerm_virtual_network":
-                self.nets[r.address] = self._net(r.address, r.address.rsplit(".", 1)[1], self.cidrs(r), False, r)
-        for r in self.ex.res:
-            for value in find(r.block.body, NETWORK_KEY):
-                for ref in self.refs(r.inst, value):
-                    if ref.remote and ref.address not in self.nets:
-                        self.nets[ref.address] = self._net(ref.address, derive(ref.name or "", NAME_SUFFIXES), [], True, r)
+                self.nets[r.address] = network_fact(r.address.rsplit(".", 1)[1], self.cidrs(r), Ref(r.address), r)
+        collect_remote(self.nets, self.ex.res, NETWORK_KEY, SUBNET_KEY, TOKEN)
 
     def collect_subnets(self) -> None:
         for r in self.ex.res:
             body = r.block.body
             if r.type == "azurerm_subnet":
-                owner = next((x.address for x in self.refs(r.inst, body.get("virtual_network_name")) if x.address in self.nets), None)
+                owner = next((k for x in self.refs(r.inst, body.get("virtual_network_name")) if (k := x.key()) in self.nets), None)
                 self.subnets[r.address] = Subnet(r.address, owner, body, r)
             elif r.type == "azurerm_virtual_network":
                 for i, block in enumerate(blocks(body.get("subnet"))):
@@ -98,16 +100,19 @@ class Network:
         if r.address in self._subnet_refs:
             return self._subnet_refs[r.address]
         found: dict[str, Subnet] = {}
-        attached = (ref for value in find(r.block.body, NIC_ATTACHMENT) for ref in self.refs(r.inst, value))
-        for ref in attached:
-            nic = self.by_address.get(ref.address)
-            if nic is not None and nic.type == "azurerm_network_interface":
-                found |= {s.address: s for s in self.direct_subnets(nic)}
-                if nic.address in self.ambiguous:
-                    self.ambiguous.setdefault(r.address, self.ambiguous[nic.address])
+        for nic in self.nics(r):
+            found |= {s.address: s for s in self.direct_subnets(nic)}
+            if nic.address in self.unplaced:
+                self.unplaced.setdefault(r.address, []).extend(self.unplaced[nic.address])
         found |= {s.address: s for s in self.direct_subnets(r)}
         self._subnet_refs[r.address] = list(found.values())
         return self._subnet_refs[r.address]
+
+    def nics(self, r: Res) -> list[Res]:
+        """The network interfaces a VM or scale set attaches."""
+        attached = (self.by_address.get(ref.address) for value in find(r.block.body, NIC_ATTACHMENT)
+                    for ref in self.refs(r.inst, value))
+        return [nic for nic in attached if nic is not None and nic.type == "azurerm_network_interface"]
 
     def direct_subnets(self, r: Res, body: Any = None) -> list[Subnet]:
         return [s for value in find(r.block.body if body is None else body, SUBNET_KEY)
@@ -129,7 +134,8 @@ class Network:
             return [self.subnets[ref.address]]
         inline = [s for s in self.subnets.values() if s.address.startswith(f"{ref.address}.subnet[")]
         if len(inline) > 1 and len(named := [s for s in inline if self.quoted_in(s, value)]) != 1:
-            self.ambiguous.setdefault(r.address, f"{ref.address} has {len(inline)} inline subnets and the reference does not single out one")
+            self.unplaced.setdefault(r.address, []).append(
+                f"{ref.address} has {len(inline)} inline subnets and the reference does not single out one")
             return []
         return named if len(inline) > 1 else inline
 
@@ -191,21 +197,8 @@ class Network:
             return "private", f"{s.address} {self.outbound[s.address]}"
         if self.literal(s.owner, s.body.get("default_outbound_access_enabled")) == "false":
             return "isolated", f"{s.address} default_outbound_access_enabled = false"
-        tags = s.body.get("tags")
-        tagged = [v for k, v in tags.items() if unq(k) == "Name"] if isinstance(tags, dict) else []
-        named = tier_in(" ".join(unq(x) for x in (s.body.get("name", ""), *tagged)))
+        named = named_tier(s.body)
         return (named, f"{s.address} name") if named else ("private", f"{s.address} default")
-
-    def remote_network(self, name: str) -> str | None:
-        """Address of the remote network whose name prefixes an output name (`shared_vnet_private_subnet_id`)."""
-        hyphenated = derive(name, NAME_SUFFIXES)
-        named = [(len(n["name"]), a) for a, n in self.nets.items() if n["remote"] and hyphenated.startswith(n["name"] + "-")]
-        return max(named)[1] if named else None
-
-    def place_remote(self, ref: Ref) -> tuple[str, str, str] | None:
-        """(network address, tier, what decided the tier) for a subnet of another stack, None when either is unknown."""
-        tier, net = tier_in(ref.name or ""), self.remote_network(ref.name or "")
-        return (net, tier, ref.name or "") if net and tier else None
 
     def placements(self) -> list[dict]:
         found: dict[tuple[str, str, str], tuple[str, Res]] = {}
@@ -216,12 +209,11 @@ class Network:
                 if s.network in self.nets:
                     tier, via = self.tier(s)
                     found.setdefault((r.address, s.network, tier), (via, r))
-            for value in find(r.block.body, SUBNET_KEY):
-                for ref in self.refs(r.inst, value):
-                    if ref.remote and (placed := self.place_remote(ref)):
+            for x in (r, *self.nics(r)):  # a VM is in the subnets of the network interfaces it attaches
+                for ref in (ref for value in find(x.block.body, SUBNET_KEY) for ref in self.refs(x.inst, value)):
+                    if ref.remote and (placed := place_remote(self.nets, ref, self.unplaced, r.address)):
                         found.setdefault((r.address, placed[0], placed[1]), (placed[2], r))
-        return [{"resource": address, "network": net, "tier": tier, "via": via, "file": r.block.file, "line": r.block.line}
-                for (address, net, tier), (via, r) in sorted(found.items())]
+        return placement_facts(found)
 
 
 def network_facts(ex: Extractor) -> dict:
@@ -229,4 +221,6 @@ def network_facts(ex: Extractor) -> dict:
     net.collect_networks()
     net.collect_subnets()
     net.collect_evidence()
-    return {"networks": [v for _, v in sorted(net.nets.items())], "placements": net.placements(), "unplaced": net.ambiguous}
+    placements = net.placements()
+    return {"networks": dict(sorted(net.nets.items())), "placements": placements,
+            "unplaced": unplaced(net.unplaced)}

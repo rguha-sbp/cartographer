@@ -14,13 +14,10 @@ from cartographer.clouds import CLOUDS, IGNORED_PROVIDERS, cloud_of_type, resolv
 from cartographer.clouds.base import UNRESOLVED, Cloud, Getter, Resolution
 from cartographer.tf_hints import collect_hints
 from cartographer.tf_modules import META, Block, Inst, Res, build, remote_info
-from cartographer.tf_policies import unq
 from cartographer.tf_values import attrs, text
 
 REF = re.compile(r"(?<![\w.\-])([A-Za-z_]\w*)\.([A-Za-z_][\w-]*)(?:\[[^\]]*\])?(?:\.([A-Za-z_][\w-]*))?")
-SINGLE = re.compile(r"\$\{(var|local)\.(\w+)\}")
 SKIP_ATTRS = {"tags", "depends_on", "provider", "lifecycle", "count", "for_each", "tags_all"}
-MAX_DEPTH = 8
 
 
 class Extractor:
@@ -71,26 +68,6 @@ class Extractor:
             return CLOUDS.get(icons.cloud_of(self.resolution[r.address].icon or ""))
         return cloud_of_type(r.type)
 
-    def value(self, inst: Inst, expr: Any, depth: int = 0) -> str | None | object:
-        """The literal `expr` is, through `local.`, module arguments and variable defaults; None when absent."""
-        if expr is None:
-            return None
-        if isinstance(expr, (bool, int, float)):
-            return str(expr).lower()
-        if not isinstance(expr, str):
-            return UNRESOLVED
-        s = unq(expr)
-        if not (m := SINGLE.fullmatch(s)):
-            return UNRESOLVED if "${" in s else s
-        kind, name = m.groups()
-        if depth >= MAX_DEPTH:
-            return UNRESOLVED
-        where, target = inst, inst.mod.locals.get(name) if kind == "local" else inst.mod.variables.get(name)
-        if kind == "var" and (passed := [a[name] for a in inst.args if name in a]) and inst.parent is not None:
-            where, target = inst.parent, passed[0]
-        got = self.value(where, target, depth + 1)
-        return UNRESOLVED if got is None else got
-
     def getter(self, r: Res) -> Getter:
         def get(path: str, present: bool = False, every: bool = False) -> str | None | bool | list | object:
             if present:
@@ -100,7 +77,7 @@ class Extractor:
                 for key in path.split("."):
                     nodes = [item.get(key) for n in nodes for item in (n if isinstance(n, list) else [n])
                              if isinstance(item, dict)]
-                return [self.value(r.inst, n) for n in nodes if n is not None]
+                return [r.inst.value(n) for n in nodes if n is not None]
             node: Any = r.block.body
             for key in path.split("."):
                 node = node[0] if isinstance(node, list) and node else node
@@ -110,7 +87,7 @@ class Extractor:
                     return UNRESOLVED
                 node = node.get(key)
             node = node[0] if isinstance(node, list) and node else node
-            return self.value(r.inst, node)
+            return r.inst.value(node)
 
         return get
 
@@ -211,12 +188,13 @@ class Extractor:
         for cloud in self.clouds:
             found = cloud.network_facts(self)
             for address, reason in found.get("unplaced", {}).items():
-                if not (res := self.resolution[address]).marked:
-                    self.resolution[address] = replace(res, marked=True, reason=reason)
+                res = self.resolution[address]  # a resource already marked keeps its reason and gets this one
+                self.resolution[address] = replace(res, marked=True, reason="; ".join(
+                    filter(None, (res.reason if res.marked else None, reason))))
             ids = {}
-            for n in found["networks"]:
-                ids[n["address"]] = f"n{len(networks) + 1}"
-                networks.append({"id": ids[n["address"]], "cloud": cloud.name, **n})
+            for key, n in found["networks"].items():  # key: what placements name the network by
+                ids[key] = f"n{len(networks) + 1}"
+                networks.append({"id": ids[key], "cloud": cloud.name, **n})
             for p in found["placements"]:
                 placements.append({"id": f"p{len(placements) + 1}", "cloud": cloud.name, **p, "network": ids[p["network"]]})
         return {"networks": networks, "placements": placements}

@@ -29,3 +29,15 @@ resource "azurerm_private_endpoint" "pb" {
   resource_group_name = "rg"
   subnet_id = azurerm_subnet.b.id
 }
+resource "azurerm_subnet" "c" {
+  name = format("snet-%s-public", var.env)
+  resource_group_name = "rg"
+  virtual_network_name = azurerm_virtual_network.v.name
+  address_prefixes = ["10.0.3.0/24"]
+}
+resource "azurerm_private_endpoint" "pc" {
+  name = "z"
+  location = "westeurope"
+  resource_group_name = "rg"
+  subnet_id = azurerm_subnet.c.id
+}
