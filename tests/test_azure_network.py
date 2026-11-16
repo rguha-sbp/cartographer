@@ -301,3 +301,53 @@ def test_a_subnet_lookup_picked_by_the_name_of_a_subnet_output_object_takes_its_
     facts = tf_extract.extract(Path("."), tmp_path)
     assert [(p["resource"], p["tier"]) for p in facts["placements"] if p["resource"].endswith(".vm")] == [
         ("azurerm_linux_virtual_machine.vm", "private")]
+
+
+AZ_STATE = 'data "terraform_remote_state" "net" {\n  backend = "local"\n  config = { path = "net.tfstate" }\n}\n'
+
+
+def _endpoint(name: str, subnet: str) -> str:
+    return f'resource "azurerm_private_endpoint" "{name}" {{ subnet_id = {subnet}.id }}\n'
+
+
+def _placed_in(tmp_path: Path, tf: str) -> tuple[set[tuple[str, str]], set[str]]:
+    """(resource, network name) of each placement, and the networks' addresses."""
+    (tmp_path / "main.tf").write_text(tf)
+    facts = tf_extract.extract(Path("."), tmp_path)
+    name = {n["id"]: n["name"] for n in facts["networks"]}
+    return {(p["resource"], name[p["network"]]) for p in facts["placements"]}, {n["address"] for n in facts["networks"]}
+
+
+def test_a_vnet_lookup_by_the_name_of_another_lookup_in_another_resource_group_is_another_network(tmp_path: Path) -> None:
+    placed, networks = _placed_in(tmp_path,
+        'data "azurerm_virtual_network" "weu" {\n  name = "vnet-hub"\n  resource_group_name = "rg-weu"\n}\n'
+        'data "azurerm_virtual_network" "neu" {\n  name = data.azurerm_virtual_network.weu.name\n  resource_group_name = "rg-neu"\n}\n'
+        'resource "azurerm_subnet" "a" {\n  name = "app-private"\n  virtual_network_name = data.azurerm_virtual_network.weu.name\n}\n'
+        'resource "azurerm_subnet" "b" {\n  name = "app-private"\n  virtual_network_name = data.azurerm_virtual_network.neu.name\n}\n'
+        + _endpoint("pe_a", "azurerm_subnet.a") + _endpoint("pe_b", "azurerm_subnet.b"))
+    assert networks == {"data.azurerm_virtual_network.weu", "data.azurerm_virtual_network.neu"}
+    assert placed == {("azurerm_private_endpoint.pe_a", "weu"), ("azurerm_private_endpoint.pe_b", "neu")}
+
+
+@pytest.mark.parametrize("rg", ['"rg-network-dr"', "var.dr_rg", "data.azurerm_resource_group.dr.name"])
+def test_a_vnet_lookup_by_a_remote_name_output_in_a_resource_group_the_state_does_not_give_is_another_network(
+        tmp_path: Path, rg: str) -> None:
+    placed, networks = _placed_in(tmp_path, AZ_STATE +
+        'data "azurerm_virtual_network" "primary" {\n  name = data.terraform_remote_state.net.outputs.vnet_name\n'
+        '  resource_group_name = data.terraform_remote_state.net.outputs.resource_group_name\n}\n'
+        f'data "azurerm_virtual_network" "dr" {{\n  name = data.terraform_remote_state.net.outputs.vnet_name\n  resource_group_name = {rg}\n}}\n'
+        'resource "azurerm_subnet" "p" {\n  name = "app-private"\n  virtual_network_name = data.azurerm_virtual_network.primary.name\n}\n'
+        'resource "azurerm_subnet" "d" {\n  name = "app-private"\n  virtual_network_name = data.azurerm_virtual_network.dr.name\n}\n'
+        + _endpoint("pe_a", "azurerm_subnet.p") + _endpoint("pe_b", "azurerm_subnet.d"))
+    assert networks == {"data.terraform_remote_state.net.outputs.vnet_name", "data.azurerm_virtual_network.dr"}
+    assert placed == {("azurerm_private_endpoint.pe_a", "vnet"), ("azurerm_private_endpoint.pe_b", "dr")}
+
+
+def test_a_subnet_lookup_by_a_remote_name_output_in_a_literal_vnet_is_not_placed_in_the_remote_network(tmp_path: Path) -> None:
+    placed, _ = _placed_in(tmp_path, AZ_STATE +
+        'resource "azurerm_subnet" "own" {\n  name = "own-private"\n'
+        '  virtual_network_name = data.terraform_remote_state.net.outputs.vnet_name\n}\n'
+        'data "azurerm_subnet" "dr_app" {\n  name = data.terraform_remote_state.net.outputs.private_subnet_name\n'
+        '  virtual_network_name = "vnet-dr"\n  resource_group_name = "rg-network-dr"\n}\n'
+        + _endpoint("pe_dr", "data.azurerm_subnet.dr_app"))
+    assert not any(resource == "azurerm_private_endpoint.pe_dr" for resource, _ in placed)

@@ -268,7 +268,11 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     (`refs.PICKS`): its `id` or its `vpc-id` / `subnet-id` filter for AWS, its `name` for Azure, each one whole
     reference that reads the same one resource of the looked-up type, with the same provider and, for Azure, the same
     `resource_group_name` (and `virtual_network_name` for a subnet). Selectors that all read one and the same remote
-    output or other lookup (`id = data.tfe_outputs.n.values.vpc_id`) make the lookup that network. Only a network
+    output or other lookup (`id = data.tfe_outputs.n.values.vpc_id`) make the lookup that network. An Azure name is
+    unique only in its resource group, so `AGREE` holds for these picks too: another lookup must agree as a resource
+    does, and a remote output needs `resource_group_name` (or a subnet's `virtual_network_name`) to read nothing but
+    outputs of its state, at least one of them from it. A DR lookup by the remote `vnet_name` in a literal resource
+    group is another network. Only a network
     lookup is picked this way, and only by a network (`refs.is_network`). A subnet lookup is picked only by a subnet
     output or subnet lookup; it keeps that output's state and name, in the network its own `vpc_id` names, with its own
     tier when the output's name gives none (`refs._as_read`). `data.aws_subnet.x.vpc_id` reads the network the subnet

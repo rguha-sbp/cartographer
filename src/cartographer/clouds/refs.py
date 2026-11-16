@@ -47,7 +47,7 @@ PART = re.compile(r"\[[^\]]*\]|[^.\[]+")  # the words and indexes of a `_render`
 TIER_WORD = re.compile(rf"(?<![a-z])(?:{'|'.join(TIERS)})")  # a tier word that starts a word: never `republic`
 
 if TYPE_CHECKING:
-    from cartographer.tf_modules import Inst, Res
+    from cartographer.tf_modules import Block, Inst, Res
 
 
 class Key(str):
@@ -227,8 +227,11 @@ def _looked_up(inst: Inst, name: str, ds_type: str, walk: _Walk) -> tuple[tuple[
 def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
     """What a lookup picks: every `PICKS` selector it sets is one whole reference (`id = aws_vpc.main.id`, never
     `"${aws_vpc.main.tags.Name}-peer"`) and they all read one and the same thing. That is a remote output or another
-    lookup (`id = data.tfe_outputs.n.values.vpc_id`), or a resource of this stack of the looked-up type that uses the
-    same provider and the same `AGREE` arguments. A selector that reads two things (`var.create ? aws_vpc.this[0].id :
+    lookup (`id = data.tfe_outputs.n.values.vpc_id`), or a resource of this stack of the looked-up type, with the
+    same `AGREE` arguments: an Azure name is unique only in its resource group (and a subnet's in its network). A
+    resource or lookup must also use the same provider. A remote output needs `AGREE` arguments that read nothing but
+    outputs of its own state, and at least one of them that does: a resource group read from that state ties the name to
+    it, a literal alone does not. A selector that reads two things (`var.create ? aws_vpc.this[0].id :
     data.tfe_outputs.n.values.vpc_id`) picks nothing. A tag or a name filter picks nothing: a peer or DR network is
     often found by the tags of a local one. A remote output or lookup picks only a lookup of its own kind: a network
     lookup a network, a subnet lookup a subnet."""
@@ -239,26 +242,31 @@ def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
     if len(found[0]) != 1 or any(f != found[0] for f in found):
         return None
     ref = found[0].pop()
-    if ref.remote:
-        return ref if is_network(ref) == (ds_type in NETWORK_LOOKUPS) else None
     kind = ds_type.removesuffix("s")
-    if ref.address.split(".")[-2] != kind:
+    if ref.remote and is_network(ref) != (ds_type in NETWORK_LOOKUPS) or not ref.remote and ref.address.split(".")[-2] != kind:
         return None
-    owner, resource = _owner(inst, ref.address)
-    if owner is None or resource is None:
+    if ref.remote and ref.looks_up is None:
+        agree = AGREE.get(ds_type, ())
+        read = [r for arg in agree for r in walk.read(inst, body.get(arg))]
+        return ref if (read or not agree) and all(r.remote and r.looks_up is None and r.state == ref.state for r in read) else None
+    owner, block = _owner(inst, ref.address)
+    if owner is None or block is None:
         return None
-    other = norm_keys(resource.body)
+    other = norm_keys(block.body)
     provider = _provider(inst, body, kind)  # key "": the calls of one instance give it different providers
     same = provider[1] != "" and provider == _provider(owner, other, kind) and all(
         _agree(inst, body.get(arg), owner, other.get(arg)) for arg in AGREE.get(ds_type, ()))
     return ref if same else None
 
 
-def _owner(inst: Inst, address: str) -> tuple[Inst, Res] | tuple[None, None]:
-    """The module instance that declares the resource at `address`, and that resource."""
-    return next(((i, i.mod.resources[key]) for i in _root(inst).walk()
-                 if (key := tuple(address.removeprefix(i.prefix).split("."))) in i.mod.resources
-                 and address.startswith(i.prefix)), (None, None))
+def _owner(inst: Inst, address: str) -> tuple[Inst, Block] | tuple[None, None]:
+    """The module instance that declares the resource or lookup at `address`, and its block."""
+    for i in _root(inst).walk():
+        if address.startswith(i.prefix):
+            key = tuple(INDEX.sub("", address.removeprefix(i.prefix)).split("."))
+            if block := i.mod.data.get(key[1:]) if key[0] == "data" else i.mod.resources.get(key):  # type: ignore[arg-type]
+                return i, block
+    return None, None
 
 
 def _selected(body: dict, names: tuple[str, ...]) -> Iterator[Any]:
