@@ -10,6 +10,7 @@ from cartographer.clouds.refs import (
     collect_remote,
     named_tier,
     network_fact,
+    only_network,
     place_remote,
     placement_facts,
     sources,
@@ -71,7 +72,8 @@ class Network:
         if subnet.type != "aws_subnet":
             return None
         tier, how = _local_tier(subnet)
-        vpc = next((k for r in sources(subnet.inst, subnet.block.body.get("vpc_id"), TOKEN) if (k := r.key()) in self.vpcs), None)
+        read = [r.key() for r in sources(subnet.inst, subnet.block.body.get("vpc_id"), TOKEN)]
+        vpc = only_network(self.vpcs, read, self.unplaced, address, ref.address)
         return (vpc, tier, f"{ref.address} {how}") if vpc else None
 
     def placements(self) -> list[dict]:

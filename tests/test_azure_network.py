@@ -258,3 +258,20 @@ def test_a_lookup_by_a_tag_of_a_local_vnet_is_external(tmp_path: Path) -> None:
     facts = tf_extract.extract(Path("."), tmp_path)
     assert [(n["address"], n["remote"]) for n in facts["networks"]] == [
         ("azurerm_virtual_network.main", False), ("data.azurerm_virtual_network.dr", True)]
+
+
+def test_a_subnet_whose_network_name_reads_two_networks_is_marked(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'variable "create" { default = false }\n'
+        'data "tfe_outputs" "n" {\n  organization = "acme"\n  workspace = "network"\n}\n'
+        'resource "azurerm_virtual_network" "own" {\n  count = var.create ? 1 : 0\n  name = "vnet-own"\n'
+        '  address_space = ["10.0.0.0/16"]\n}\n'
+        'resource "azurerm_subnet" "app" {\n'
+        '  virtual_network_name = var.create ? azurerm_virtual_network.own[0].name : data.tfe_outputs.n.values.vnet_name\n'
+        '  name = "snet-app"\n}\n'
+        'resource "azurerm_private_endpoint" "pe" { subnet_id = azurerm_subnet.app.id }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert facts["placements"] == []
+    assert next(r.get("reason") for r in facts["resources"] if r["address"] == "azurerm_private_endpoint.pe") == (
+        "azurerm_subnet.app is in network azurerm_virtual_network.own or data.tfe_outputs.n.values.vnet_name,"
+        " it does not single out one")

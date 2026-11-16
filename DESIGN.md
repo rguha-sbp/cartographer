@@ -246,8 +246,11 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     (`merge(local.a, local.b).vpc_id`) reads from each reference in it, except a reference that is the value of an
     object member inside it (`merge({vpc_id = x, subnet_ids = y}, var.o).vpc_id`), which is read only when the path
     starts with its keys, outermost first (`merge({a = {vpc_id = x}}).a.vpc_id`), also inside a condition or a call
-    (`vpc_id = try(var.o.vpc_id, x)`). `clouds/hcl_scan.py` finds these keys in one pass over the expression text that
-    tracks brackets, strings and interpolations; a `for` expression adds no key. A resource's `vpc_id` or
+    (`vpc_id = try(var.o.vpc_id, x)`). A list literal is one level too: any index reads its elements
+    (`concat([{vpc_id = x, subnet_ids = y}], var.extra)[count.index].vpc_id` reads `x`), and an attribute passes it, as a
+    function may drop the list (`one([module.net.vpc]).vpc_id`). `clouds/hcl_scan.py` finds these keys and levels in one
+    pass over the expression text that tracks brackets, strings and interpolations; a `for` expression and an index add
+    none. A resource's `vpc_id` or
     `virtual_network_name` (`aws_subnet.a.vpc_id`) reads what that argument reads. After a remote output it is named `[*]`, so every key of
     `vpcs[each.key]` reads one network `vpcs[*]`. The index of a module call (`module.net[0]`) is skipped: every
     instance has the same outputs. A remote subnet's tier comes from the end of its path: the key in brackets it
@@ -264,7 +267,9 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     literal index (`data.aws_vpc.x[0]` is network `x[0]`). A lookup is the resource of this stack it picks
     (`refs.PICKS`): its `id` or its `vpc-id` / `subnet-id` filter for AWS, its `name` for Azure, each one whole
     reference that reads the same one resource of the looked-up type, with the same provider and, for Azure, the same
-    `resource_group_name` (and `virtual_network_name` for a subnet). A tag, a name filter, a value built from a local
+    `resource_group_name` (and `virtual_network_name` for a subnet). Selectors that all read one and the same remote
+    output or other lookup (`id = data.tfe_outputs.n.values.vpc_id`) make the lookup that network. A selector that
+    reads two things (`var.create ? aws_vpc.this[0].id : data.tfe_outputs.n.values.vpc_id`) picks nothing. A tag, a name filter, a value built from a local
     network (`"${aws_vpc.main.tags.Name}-peer"`) or another provider keeps it external: a peer or DR network is often
     found by the tags of a local one. Each lookup is followed once per reference walk, a local that reads itself
     reads nothing more, and `Inst.value` keeps each result, so many reads stay linear. Each module output is its own
@@ -288,11 +293,13 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     for a lookup one of the same module. A subnet name that names no network (`private_subnet_ids`) fits every network
     of its state with fitting indexes, and that fit still comes before a lookup whose name starts the subnet's (a
     peer lookup `private` never takes `private_subnet_ids`). A remote output whose name is a subnet output
-    (`private_subnet_ids`) is never a network, also when a `vpc_id` reads it through a projection the walk does not
-    follow (`lookup(local.net, "vpc_id", null)`, a `for` expression). A remote subnet gives no placement, and the resource is marked with why, when
+    (`private_subnet_ids`) is never a network, also when a `vpc_id`, or what a subnet lookup is in, reads it through a
+    projection the walk does not follow (`lookup(local.net, "vpc_id", null)`, a `for` expression). A remote subnet gives no placement, and the resource is marked with why, when
     no network fits, when two fit equally well, or when its name gives no tier. Every reason is kept, also when
     another subnet of the resource is placed or the resource is already marked. An Azure VM or scale set is placed
-    or marked through the remote or looked-up subnets of the network interfaces it attaches, as for local subnets.
+    or marked through the remote or looked-up subnets of the network interfaces it attaches, as for local subnets. A
+    local subnet whose `vpc_id` or `virtual_network_name` reads two networks this stack knows gives no placement
+    (`refs.only_network`), and the resource is marked with both.
 - The exit code is always 0, and the report is the artefact. `--strict` exits 1 when the tool dropped anything, a node
   has no edge, or verify changed a group claim: cidrs, a subnet tier, a group parent, an `external` marker or a node
   inside a network. The empty group notes come after verify has moved the nodes.

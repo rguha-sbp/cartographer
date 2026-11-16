@@ -15,6 +15,7 @@ from cartographer.clouds.refs import (
     collect_remote,
     named_tier,
     network_fact,
+    only_network,
     place_remote,
     placement_facts,
     sources,
@@ -43,7 +44,7 @@ TOKEN = token(r"azurerm_\w+", "azurerm_(?:virtual_network|subnet)")
 @dataclass(frozen=True)
 class Subnet:
     address: str  # an inline subnet is `<virtual network address>.subnet[<index>]`
-    network: str | None
+    networks: tuple[str, ...]  # the keys of what its `virtual_network_name` reads; one known network places it
     body: dict
     owner: Res  # the azurerm_subnet, or the virtual network an inline subnet is declared in
 
@@ -88,12 +89,12 @@ class Network:
         for r in self.ex.res:
             body = r.block.body
             if r.type == "azurerm_subnet":
-                owner = next((k for x in self.refs(r.inst, body.get("virtual_network_name")) if (k := x.key()) in self.nets), None)
-                self.subnets[r.address] = Subnet(r.address, owner, body, r)
+                read = tuple(x.key() for x in self.refs(r.inst, body.get("virtual_network_name")))
+                self.subnets[r.address] = Subnet(r.address, read, body, r)
             elif r.type == "azurerm_virtual_network":
                 for i, block in enumerate(blocks(body.get("subnet"))):
                     address = f"{r.address}.subnet[{i}]"
-                    self.subnets[address] = Subnet(address, r.address, block, r)
+                    self.subnets[address] = Subnet(address, (r.address,), block, r)
 
     def subnet_refs(self, r: Res) -> list[Subnet]:
         """The local subnets `r` sits in: its own subnet attributes, and those of the network interfaces attached to it."""
@@ -206,9 +207,9 @@ class Network:
             if r.type in NOT_PLACED or self.ex.folded(r.address):
                 continue
             for s in self.subnet_refs(r):
-                if s.network in self.nets:
+                if network := only_network(self.nets, s.networks, self.unplaced, r.address, s.address):
                     tier, via = self.tier(s)
-                    found.setdefault((r.address, s.network, tier), (via, r))
+                    found.setdefault((r.address, network, tier), (via, r))
             for x in (r, *self.nics(r)):  # a VM is in the subnets of the network interfaces it attaches
                 for ref in (ref for value in find(x.block.body, SUBNET_KEY) for ref in self.refs(x.inst, value)):
                     if ref.remote and (placed := place_remote(self.nets, ref, self.unplaced, r.address)):

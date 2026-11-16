@@ -3,11 +3,11 @@ Only `.tf` text is read: a remote state is compared by what its data block says,
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from cartographer.clouds.hcl_scan import literals, member_keys
+from cartographer.clouds.hcl_scan import ELEMENT, literals, member_keys
 from cartographer.clouds.remote_state import LITERAL_INDEX, State, remote_key, state_of
 from cartographer.tf_modules import bare, declared_provider
 from cartographer.tf_policies import norm_keys, unq
@@ -169,9 +169,15 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
 
 def _under(keys: tuple[str, ...], unread: tuple[str | None, ...]) -> tuple[str | None, ...] | None:
     """What of `unread` a reference that is the member value at `keys` still reads, or None when the path names
-    another member. A path shorter than the keys reads the whole object: no key is left to compare."""
-    for key in keys[:len(unread)]:
-        if unread[0] is not None and unread[0] != key:
+    another member. A list element takes an index of any value (a function may reorder the list) and lets an
+    attribute pass: `one([module.net.vpc])` drops the list. A path shorter than the keys reads the whole object."""
+    for key in keys:
+        if not unread:
+            break
+        step = unread[0]
+        if key == ELEMENT and step is not None and not step.isdecimal():
+            continue
+        if key != ELEMENT and step is not None and step != key:
             return None
         unread = unread[1:]
     return unread
@@ -215,19 +221,24 @@ def _looked_up(inst: Inst, name: str, ds_type: str, walk: _Walk) -> tuple[tuple[
 
 
 def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
-    """The resource of this stack a lookup picks: every `PICKS` selector it sets is one whole reference (`id =
-    aws_vpc.main.id`, never `"${aws_vpc.main.tags.Name}-peer"`), they all read the same one resource of the looked-up
-    type, and that resource uses the same provider and the same `AGREE` arguments. A tag or a name filter picks
-    nothing: a peer or DR network is often found by the tags of a local one."""
+    """What a lookup picks: every `PICKS` selector it sets is one whole reference (`id = aws_vpc.main.id`, never
+    `"${aws_vpc.main.tags.Name}-peer"`) and they all read one and the same thing. That is a remote output or another
+    lookup (`id = data.tfe_outputs.n.values.vpc_id`), or a resource of this stack of the looked-up type that uses the
+    same provider and the same `AGREE` arguments. A selector that reads two things (`var.create ? aws_vpc.this[0].id :
+    data.tfe_outputs.n.values.vpc_id`) picks nothing. A tag or a name filter picks nothing: a peer or DR network is
+    often found by the tags of a local one."""
     picks = list(_selected(body, PICKS.get(ds_type, ())))
     if not picks or not all(_whole(v, walk.pattern) for v in picks):
         return None
-    kind = ds_type.removesuffix("s")
-    found = set.intersection(*({r for r in walk.read(inst, v) if not r.remote and r.address.split(".")[-2] == kind}
-                               for v in picks))
-    if len(found) != 1:
+    found = [set(walk.read(inst, v)) for v in picks]
+    if len(found[0]) != 1 or any(f != found[0] for f in found):
         return None
-    ref = found.pop()
+    ref = found[0].pop()
+    if ref.remote:
+        return ref
+    kind = ds_type.removesuffix("s")
+    if ref.address.split(".")[-2] != kind:
+        return None
     owner, resource = next(((i, i.mod.resources[key]) for i in _root(inst).walk()
                             if (key := tuple(ref.address.removeprefix(i.prefix).split("."))) in i.mod.resources
                             and ref.address.startswith(i.prefix)), (None, None))
@@ -365,15 +376,12 @@ def collect_remote(networks: dict[str, dict], resources: list[Res], network_key:
     in (`vpc-id = data.aws_vpc.shared.id`). A subnet output is never a network, also when a projection the walk does not
     follow (`lookup(local.net, "vpc_id", null)`, a `for` expression) reads the subnet outputs beside the network."""
     for r in resources:
-        for value in find(r.block.body, network_key):
-            for ref in sources(r.inst, value, pattern):
-                if ref.remote and not (ref.state and subnet_key.fullmatch(INDEX.sub("", ref.name or "").rsplit(".", 1)[-1])):
-                    add_remote(networks, ref, r)
-        for value in find(r.block.body, subnet_key):
-            for ref in sources(r.inst, value, pattern):
-                for net in ref.within:
-                    if net.remote:
-                        add_remote(networks, net, r)
+        named = [ref for value in find(r.block.body, network_key) for ref in sources(r.inst, value, pattern)]
+        within = [net for value in find(r.block.body, subnet_key) for ref in sources(r.inst, value, pattern)
+                  for net in ref.within]
+        for ref in named + within:
+            if ref.remote and not (ref.state and subnet_key.fullmatch(INDEX.sub("", ref.name or "").rsplit(".", 1)[-1])):
+                add_remote(networks, ref, r)
 
 
 def _candidates(networks: dict[str, dict], ref: Ref) -> dict[str, tuple]:
@@ -425,6 +433,18 @@ def _stem(name: str) -> tuple[str, tuple[str, ...]]:
 def _module(address: str) -> str:
     """The module path a data source address starts with: `module.a.` for `module.a.data.aws_vpc.main`."""
     return MODULE_PREFIX.match(address)[0]
+
+
+def only_network(networks: dict[str, dict], keys: Iterable[str], why: dict[str, list[str]], address: str,
+                 via: str) -> str | None:
+    """The one network of `keys` this stack knows. When the subnet `via` reads two (`vpc_id = var.create ?
+    aws_vpc.this[0].id : data.tfe_outputs.n.values.vpc_id`), the result is None and `why` gets the reason for
+    `address`."""
+    known = sorted({k for k in keys if k in networks})
+    if len(known) > 1:
+        why.setdefault(address, []).append(
+            f"{via} is in network {' or '.join(networks[k]['address'] for k in known)}, it does not single out one")
+    return known[0] if len(known) == 1 else None
 
 
 def placement_facts(found: dict[tuple[str, str, str], tuple[str, Res]]) -> list[dict]:
