@@ -107,6 +107,7 @@ def test_remote_networks_from_data_sources_and_outputs_have_names_and_no_cidrs()
 def test_interpolated_subnet_names_still_inform_the_tier():
     assert tier_of("interpolated_tier_names", "azurerm_private_endpoint.pa") == ("public", "azurerm_subnet.a name")
     assert tier_of("interpolated_tier_names", "azurerm_private_endpoint.pb") == ("isolated", "azurerm_subnet.b name")
+    assert tier_of("interpolated_tier_names", "azurerm_private_endpoint.pc") == ("public", "azurerm_subnet.c name")  # format()
 
 
 def test_a_remote_network_named_by_a_name_output_drops_the_name_suffix_and_is_placed():
@@ -176,3 +177,264 @@ def test_each_resource_body_is_scanned_for_references_once(monkeypatch):
 
 def test_blocks_given_as_expressions_are_skipped_not_crashed_on():
     assert placements("subnet_expression") == {}
+
+
+def test_a_hub_lookup_that_shares_a_resource_group_with_a_local_vnet_stays_external(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "azurerm_virtual_network" "spoke" {\n  name = "spoke"\n  address_space = ["10.1.0.0/16"]\n'
+        '  resource_group_name = "rg-net"\n}\n'
+        'data "azurerm_virtual_network" "hub" {\n  name = "hub"\n'
+        '  resource_group_name = azurerm_virtual_network.spoke.resource_group_name\n}\n'
+        'data "azurerm_subnet" "hub_private" {\n  name = "private"\n'
+        '  virtual_network_name = data.azurerm_virtual_network.hub.name\n'
+        '  resource_group_name = azurerm_virtual_network.spoke.resource_group_name\n}\n'
+        'resource "azurerm_virtual_network_peering" "p" {\n  virtual_network_name = azurerm_virtual_network.spoke.name\n'
+        '  remote_virtual_network_id = data.azurerm_virtual_network.hub.id\n}\n'
+        'resource "azurerm_private_endpoint" "pe" { subnet_id = data.azurerm_subnet.hub_private.id }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [(n["address"], n["remote"]) for n in facts["networks"]] == [
+        ("azurerm_virtual_network.spoke", False), ("data.azurerm_virtual_network.hub", True)]
+    hub = next(n["id"] for n in facts["networks"] if n["remote"])
+    assert [(p["resource"], p["network"], p["tier"]) for p in facts["placements"]] == [("azurerm_private_endpoint.pe", hub, "private")]
+
+
+def test_a_lookup_of_a_local_vnet_whose_resource_group_is_the_same_variable_is_that_vnet(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'variable "rg_name" {}\n'
+        'resource "azurerm_virtual_network" "main" {\n  name = "main"\n  resource_group_name = var.rg_name\n'
+        '  address_space = ["10.0.0.0/16"]\n}\n'
+        'data "azurerm_virtual_network" "same" {\n  name = azurerm_virtual_network.main.name\n'
+        '  resource_group_name = var.rg_name\n}\n'
+        'resource "azurerm_subnet" "app_private" {\n  name = "app-private"\n  resource_group_name = var.rg_name\n'
+        '  virtual_network_name = data.azurerm_virtual_network.same.name\n  address_prefixes = ["10.0.1.0/24"]\n}\n'
+        'resource "azurerm_private_endpoint" "pe" { subnet_id = azurerm_subnet.app_private.id }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [(n["address"], n["remote"]) for n in facts["networks"]] == [("azurerm_virtual_network.main", False)]
+    assert [(p["resource"], p["tier"]) for p in facts["placements"]] == [("azurerm_private_endpoint.pe", "private")]
+
+
+def test_a_vm_is_placed_or_marked_through_a_nic_in_a_remote_or_looked_up_subnet(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'data "azurerm_virtual_network" "hub" {\n  name = "hub"\n  resource_group_name = "hub-rg"\n}\n'
+        'data "azurerm_subnet" "hub_private" {\n  name = "private"\n'
+        '  virtual_network_name = data.azurerm_virtual_network.hub.name\n  resource_group_name = "hub-rg"\n}\n'
+        'data "tfe_outputs" "net" {\n  organization = "o"\n  workspace = "w"\n}\n'
+        'resource "azurerm_network_interface" "nic" {\n  ip_configuration {\n'
+        '    subnet_id = data.tfe_outputs.net.values.spoke_private_subnet_id\n  }\n}\n'
+        'resource "azurerm_linux_virtual_machine" "vm" { network_interface_ids = [azurerm_network_interface.nic.id] }\n'
+        'resource "azurerm_network_interface" "nic2" {\n  ip_configuration {\n'
+        '    subnet_id = data.azurerm_subnet.hub_private.id\n  }\n}\n'
+        'resource "azurerm_linux_virtual_machine" "vm2" { network_interface_ids = [azurerm_network_interface.nic2.id] }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    hub = next(n["id"] for n in facts["networks"] if n["address"] == "data.azurerm_virtual_network.hub")
+    assert [(p["resource"], p["network"]) for p in facts["placements"]] == [("azurerm_linux_virtual_machine.vm2", hub)]
+    reason = next(r.get("reason") for r in facts["resources"] if r["address"] == "azurerm_linux_virtual_machine.vm")
+    assert "spoke_private_subnet_id fits no network this stack knows" in reason
+
+
+@pytest.mark.parametrize(("vnet_rg", "lookup_rg"), [
+    ("azurerm_resource_group.rg.name", "azurerm_virtual_network.main.resource_group_name"),
+    ('"rg"', "azurerm_resource_group.rg.name"),
+])
+def test_a_lookup_whose_resource_group_reads_the_same_name_is_the_local_vnet(tmp_path: Path, vnet_rg: str, lookup_rg: str) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "azurerm_resource_group" "rg" {\n  name = "rg"\n}\n'
+        f'resource "azurerm_virtual_network" "main" {{\n  name = "main"\n  resource_group_name = {vnet_rg}\n'
+        '  address_space = ["10.0.0.0/16"]\n}\n'
+        f'data "azurerm_virtual_network" "me" {{\n  name = azurerm_virtual_network.main.name\n  resource_group_name = {lookup_rg}\n}}\n'
+        'resource "azurerm_virtual_network_peering" "p" {\n  virtual_network_name = "other"\n'
+        '  remote_virtual_network_id = data.azurerm_virtual_network.me.id\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [(n["address"], n["remote"]) for n in facts["networks"]] == [("azurerm_virtual_network.main", False)]
+
+
+def test_a_lookup_by_a_tag_of_a_local_vnet_is_external(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'resource "azurerm_virtual_network" "main" {\n  name = "main"\n  resource_group_name = "rg"\n'
+        '  address_space = ["10.0.0.0/16"]\n  tags = { peer = "dr" }\n}\n'
+        'data "azurerm_virtual_network" "dr" {\n  name = azurerm_virtual_network.main.tags["peer"]\n  resource_group_name = "rg"\n}\n'
+        'resource "azurerm_virtual_network_peering" "p" {\n  virtual_network_name = azurerm_virtual_network.main.name\n'
+        '  remote_virtual_network_id = data.azurerm_virtual_network.dr.id\n}\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [(n["address"], n["remote"]) for n in facts["networks"]] == [
+        ("azurerm_virtual_network.main", False), ("data.azurerm_virtual_network.dr", True)]
+
+
+def test_a_subnet_whose_network_name_reads_two_networks_is_marked(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'variable "create" { default = false }\n'
+        'data "tfe_outputs" "n" {\n  organization = "acme"\n  workspace = "network"\n}\n'
+        'resource "azurerm_virtual_network" "own" {\n  count = var.create ? 1 : 0\n  name = "vnet-own"\n'
+        '  address_space = ["10.0.0.0/16"]\n}\n'
+        'resource "azurerm_subnet" "app" {\n'
+        '  virtual_network_name = var.create ? azurerm_virtual_network.own[0].name : data.tfe_outputs.n.values.vnet_name\n'
+        '  name = "snet-app"\n}\n'
+        'resource "azurerm_private_endpoint" "pe" { subnet_id = azurerm_subnet.app.id }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert facts["placements"] == []
+    assert next(r.get("reason") for r in facts["resources"] if r["address"] == "azurerm_private_endpoint.pe") == (
+        "azurerm_subnet.app is in network azurerm_virtual_network.own or data.tfe_outputs.n.values.vnet_name,"
+        " it does not single out one")
+
+
+def test_a_subnet_lookup_picked_by_a_remote_subnet_output_is_in_the_network_it_names(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'data "terraform_remote_state" "hub" {\n  backend = "local"\n  config = { path = "hub.tfstate" }\n}\n'
+        'data "azurerm_subnet" "app_private" {\n  name = data.terraform_remote_state.hub.outputs.app_subnet_name\n'
+        '  virtual_network_name = data.terraform_remote_state.hub.outputs.vnet_name\n  resource_group_name = "rg-hub"\n}\n'
+        'resource "azurerm_network_interface" "nic" {\n  ip_configuration {\n'
+        '    subnet_id = data.azurerm_subnet.app_private.id\n  }\n}\n'
+        'resource "azurerm_linux_virtual_machine" "vm" { network_interface_ids = [azurerm_network_interface.nic.id] }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    network = {n["id"]: n["name"] for n in facts["networks"]}
+    assert {(p["resource"], network[p["network"]]) for p in facts["placements"]} >= {("azurerm_linux_virtual_machine.vm", "vnet")}
+    assert all(r.get("reason") is None for r in facts["resources"] if r["address"] == "azurerm_linux_virtual_machine.vm")
+
+
+@pytest.mark.parametrize(("rg", "tiers"), [("data.terraform_remote_state.net.outputs.rg_name", ["private"]), ('"rg-net"', [])])
+def test_a_subnet_lookup_picked_by_the_name_of_a_subnet_output_object_takes_its_tier_only_in_the_state_resource_group(
+        tmp_path: Path, rg: str, tiers: list[str]) -> None:
+    (tmp_path / "main.tf").write_text(
+        'data "terraform_remote_state" "net" {\n  backend = "local"\n  config = { path = "net.tfstate" }\n}\n'
+        'data "azurerm_subnet" "s" {\n  name = data.terraform_remote_state.net.outputs.app_private_subnet.name\n'
+        f'  virtual_network_name = data.terraform_remote_state.net.outputs.hub_vnet_name\n  resource_group_name = {rg}\n}}\n'
+        'resource "azurerm_network_interface" "nic" {\n  ip_configuration {\n    subnet_id = data.azurerm_subnet.s.id\n  }\n}\n'
+        'resource "azurerm_linux_virtual_machine" "vm" { network_interface_ids = [azurerm_network_interface.nic.id] }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [p["tier"] for p in facts["placements"] if p["resource"].endswith(".vm")] == tiers
+
+
+AZ_STATE = 'data "terraform_remote_state" "net" {\n  backend = "local"\n  config = { path = "net.tfstate" }\n}\n'
+
+
+def _endpoint(name: str, subnet: str) -> str:
+    return f'resource "azurerm_private_endpoint" "{name}" {{ subnet_id = {subnet}.id }}\n'
+
+
+def _placed_in(tmp_path: Path, tf: str) -> tuple[set[tuple[str, str]], set[str]]:
+    """(resource, network name) of each placement, and the networks' addresses."""
+    (tmp_path / "main.tf").write_text(tf)
+    facts = tf_extract.extract(Path("."), tmp_path)
+    name = {n["id"]: n["name"] for n in facts["networks"]}
+    return {(p["resource"], name[p["network"]]) for p in facts["placements"]}, {n["address"] for n in facts["networks"]}
+
+
+def test_a_vnet_lookup_by_the_name_of_another_lookup_in_another_resource_group_is_another_network(tmp_path: Path) -> None:
+    placed, networks = _placed_in(tmp_path,
+        'data "azurerm_virtual_network" "weu" {\n  name = "vnet-hub"\n  resource_group_name = "rg-weu"\n}\n'
+        'data "azurerm_virtual_network" "neu" {\n  name = data.azurerm_virtual_network.weu.name\n  resource_group_name = "rg-neu"\n}\n'
+        'resource "azurerm_subnet" "a" {\n  name = "app-private"\n  virtual_network_name = data.azurerm_virtual_network.weu.name\n}\n'
+        'resource "azurerm_subnet" "b" {\n  name = "app-private"\n  virtual_network_name = data.azurerm_virtual_network.neu.name\n}\n'
+        + _endpoint("pe_a", "azurerm_subnet.a") + _endpoint("pe_b", "azurerm_subnet.b"))
+    assert networks == {"data.azurerm_virtual_network.weu", "data.azurerm_virtual_network.neu"}
+    assert placed == {("azurerm_private_endpoint.pe_a", "weu"), ("azurerm_private_endpoint.pe_b", "neu")}
+
+
+@pytest.mark.parametrize("rg", ['"rg-network-dr"', "var.dr_rg", "data.azurerm_resource_group.dr.name"])
+def test_a_vnet_lookup_by_a_remote_name_output_in_a_resource_group_the_state_does_not_give_is_another_network(
+        tmp_path: Path, rg: str) -> None:
+    placed, networks = _placed_in(tmp_path, AZ_STATE +
+        'data "azurerm_virtual_network" "primary" {\n  name = data.terraform_remote_state.net.outputs.vnet_name\n'
+        '  resource_group_name = data.terraform_remote_state.net.outputs.resource_group_name\n}\n'
+        f'data "azurerm_virtual_network" "dr" {{\n  name = data.terraform_remote_state.net.outputs.vnet_name\n  resource_group_name = {rg}\n}}\n'
+        'resource "azurerm_subnet" "p" {\n  name = "app-private"\n  virtual_network_name = data.azurerm_virtual_network.primary.name\n}\n'
+        'resource "azurerm_subnet" "d" {\n  name = "app-private"\n  virtual_network_name = data.azurerm_virtual_network.dr.name\n}\n'
+        + _endpoint("pe_a", "azurerm_subnet.p") + _endpoint("pe_b", "azurerm_subnet.d"))
+    assert networks == {"data.terraform_remote_state.net.outputs.vnet_name", "data.azurerm_virtual_network.dr"}
+    assert placed == {("azurerm_private_endpoint.pe_a", "vnet"), ("azurerm_private_endpoint.pe_b", "dr")}
+
+
+def test_a_subnet_lookup_by_a_remote_name_output_in_a_literal_vnet_is_not_placed_in_the_remote_network(tmp_path: Path) -> None:
+    placed, _ = _placed_in(tmp_path, AZ_STATE +
+        'resource "azurerm_subnet" "own" {\n  name = "own-private"\n'
+        '  virtual_network_name = data.terraform_remote_state.net.outputs.vnet_name\n}\n'
+        'data "azurerm_subnet" "dr_app" {\n  name = data.terraform_remote_state.net.outputs.private_subnet_name\n'
+        '  virtual_network_name = "vnet-dr"\n  resource_group_name = "rg-network-dr"\n}\n'
+        + _endpoint("pe_dr", "data.azurerm_subnet.dr_app"))
+    assert not any(resource == "azurerm_private_endpoint.pe_dr" for resource, _ in placed)
+
+
+@pytest.mark.parametrize(("hub_rg", "passed_rg", "same"), [
+    ('"rg-network"', "data.azurerm_virtual_network.hub.resource_group_name", True),
+    ("var.network_rg", "var.network_rg", True),
+    ("local.rg", "local.rg", True),
+    ('"rg-network"', '"rg-network-dr"', False),
+])
+def test_a_module_lookup_of_a_vnet_the_caller_looked_up_is_that_network_when_its_resource_group_traces_to_the_same(
+        tmp_path: Path, hub_rg: str, passed_rg: str, same: bool) -> None:
+    (tmp_path / "mod").mkdir()
+    (tmp_path / "mod" / "main.tf").write_text(
+        'variable "vnet_name" {}\nvariable "vnet_rg" {}\n'
+        'data "azurerm_virtual_network" "this" {\n  name = var.vnet_name\n  resource_group_name = var.vnet_rg\n}\n'
+        'data "azurerm_subnet" "app_private" {\n  name = "app-private"\n'
+        '  virtual_network_name = data.azurerm_virtual_network.this.name\n}\n'
+        + _endpoint("app", "data.azurerm_subnet.app_private"))
+    placed, networks = _placed_in(tmp_path,
+        'variable "network_rg" {}\nlocals {\n  rg = var.network_rg\n}\n'
+        f'data "azurerm_virtual_network" "hub" {{\n  name = "vnet-hub"\n  resource_group_name = {hub_rg}\n}}\n'
+        f'module "app" {{\n  source = "./mod"\n  vnet_name = data.azurerm_virtual_network.hub.name\n  vnet_rg = {passed_rg}\n}}\n')
+    assert networks == {"data.azurerm_virtual_network.hub" if same else "module.app.data.azurerm_virtual_network.this"}
+    assert placed == {("module.app.azurerm_private_endpoint.app", "hub" if same else "this")}
+
+
+@pytest.mark.parametrize("dr_rg", ['"${data.terraform_remote_state.net.outputs.rg_name}-dr"',
+                                   'format("%s-dr", data.terraform_remote_state.net.outputs.rg_name)'])
+def test_a_vnet_lookup_by_a_remote_name_in_a_resource_group_built_from_a_remote_output_is_another_network(
+        tmp_path: Path, dr_rg: str) -> None:
+    placed, networks = _placed_in(tmp_path, AZ_STATE +
+        f'data "azurerm_virtual_network" "dr" {{\n  name = data.terraform_remote_state.net.outputs.vnet_name\n  resource_group_name = {dr_rg}\n}}\n'
+        'resource "azurerm_subnet" "d" {\n  name = "app-private"\n  virtual_network_name = data.azurerm_virtual_network.dr.name\n}\n'
+        + _endpoint("pe_dr", "azurerm_subnet.d"))
+    assert networks == {"data.azurerm_virtual_network.dr"}
+    assert placed == {("azurerm_private_endpoint.pe_dr", "dr")}
+
+
+def test_a_lookup_in_a_for_each_module_does_not_agree_with_another_for_each_module_by_the_text_each_value(
+        tmp_path: Path) -> None:
+    for mod, body in {
+        "network": 'variable "rg" {}\nresource "azurerm_virtual_network" "this" {\n  name = "vnet-spoke"\n'
+                   '  resource_group_name = var.rg\n  address_space = ["10.0.0.0/16"]\n}\n'
+                   'output "vnet_name" { value = azurerm_virtual_network.this.name }\n'
+                   'resource "azurerm_subnet" "s" {\n  name = "own-private"\n  virtual_network_name = azurerm_virtual_network.this.name\n}\n'
+                   + _endpoint("own", "azurerm_subnet.s"),
+        "app": 'variable "rg" {}\nvariable "vnet_name" {}\n'
+               'data "azurerm_virtual_network" "spoke" {\n  name = var.vnet_name\n  resource_group_name = var.rg\n}\n'
+               'data "azurerm_subnet" "private" {\n  name = "app-private"\n'
+               '  virtual_network_name = data.azurerm_virtual_network.spoke.name\n}\n'
+               + _endpoint("pe", "data.azurerm_subnet.private"),
+    }.items():
+        (tmp_path / mod).mkdir()
+        (tmp_path / mod / "main.tf").write_text(body)
+    placed, networks = _placed_in(tmp_path,
+        'locals {\n  regions = { weu = { rg = "rg-net-weu" } }\n  apps = { billing = { rg = "rg-billing" } }\n}\n'
+        'module "network" {\n  source = "./network"\n  for_each = local.regions\n  rg = each.value.rg\n}\n'
+        'module "app" {\n  source = "./app"\n  for_each = local.apps\n  rg = each.value.rg\n'
+        '  vnet_name = module.network["weu"].vnet_name\n}\n')
+    assert "module.app.data.azurerm_virtual_network.spoke" in networks
+    assert ("module.app.azurerm_private_endpoint.pe", "spoke") in placed
+
+
+def test_a_dr_vnet_lookup_with_a_resource_group_built_from_the_state_in_a_local_is_another_network(tmp_path: Path) -> None:
+    placed, networks = _placed_in(tmp_path, AZ_STATE +
+        'locals {\n  dr_rg = "${data.terraform_remote_state.net.outputs.rg_name}-dr"\n}\n'
+        'data "azurerm_virtual_network" "dr" {\n  name = data.terraform_remote_state.net.outputs.vnet_name\n  resource_group_name = local.dr_rg\n}\n'
+        'resource "azurerm_subnet" "d" {\n  name = "app-private"\n  virtual_network_name = data.azurerm_virtual_network.dr.name\n}\n'
+        + _endpoint("pe_dr", "azurerm_subnet.d"))
+    assert networks == {"data.azurerm_virtual_network.dr"}
+    assert placed == {("azurerm_private_endpoint.pe_dr", "dr")}
+
+
+@pytest.mark.parametrize("vnet", ["each.value", "var.dr_vnet_name", '"vnet-spoke-b"'])
+def test_a_subnet_lookup_by_a_remote_subnet_name_in_a_vnet_the_state_does_not_give_is_not_placed_in_the_state_network(
+        tmp_path: Path, vnet: str) -> None:
+    each = '  for_each = toset(["vnet-spoke-a", "vnet-spoke-b"])\n' if vnet == "each.value" else ""
+    index = '["vnet-spoke-b"]' if each else ""
+    placed, _ = _placed_in(tmp_path, AZ_STATE + 'variable "dr_vnet_name" {}\n'
+        'resource "azurerm_subnet" "own" {\n  name = "own-private"\n'
+        '  virtual_network_name = data.terraform_remote_state.net.outputs.vnet_name\n}\n'
+        + _endpoint("own", "azurerm_subnet.own") +
+        f'data "azurerm_subnet" "dr_app" {{\n{each}  name = data.terraform_remote_state.net.outputs.private_subnet_name\n'
+        f'  resource_group_name = data.terraform_remote_state.net.outputs.rg_name\n  virtual_network_name = {vnet}\n}}\n'
+        + _endpoint("pe", f"data.azurerm_subnet.dr_app{index}"))
+    assert ("azurerm_private_endpoint.own", "vnet") in placed
+    assert not any(resource == "azurerm_private_endpoint.pe" for resource, _ in placed)

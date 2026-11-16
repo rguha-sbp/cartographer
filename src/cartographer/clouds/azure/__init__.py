@@ -6,6 +6,7 @@ from cartographer.clouds.azure.rules import RULES
 from cartographer.clouds.azure.specs import EDGE_SPECS
 from cartographer.clouds.base import Catalog, Cloud, load_json
 from cartographer.diagram_model import FRAME_TITLE_LEFT
+from cartographer.tf_modules import declared_provider
 from cartographer.tf_policies import unq
 from cartographer.tf_values import text
 
@@ -52,12 +53,12 @@ class AzureCloud(Cloud):
     def location(ex, res):
         """The literal location, or the literal location of the resource group it references."""
         expr = res.block.body.get("location")
-        found = ex.value(res.inst, expr)
+        found = res.inst.value(expr)
         if isinstance(found, str):
             return found
         for address in sorted(ex.refs(res.inst, expr)):
             group = ex.by_address.get(address)
-            literal = ex.value(group.inst, group.block.body.get("location")) if group and group.type == "azurerm_resource_group" else None
+            literal = group.inst.value(group.block.body.get("location")) if group and group.type == "azurerm_resource_group" else None
             if isinstance(literal, str):
                 return literal
         return None
@@ -72,14 +73,8 @@ class AzureCloud(Cloud):
         else:
             provider, chosen = res.type.split("_", 1)[0], body.get("provider", "")
         alias = ALIAS.search(text(chosen))
-        key = f"{provider}.{alias[1]}" if alias else provider
-        inst = res.inst
-        while inst is not None and key not in inst.mod.providers:
-            key = inst.provider_map.get(key, key)
-            inst = inst.parent
-        if not key:
-            return None
-        found = ex.value(inst, inst.mod.providers[key].get("subscription_id")) if inst else None
+        owner, key = declared_provider(res.inst, f"{provider}.{alias[1]}" if alias else provider)
+        found = owner.value(owner.mod.providers[key].get("subscription_id")) if owner and key else None
         return found if isinstance(found, str) else None
 
     def icon_style(self, name: str) -> str:

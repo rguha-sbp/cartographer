@@ -13,6 +13,7 @@ from cartographer.verify_shared import (
     code_hit,
     declared_icon,
     edge_name,
+    empty_notes,
     fix_groups,
     isolated_ids,
     render_report,
@@ -99,6 +100,7 @@ def verify(curated: dict, repo_root: Path) -> tuple[dict, str]:
     fix_groups(out, notes)
     warnings += cloud_warnings(out)
     check_claims(out, notes, lambda group, evidence: _supported(evidence, repo_root))
+    notes += empty_notes(out)
     out["assumptions"], bad_assumptions = check_assumptions(curated, ends, kept_edges)
     isolated = [f"{i}: no edge connects it" for i in isolated_ids(out)]
     total = sum(map(len, dropped.values())) + len(bad_assumptions)

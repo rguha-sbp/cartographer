@@ -71,12 +71,23 @@ Step 3: produce the curated JSON
   and order groups top to bottom within a column in list order. Frames (cloud, region, account) set column 0, and
   it is ignored. A group nested in another role group or in a network group gets its parent's column.
 - Network nesting: facts.json has `networks` (id like n1, `cloud`, name, cidrs, remote) and `placements` (id like p1, a
-  resource, its network fact id and tier public, private or isolated). Put each network-attached node in a `subnet`
+  resource, its network fact id, tier public, private or isolated). Put each network-attached node in a `subnet`
   group with that `tier`, whose parent is its `network` group (one subnet group per tier that holds a node, label "Public
   subnets", "Private subnets" or "Isolated subnets"). The subnet group cites a placement fact of that tier in `evidence`,
   and a node stays in it only when a placement fact of that tier exists for one of its `tf` addresses. Give a `network`
   group `cidrs` only copied from a `networks` fact (the same list), and cite that fact in the group's `evidence`; with no
   cidrs in the fact, leave `cidrs` out. A network group that comes from a remote fact is named after it, without cidrs.
+- Every `network` group cites the `networks` fact it stands for in its `evidence`. Cite two facts only when you know
+  they are one network; verify notes it. Name it after that fact's `name`
+  in words that start with a capital letter, plus `VPC` (AWS) or `VNet` (Azure): `ingress` gives "Ingress VPC",
+  `shared-vpc` gives "Shared VPC", `hub` gives "Hub VNet". Verify checks that each node with a
+  placement fact runs in a network its group cites, and moves it out of the group when it does not.
+- External networks: a `networks` fact with `remote` true is a VPC or VNet this stack does not create. Often another
+  account owns it and shares it (AWS VPC sharing), but it can also be a network of the same account that another stack
+  creates. The stack's resources in its subnets still belong to the stack's account. Put its `network` group inside the
+  stack's account frame, never in an account frame of its own, and name it as above. Verify adds `External` to the
+  frame title (for example `Shared VPC (External)`). Never set `external` yourself, and never name the owning
+  account or stack in any group label.
 - Azure placement: a Function or Web App with VNet integration (`virtual_network_subnet_id`) stays outside the subnets
   and draws an outbound arrow to the integration subnet. A private endpoint sits in its subnet with an arrow to the
   service it exposes, and that service stays in the region outside the subnets. PaaS services without a subnet fact
