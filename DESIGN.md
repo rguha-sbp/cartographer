@@ -286,7 +286,10 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     step in that guard, as Terraform orders outputs one by one: a lookup reached through `module.net.app_subnet_ids`
     still reads `module.net.vpc_id`. With the same unresolved
     `resource_group_name` text (`var.rg_name`) on both, an Azure lookup and the network it names agree; each side is
-    first read through the resource arguments it names (`azurerm_resource_group.rg.name` is `"rg"`). A reference to a
+    first traced to where it is written (`refs._written`): through the resource and lookup arguments it names
+    (`azurerm_resource_group.rg.name` is `"rg"`), locals, and a module variable every call passes as the same text,
+    into the calling module. So a module lookup by `var.vnet_rg`, passed
+    `data.azurerm_virtual_network.hub.resource_group_name`, agrees with `hub`. A reference to a
     resource's or lookup's `tags` reads only that tag's value as written in the block, never the block
     (`refs.READ_THROUGH`), so a lookup by a tag of a local network stays external. A chain of more than
     `refs.MAX_HOPS` (100) locals, variables, outputs and lookups, or a walk past `refs.MAX_READS` (10,000) distinct

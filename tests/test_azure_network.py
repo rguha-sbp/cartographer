@@ -351,3 +351,26 @@ def test_a_subnet_lookup_by_a_remote_name_output_in_a_literal_vnet_is_not_placed
         '  virtual_network_name = "vnet-dr"\n  resource_group_name = "rg-network-dr"\n}\n'
         + _endpoint("pe_dr", "data.azurerm_subnet.dr_app"))
     assert not any(resource == "azurerm_private_endpoint.pe_dr" for resource, _ in placed)
+
+
+@pytest.mark.parametrize(("hub_rg", "passed_rg", "same"), [
+    ('"rg-network"', "data.azurerm_virtual_network.hub.resource_group_name", True),
+    ("var.network_rg", "var.network_rg", True),
+    ("local.rg", "local.rg", True),
+    ('"rg-network"', '"rg-network-dr"', False),
+])
+def test_a_module_lookup_of_a_vnet_the_caller_looked_up_is_that_network_when_its_resource_group_traces_to_the_same(
+        tmp_path: Path, hub_rg: str, passed_rg: str, same: bool) -> None:
+    (tmp_path / "mod").mkdir()
+    (tmp_path / "mod" / "main.tf").write_text(
+        'variable "vnet_name" {}\nvariable "vnet_rg" {}\n'
+        'data "azurerm_virtual_network" "this" {\n  name = var.vnet_name\n  resource_group_name = var.vnet_rg\n}\n'
+        'data "azurerm_subnet" "app_private" {\n  name = "app-private"\n'
+        '  virtual_network_name = data.azurerm_virtual_network.this.name\n}\n'
+        + _endpoint("app", "data.azurerm_subnet.app_private"))
+    placed, networks = _placed_in(tmp_path,
+        'variable "network_rg" {}\nlocals {\n  rg = var.network_rg\n}\n'
+        f'data "azurerm_virtual_network" "hub" {{\n  name = "vnet-hub"\n  resource_group_name = {hub_rg}\n}}\n'
+        f'module "app" {{\n  source = "./mod"\n  vnet_name = data.azurerm_virtual_network.hub.name\n  vnet_rg = {passed_rg}\n}}\n')
+    assert networks == {"data.azurerm_virtual_network.hub" if same else "module.app.data.azurerm_virtual_network.this"}
+    assert placed == {("module.app.azurerm_private_endpoint.app", "hub" if same else "this")}

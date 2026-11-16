@@ -41,7 +41,8 @@ SUFFIX = r"ids?|name|arn"  # the attributes that identify a resource rather than
 IDENTIFIER = re.compile(rf"(?:{SUFFIX})")
 # a last attribute that identifies the network itself: `id`, `vpc_id`, `vnet_name`
 IDENTIFYING = re.compile(rf"(?:(?:vpc|vnet|virtual_network|network)_)?(?:{SUFFIX})")
-RESOURCE_ARG = re.compile(r"(?!(?:var|local|module|data)\.)([\w-]+)\.([\w-]+)\.([\w-]+)")  # `type.name.argument`
+RESOURCE_ARG = re.compile(r"(data\.)?(?!(?:var|local|module|data)\.)([\w-]+)\.([\w-]+)\.([\w-]+)")  # `[data.]type.name.argument`
+WRITTEN_IN = re.compile(r"(var|local)\.([\w-]+)")  # a variable or local an argument is written as
 INDEX = re.compile(r"\[[^\]]*\]")
 PART = re.compile(r"\[[^\]]*\]|[^.\[]+")  # the words and indexes of a `_render`ed name
 TIER_WORD = re.compile(rf"(?<![a-z])(?:{'|'.join(TIERS)})")  # a tier word that starts a word: never `republic`
@@ -296,26 +297,31 @@ def _provider(inst: Inst, body: dict, kind: str) -> tuple[int | None, str]:
 
 
 def _agree(inst: Inst, value: Any, owner: Inst, other: Any) -> bool:
-    """True when two arguments, each as it is written (`_written`), give the same literal, or are the same expression
-    in one module instance."""
-    value, other = _written(inst, value), _written(owner, other)
+    """True when two arguments, each traced to where it is written (`_written`), give the same literal, or are the
+    same expression in one module instance."""
+    (inst, value), (owner, other) = _written(inst, value), _written(owner, other)
     literal = inst.value(value)
     if isinstance(literal, str):
         return literal == owner.value(other)
     return inst is owner and value is not None and value == other
 
 
-def _written(inst: Inst, value: Any) -> Any:
-    """What an argument is written as: a whole reference to an argument another resource of the module sets
-    (`azurerm_virtual_network.main.resource_group_name`, `azurerm_resource_group.rg.name`) is that argument's value."""
+def _written(inst: Inst, value: Any) -> tuple[Inst, Any]:
+    """Where an argument is written, and as what. A whole reference to an argument a resource or lookup of the module
+    sets (`azurerm_resource_group.rg.name`, `data.azurerm_virtual_network.hub.resource_group_name`) is that argument, a
+    local is its value, and a variable every call passes as the same text is that text in the calling module."""
     for _ in range(MAX_HOPS):
-        m = RESOURCE_ARG.fullmatch(bare(value))
-        resource = inst.mod.resources.get((m[1], m[2])) if m else None
-        body = norm_keys(resource.body) if resource else {}
-        if not m or m[3] not in body:
+        arg, name = RESOURCE_ARG.fullmatch(bare(value)), WRITTEN_IN.fullmatch(bare(value))
+        passed = {str(a.get(name[2])) for a in inst.args} if name else set()
+        if arg and (block := (inst.mod.data if arg[1] else inst.mod.resources).get((arg[2], arg[3]))) and arg[4] in (body := norm_keys(block.body)):
+            value = body[arg[4]]
+        elif name and name[1] == "local" and name[2] in inst.mod.locals:
+            value = inst.mod.locals[name[2]]
+        elif name and name[1] == "var" and inst.parent and len(passed) == 1 and passed != {"None"}:
+            inst, value = inst.parent, inst.args[0][name[2]]
+        else:
             break
-        value = body[m[3]]
-    return value
+    return inst, value
 
 
 def _as_read(within: tuple[Ref, ...], picked: Ref | None, inst: Inst, m: re.Match[str]) -> Ref:
