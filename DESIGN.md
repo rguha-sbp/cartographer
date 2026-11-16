@@ -272,8 +272,9 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     lookup is picked this way, and only by a network (`refs.is_network`). A subnet lookup is picked only by a subnet
     output or subnet lookup; it keeps that output's state and name, in the network its own `vpc_id` names, with its own
     tier when the output's name gives none (`refs._as_read`). `data.aws_subnet.x.vpc_id` reads the network the subnet
-    lookup is in, so a `data.aws_vpc` with that `id` is that network, or an external network when the subnet lookup
-    names none. A selector that
+    lookup is in: what its own `vpc_id` names, or the network of the local subnet it picks. A `data.aws_vpc` with that
+    `id` is that network, or an external network when the subnet lookup names none. An output is a subnet output
+    when any part of its name is one (`subnet_ids["private"]`, `app_subnet.id`). A selector that
     reads two things (`var.create ? aws_vpc.this[0].id : data.tfe_outputs.n.values.vpc_id`) picks nothing. A tag, a name filter, a value built from a local
     network (`"${aws_vpc.main.tags.Name}-peer"`) or another provider keeps it external: a peer or DR network is often
     found by the tags of a local one. Each lookup is followed once per reference walk, a local that reads itself
@@ -289,8 +290,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     `vpc_id`, `vpc-id` filter or `virtual_network_name` reads one network of this stack, a looked-up network or a
     remote network (`aws_vpc.main.id`, `aws_subnet.a[0].vpc_id`, `data.aws_vpc.shared.id`) is in it, and that network
     is a network fact even when nothing else names it; when these name no network this stack knows, the subnet is
-    ranked by its name like a remote subnet. Its other selectors name no network. An attribute of a subnet lookup
-    (`data.aws_subnet.x.vpc_id`) is no network.
+    ranked by its name like a remote subnet. Its other selectors name no network, and no other attribute of a
+    subnet lookup is a network.
   - A remote subnet output places a resource in a remote network whose name parts without indexes start the
     subnet's, and whose indexes are the subnet's or none. The last network part equals the subnet's part or is the
     first words of it when all the other words are subnet words (`shared-vpc` for `shared_vpc_private_subnet_ids[0]`,

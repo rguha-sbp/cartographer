@@ -151,8 +151,9 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
             out |= _read_through(inst, inst.mod.data.get((m["ds_type"], m["ds"])), path, walk)
         elif m["ds"]:
             within, picked = _looked_up(inst, m["ds"], m["ds_type"], walk)
-            if path and path[0] in IN_NETWORK:  # `data.aws_subnet.x.vpc_id` is the network the subnet lookup is in
-                out |= dict.fromkeys(within)
+            if path and path[0] in IN_NETWORK:  # `data.aws_subnet.x.vpc_id`: what the lookup names, or what the subnet it picks is in
+                out |= (dict.fromkeys(within) if within or picked is None or picked.remote
+                        else _read_through(*_owner(inst, picked.address), path, walk))
             else:
                 out[_as_read(picked, _lookup(inst, m, within))] = None
         elif (hops := _hops(inst, head, second, path)) is not None:
@@ -244,16 +245,21 @@ def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
     kind = ds_type.removesuffix("s")
     if ref.address.split(".")[-2] != kind:
         return None
-    owner, resource = next(((i, i.mod.resources[key]) for i in _root(inst).walk()
-                            if (key := tuple(ref.address.removeprefix(i.prefix).split("."))) in i.mod.resources
-                            and ref.address.startswith(i.prefix)), (None, None))
-    if owner is None:
+    owner, resource = _owner(inst, ref.address)
+    if owner is None or resource is None:
         return None
     other = norm_keys(resource.body)
     provider = _provider(inst, body, kind)  # key "": the calls of one instance give it different providers
     same = provider[1] != "" and provider == _provider(owner, other, kind) and all(
         _agree(inst, body.get(arg), owner, other.get(arg)) for arg in AGREE.get(ds_type, ()))
     return ref if same else None
+
+
+def _owner(inst: Inst, address: str) -> tuple[Inst, Res] | tuple[None, None]:
+    """The module instance that declares the resource at `address`, and that resource."""
+    return next(((i, i.mod.resources[key]) for i in _root(inst).walk()
+                 if (key := tuple(address.removeprefix(i.prefix).split("."))) in i.mod.resources
+                 and address.startswith(i.prefix)), (None, None))
 
 
 def _selected(body: dict, names: tuple[str, ...]) -> Iterator[Any]:
@@ -360,10 +366,10 @@ def network_fact(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
 
 def is_network(ref: Ref) -> bool:
     """Whether a remote output or a lookup can be a network: a network lookup, or an output whose name is no subnet
-    output (`vpc_id`, never `private_subnet_ids`). A subnet lookup and a subnet output name the subnet, not its network."""
+    output in any part of its name (`vpc_id`, never `private_subnet_ids`, `subnet_ids.private` or `app_subnet.id`). A subnet lookup and a subnet output name the subnet, not its network."""
     if ref.looks_up is not None:
         return ref.looks_up in NETWORK_LOOKUPS
-    return not SUBNET_OUTPUT.fullmatch(INDEX.sub("", ref.name or "").rsplit(".", 1)[-1])
+    return not any(SUBNET_OUTPUT.fullmatch(part) for part in INDEX.sub("", ref.name or "").split("."))
 
 
 def add_remote(networks: dict[str, dict], ref: Ref, res: Res) -> None:

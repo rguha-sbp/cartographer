@@ -289,3 +289,15 @@ def test_a_subnet_lookup_picked_by_a_remote_subnet_output_is_in_the_network_it_n
     network = {n["id"]: n["name"] for n in facts["networks"]}
     assert {(p["resource"], network[p["network"]]) for p in facts["placements"]} >= {("azurerm_linux_virtual_machine.vm", "vnet")}
     assert all(r.get("reason") is None for r in facts["resources"] if r["address"] == "azurerm_linux_virtual_machine.vm")
+
+
+def test_a_subnet_lookup_picked_by_the_name_of_a_subnet_output_object_takes_its_tier(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'data "terraform_remote_state" "net" {\n  backend = "local"\n  config = { path = "net.tfstate" }\n}\n'
+        'data "azurerm_subnet" "s" {\n  name = data.terraform_remote_state.net.outputs.app_private_subnet.name\n'
+        '  virtual_network_name = data.terraform_remote_state.net.outputs.hub_vnet_name\n  resource_group_name = "rg-net"\n}\n'
+        'resource "azurerm_network_interface" "nic" {\n  ip_configuration {\n    subnet_id = data.azurerm_subnet.s.id\n  }\n}\n'
+        'resource "azurerm_linux_virtual_machine" "vm" { network_interface_ids = [azurerm_network_interface.nic.id] }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    assert [(p["resource"], p["tier"]) for p in facts["placements"] if p["resource"].endswith(".vm")] == [
+        ("azurerm_linux_virtual_machine.vm", "private")]

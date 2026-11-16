@@ -437,3 +437,23 @@ def test_a_vpc_lookup_by_the_vpc_of_a_subnet_lookup_is_the_network_that_subnet_l
         'resource "aws_instance" "app" { subnet_id = data.aws_subnet.app_private.id }\n')
     assert [n["address"] for n in facts["networks"]] == ["data.tfe_outputs.n.values.vpc_id"]
     assert placed_in(facts, "name") == {"aws_instance.app": "vpc"}
+
+
+@pytest.mark.parametrize("output", ['subnet_ids["private"]', "private_subnet.id"])
+def test_a_subnet_lookup_picked_by_a_key_or_attribute_of_a_subnet_output_is_placed(tmp_path: Path, output: str) -> None:
+    facts = extract_tf(tmp_path, S3_STATE +
+        f'data "aws_subnet" "app" {{ id = data.terraform_remote_state.net.outputs.{output} }}\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.terraform_remote_state.net.outputs.vpc_id }\n'
+        'resource "aws_instance" "web" { subnet_id = data.aws_subnet.app.id }\n')
+    assert placed_in(facts, "name") == {"aws_instance.web": "vpc"}
+    assert facts["placements"][0]["tier"] == "private"
+
+
+def test_a_vpc_lookup_by_the_vpc_of_a_subnet_lookup_of_a_local_subnet_is_that_local_vpc(tmp_path: Path) -> None:
+    facts = extract_tf(tmp_path,
+        'resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }\n'
+        'resource "aws_subnet" "a" { vpc_id = aws_vpc.main.id }\n'
+        'data "aws_subnet" "x" { id = aws_subnet.a.id }\n'
+        'data "aws_vpc" "v" { id = data.aws_subnet.x.vpc_id }\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.v.id }\n')
+    assert [(n["address"], n["remote"]) for n in facts["networks"]] == [("aws_vpc.main", False)]
