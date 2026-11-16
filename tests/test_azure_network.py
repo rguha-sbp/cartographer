@@ -374,3 +374,40 @@ def test_a_module_lookup_of_a_vnet_the_caller_looked_up_is_that_network_when_its
         f'module "app" {{\n  source = "./mod"\n  vnet_name = data.azurerm_virtual_network.hub.name\n  vnet_rg = {passed_rg}\n}}\n')
     assert networks == {"data.azurerm_virtual_network.hub" if same else "module.app.data.azurerm_virtual_network.this"}
     assert placed == {("module.app.azurerm_private_endpoint.app", "hub" if same else "this")}
+
+
+@pytest.mark.parametrize("dr_rg", ['"${data.terraform_remote_state.net.outputs.rg_name}-dr"',
+                                   'format("%s-dr", data.terraform_remote_state.net.outputs.rg_name)'])
+def test_a_vnet_lookup_by_a_remote_name_in_a_resource_group_built_from_a_remote_output_is_another_network(
+        tmp_path: Path, dr_rg: str) -> None:
+    placed, networks = _placed_in(tmp_path, AZ_STATE +
+        f'data "azurerm_virtual_network" "dr" {{\n  name = data.terraform_remote_state.net.outputs.vnet_name\n  resource_group_name = {dr_rg}\n}}\n'
+        'resource "azurerm_subnet" "d" {\n  name = "app-private"\n  virtual_network_name = data.azurerm_virtual_network.dr.name\n}\n'
+        + _endpoint("pe_dr", "azurerm_subnet.d"))
+    assert networks == {"data.azurerm_virtual_network.dr"}
+    assert placed == {("azurerm_private_endpoint.pe_dr", "dr")}
+
+
+def test_a_lookup_in_a_for_each_module_does_not_agree_with_another_for_each_module_by_the_text_each_value(
+        tmp_path: Path) -> None:
+    for mod, body in {
+        "network": 'variable "rg" {}\nresource "azurerm_virtual_network" "this" {\n  name = "vnet-spoke"\n'
+                   '  resource_group_name = var.rg\n  address_space = ["10.0.0.0/16"]\n}\n'
+                   'output "vnet_name" { value = azurerm_virtual_network.this.name }\n'
+                   'resource "azurerm_subnet" "s" {\n  name = "own-private"\n  virtual_network_name = azurerm_virtual_network.this.name\n}\n'
+                   + _endpoint("own", "azurerm_subnet.s"),
+        "app": 'variable "rg" {}\nvariable "vnet_name" {}\n'
+               'data "azurerm_virtual_network" "spoke" {\n  name = var.vnet_name\n  resource_group_name = var.rg\n}\n'
+               'data "azurerm_subnet" "private" {\n  name = "app-private"\n'
+               '  virtual_network_name = data.azurerm_virtual_network.spoke.name\n}\n'
+               + _endpoint("pe", "data.azurerm_subnet.private"),
+    }.items():
+        (tmp_path / mod).mkdir()
+        (tmp_path / mod / "main.tf").write_text(body)
+    placed, networks = _placed_in(tmp_path,
+        'locals {\n  regions = { weu = { rg = "rg-net-weu" } }\n  apps = { billing = { rg = "rg-billing" } }\n}\n'
+        'module "network" {\n  source = "./network"\n  for_each = local.regions\n  rg = each.value.rg\n}\n'
+        'module "app" {\n  source = "./app"\n  for_each = local.apps\n  rg = each.value.rg\n'
+        '  vnet_name = module.network["weu"].vnet_name\n}\n')
+    assert "module.app.data.azurerm_virtual_network.spoke" in networks
+    assert ("module.app.azurerm_private_endpoint.pe", "spoke") in placed

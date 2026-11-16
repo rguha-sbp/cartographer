@@ -270,9 +270,9 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     `resource_group_name` (and `virtual_network_name` for a subnet). Selectors that all read one and the same remote
     output or other lookup (`id = data.tfe_outputs.n.values.vpc_id`) make the lookup that network. An Azure name is
     unique only in its resource group, so `AGREE` holds for these picks too: another lookup must agree as a resource
-    does, and a remote output needs `resource_group_name` (or a subnet's `virtual_network_name`) to read nothing but
-    outputs of its state, at least one of them from it. A DR lookup by the remote `vnet_name` in a literal resource
-    group is another network. Only a network
+    does, and a remote output needs `resource_group_name` (or a subnet's `virtual_network_name`) to be a literal or one
+    whole reference to an output of its state, at least one of them a reference. A DR lookup by the remote `vnet_name`
+    in a literal resource group, or in one built from the state's (`"${...rg_name}-dr"`), is another network. Only a network
     lookup is picked this way, and only by a network (`refs.is_network`). A subnet lookup is picked only by a subnet
     output or subnet lookup; it keeps that output's state and name, in the network its own `vpc_id` names, with its own
     tier when the output's name gives none (`refs._as_read`). `data.aws_subnet.x.vpc_id` reads the network the subnet
@@ -289,7 +289,8 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     first traced to where it is written (`refs._written`): through the resource and lookup arguments it names
     (`azurerm_resource_group.rg.name` is `"rg"`), locals, and a module variable every call passes as the same text,
     into the calling module. So a module lookup by `var.vnet_rg`, passed
-    `data.azurerm_virtual_network.hub.resource_group_name`, agrees with `hub`. A reference to a
+    `data.azurerm_virtual_network.hub.resource_group_name`, agrees with `hub`. Text that reads `each.` or `count.` is
+    bound per block, so two blocks never agree by it. A reference to a
     resource's or lookup's `tags` reads only that tag's value as written in the block, never the block
     (`refs.READ_THROUGH`), so a lookup by a tag of a local network stays external. A chain of more than
     `refs.MAX_HOPS` (100) locals, variables, outputs and lookups, or a walk past `refs.MAX_READS` (10,000) distinct

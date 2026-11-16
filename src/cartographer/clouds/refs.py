@@ -42,6 +42,7 @@ IDENTIFIER = re.compile(rf"(?:{SUFFIX})")
 # a last attribute that identifies the network itself: `id`, `vpc_id`, `vnet_name`
 IDENTIFYING = re.compile(rf"(?:(?:vpc|vnet|virtual_network|network)_)?(?:{SUFFIX})")
 RESOURCE_ARG = re.compile(r"(data\.)?(?!(?:var|local|module|data)\.)([\w-]+)\.([\w-]+)\.([\w-]+)")  # `[data.]type.name.argument`
+PER_BLOCK = re.compile(r"\b(?:each|count)\.")  # what one text reads differently in each block that writes it
 WRITTEN_IN = re.compile(r"(var|local)\.([\w-]+)")  # a variable or local an argument is written as
 INDEX = re.compile(r"\[[^\]]*\]")
 PART = re.compile(r"\[[^\]]*\]|[^.\[]+")  # the words and indexes of a `_render`ed name
@@ -230,9 +231,9 @@ def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
     `"${aws_vpc.main.tags.Name}-peer"`) and they all read one and the same thing. That is a remote output or another
     lookup (`id = data.tfe_outputs.n.values.vpc_id`), or a resource of this stack of the looked-up type, with the
     same `AGREE` arguments: an Azure name is unique only in its resource group (and a subnet's in its network). A
-    resource or lookup must also use the same provider. A remote output needs `AGREE` arguments that read nothing but
-    outputs of its own state, and at least one of them that does: a resource group read from that state ties the name to
-    it, a literal alone does not. A selector that reads two things (`var.create ? aws_vpc.this[0].id :
+    resource or lookup must also use the same provider. A remote output needs `AGREE` arguments that are each a literal or
+    one whole reference to an output of its own state, and at least one of them a reference: a resource group read from
+    that state ties the name to it, a literal or a name built from it (`"${...rg_name}-dr"`) does not. A selector that reads two things (`var.create ? aws_vpc.this[0].id :
     data.tfe_outputs.n.values.vpc_id`) picks nothing. A tag or a name filter picks nothing: a peer or DR network is
     often found by the tags of a local one. A remote output or lookup picks only a lookup of its own kind: a network
     lookup a network, a subnet lookup a subnet."""
@@ -247,9 +248,10 @@ def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
     if ref.remote and is_network(ref) != (ds_type in NETWORK_LOOKUPS) or not ref.remote and ref.address.split(".")[-2] != kind:
         return None
     if ref.remote and ref.looks_up is None:
-        agree = AGREE.get(ds_type, ())
-        read = [r for arg in agree for r in walk.read(inst, body.get(arg))]
-        return ref if (read or not agree) and all(r.remote and r.looks_up is None and r.state == ref.state for r in read) else None
+        reads = {arg: walk.read(inst, body.get(arg)) for arg in AGREE.get(ds_type, ())}
+        of_state = all(not read or _whole(body.get(arg), walk.pattern) and all(
+            r.remote and r.looks_up is None and r.state == ref.state for r in read) for arg, read in reads.items())
+        return ref if of_state and (any(reads.values()) or not reads) else None
     owner, block = _owner(inst, ref.address)
     if owner is None or block is None:
         return None
@@ -298,12 +300,12 @@ def _provider(inst: Inst, body: dict, kind: str) -> tuple[int | None, str]:
 
 def _agree(inst: Inst, value: Any, owner: Inst, other: Any) -> bool:
     """True when two arguments, each traced to where it is written (`_written`), give the same literal, or are the
-    same expression in one module instance."""
+    same expression in one module instance. Text that reads `each.` or `count.` is bound per block, never shared."""
     (inst, value), (owner, other) = _written(inst, value), _written(owner, other)
     literal = inst.value(value)
     if isinstance(literal, str):
         return literal == owner.value(other)
-    return inst is owner and value is not None and value == other
+    return inst is owner and value is not None and value == other and not PER_BLOCK.search(str(value))
 
 
 def _written(inst: Inst, value: Any) -> tuple[Inst, Any]:
