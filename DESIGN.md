@@ -272,7 +272,7 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     lookup is picked this way, and only by a network (`refs.is_network`). A subnet lookup is picked only by a subnet
     output or subnet lookup; it keeps that output's state and name, in the network its own `vpc_id` names, with its own
     tier when the output's name gives none (`refs._as_read`). `data.aws_subnet.x.vpc_id` reads the network the subnet
-    lookup is in: what its own `vpc_id` names, or the network of the local subnet it picks. A `data.aws_vpc` with that
+    lookup is in: what its own `vpc_id` names, or the network of the subnet or subnet lookup it picks. A `data.aws_vpc` with that
     `id` is that network, or an external network when the subnet lookup names none. An output is a subnet output
     when any part of its name is one (`subnet_ids["private"]`, `app_subnet.id`). A selector that
     reads two things (`var.create ? aws_vpc.this[0].id : data.tfe_outputs.n.values.vpc_id`) picks nothing. A tag, a name filter, a value built from a local

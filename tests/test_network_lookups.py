@@ -457,3 +457,26 @@ def test_a_vpc_lookup_by_the_vpc_of_a_subnet_lookup_of_a_local_subnet_is_that_lo
         'data "aws_vpc" "v" { id = data.aws_subnet.x.vpc_id }\n'
         'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.v.id }\n')
     assert [(n["address"], n["remote"]) for n in facts["networks"]] == [("aws_vpc.main", False)]
+
+
+def test_a_vpc_lookup_by_the_vpc_of_a_subnet_lookup_that_picks_another_lookup_is_the_network_of_that_lookup(
+        tmp_path: Path) -> None:
+    facts = extract_tf(tmp_path,
+        'data "aws_vpc" "shared" { tags = { Name = "shared" } }\n'
+        'data "aws_subnets" "private" {\n  filter {\n    name = "vpc-id"\n    values = [data.aws_vpc.shared.id]\n  }\n}\n'
+        'data "aws_subnet" "first" { id = data.aws_subnets.private.ids[0] }\n'
+        'data "aws_vpc" "of_first" { id = data.aws_subnet.first.vpc_id }\n'
+        'data "aws_subnet" "db_isolated" {\n  vpc_id = data.aws_vpc.of_first.id\n  tags = { Tier = "db" }\n}\n'
+        'resource "aws_instance" "app" { subnet_id = data.aws_subnet.first.id }\n'
+        'resource "aws_db_subnet_group" "db" { subnet_ids = [data.aws_subnet.db_isolated.id] }\n')
+    assert [n["address"] for n in facts["networks"]] == ["data.aws_vpc.shared"]
+    assert placed_in(facts) == {"aws_instance.app": "data.aws_vpc.shared", "aws_db_subnet_group.db": "data.aws_vpc.shared"}
+
+
+def test_a_local_subnet_in_the_vpc_of_a_subnet_lookup_that_picks_another_lookup_is_in_that_network(tmp_path: Path) -> None:
+    facts = extract_tf(tmp_path, S3_STATE +
+        'data "aws_subnet" "a" { vpc_id = data.terraform_remote_state.net.outputs.vpc_id }\n'
+        'data "aws_subnet" "b" { id = data.aws_subnet.a.id }\n'
+        'resource "aws_subnet" "c" { vpc_id = data.aws_subnet.b.vpc_id }\n'
+        'resource "aws_instance" "j" { subnet_id = aws_subnet.c.id }\n')
+    assert placed_in(facts) == {"aws_instance.j": "data.terraform_remote_state.net.outputs.vpc_id"}

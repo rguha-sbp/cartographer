@@ -150,12 +150,11 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
         elif m["ds"] and path and path[0] in TAGS:
             out |= _read_through(inst, inst.mod.data.get((m["ds_type"], m["ds"])), path, walk)
         elif m["ds"]:
-            within, picked = _looked_up(inst, m["ds"], m["ds_type"], walk)
-            if path and path[0] in IN_NETWORK:  # `data.aws_subnet.x.vpc_id`: what the lookup names, or what the subnet it picks is in
-                out |= (dict.fromkeys(within) if within or picked is None or picked.remote
-                        else _read_through(*_owner(inst, picked.address), path, walk))
+            read = _as_read(*_looked_up(inst, m["ds"], m["ds_type"], walk), inst, m)
+            if path and path[0] in IN_NETWORK:  # `data.aws_subnet.x.vpc_id`: the network of the subnet the lookup reads
+                out |= dict.fromkeys(read.within) if read.remote else _read_through(*_owner(inst, read.address), path, walk)
             else:
-                out[_as_read(picked, _lookup(inst, m, within))] = None
+                out[read] = None
         elif (hops := _hops(inst, head, second, path)) is not None:
             # a local that reads itself reads nothing more; each module output is its own hop, as Terraform orders them
             hop = (id(inst), head, second, path[0] if head == "module" else None)
@@ -311,10 +310,12 @@ def _written(inst: Inst, value: Any) -> Any:
     return value
 
 
-def _as_read(picked: Ref | None, lookup: Ref) -> Ref:
-    """What a reference to a lookup reads: the lookup itself, or what it picks. A subnet output or subnet lookup that
+def _as_read(within: tuple[Ref, ...], picked: Ref | None, inst: Inst, m: re.Match[str]) -> Ref:
+    """What a reference to the lookup `m` reads, given what names its network and what it picks (`_looked_up`): the
+    lookup itself, or what it picks. A subnet output or subnet lookup that
     picks a subnet lookup keeps its own state and name, in the network the lookup names and with the lookup's tier
     when its own name gives none (`id = ...app_subnet_id` of `data.aws_subnet.app_private`: private)."""
+    lookup = _lookup(inst, m, within)
     if picked is None:
         return lookup
     if picked.remote and not is_network(picked):
