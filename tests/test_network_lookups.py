@@ -392,3 +392,20 @@ def test_a_subnet_lookup_in_a_network_read_beside_a_subnet_output_is_in_that_net
         'resource "aws_instance" "app" { subnet_id = data.aws_subnet.private.id }\n')
     assert placed_in(facts, "name") == {"aws_instance.app": "vpc"}
     assert [n["name"] for n in facts["networks"]] == ["vpc"] and mark_reason(facts, "aws_instance.app") is None
+
+
+def test_a_subnet_lookup_picked_by_a_remote_subnet_output_is_in_the_network_it_names(tmp_path: Path) -> None:
+    facts = extract_tf(tmp_path, TFE +
+        'data "aws_subnet" "app_private" {\n  id = data.tfe_outputs.n.values.app_subnet_id\n'
+        '  vpc_id = data.tfe_outputs.n.values.vpc_id\n}\n'
+        'resource "aws_instance" "app" { subnet_id = data.aws_subnet.app_private.id }\n')
+    assert placed_in(facts, "name") == {"aws_instance.app": "vpc"}
+    assert mark_reason(facts, "aws_instance.app") is None
+
+
+def test_a_vpc_lookup_by_the_vpc_of_a_subnet_lookup_is_a_network(tmp_path: Path) -> None:
+    facts = extract_tf(tmp_path,
+        'data "aws_subnet" "app_private" {\n  filter {\n    name = "tag:Name"\n    values = ["app-private"]\n  }\n}\n'
+        'data "aws_vpc" "shared" { id = data.aws_subnet.app_private.vpc_id }\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.shared.id }\n')
+    assert [(n["address"], n["remote"]) for n in facts["networks"]] == [("data.aws_vpc.shared", True)]

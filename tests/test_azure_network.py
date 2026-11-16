@@ -275,3 +275,17 @@ def test_a_subnet_whose_network_name_reads_two_networks_is_marked(tmp_path: Path
     assert next(r.get("reason") for r in facts["resources"] if r["address"] == "azurerm_private_endpoint.pe") == (
         "azurerm_subnet.app is in network azurerm_virtual_network.own or data.tfe_outputs.n.values.vnet_name,"
         " it does not single out one")
+
+
+def test_a_subnet_lookup_picked_by_a_remote_subnet_output_is_in_the_network_it_names(tmp_path: Path) -> None:
+    (tmp_path / "main.tf").write_text(
+        'data "terraform_remote_state" "hub" {\n  backend = "local"\n  config = { path = "hub.tfstate" }\n}\n'
+        'data "azurerm_subnet" "app_private" {\n  name = data.terraform_remote_state.hub.outputs.app_subnet_name\n'
+        '  virtual_network_name = data.terraform_remote_state.hub.outputs.vnet_name\n  resource_group_name = "rg-hub"\n}\n'
+        'resource "azurerm_network_interface" "nic" {\n  ip_configuration {\n'
+        '    subnet_id = data.azurerm_subnet.app_private.id\n  }\n}\n'
+        'resource "azurerm_linux_virtual_machine" "vm" { network_interface_ids = [azurerm_network_interface.nic.id] }\n')
+    facts = tf_extract.extract(Path("."), tmp_path)
+    network = {n["id"]: n["name"] for n in facts["networks"]}
+    assert {(p["resource"], network[p["network"]]) for p in facts["placements"]} >= {("azurerm_linux_virtual_machine.vm", "vnet")}
+    assert all(r.get("reason") is None for r in facts["resources"] if r["address"] == "azurerm_linux_virtual_machine.vm")

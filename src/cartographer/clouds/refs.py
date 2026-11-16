@@ -15,6 +15,7 @@ from cartographer.tf_values import find
 
 TIERS = ("isolated", "private", "public")
 SUBNET_WORDS = (*TIERS, "subnet", "subnets")  # the words of a name that say it is a subnet
+SUBNET_OUTPUT = re.compile(r"(?:\w*_)?subnets?(?:_(?:ids?|names?|arns?))?")  # `private_subnet_ids`, `app_subnet_name`
 CIDR = re.compile(r"\d{1,3}(\.\d{1,3}){3}/\d{1,2}")
 PATH = r"(?:\.[\w-]+|\[[^\]]*\])*"  # the attributes and indexes after a reference: `.vpc`, `["blue"]`, `[0]`
 SEGMENT = re.compile(r'\.([\w-]+)|\[\s*(?:"([^"]*)"|(\d+)|([^\]]*))\s*\]')
@@ -235,7 +236,7 @@ def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
         return None
     ref = found[0].pop()
     if ref.remote:
-        return ref
+        return ref if ds_type in NETWORK_LOOKUPS and is_network(ref) else None
     kind = ds_type.removesuffix("s")
     if ref.address.split(".")[-2] != kind:
         return None
@@ -342,11 +343,16 @@ def network_fact(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
             "line": res.block.line}
 
 
+def is_network(ref: Ref) -> bool:
+    """Whether a remote output or a lookup can be a network: a network lookup, or an output whose name is no subnet
+    output (`vpc_id`, never `private_subnet_ids`). A subnet lookup and a subnet output name the subnet, not its network."""
+    if ref.looks_up is not None:
+        return ref.looks_up in NETWORK_LOOKUPS
+    return not SUBNET_OUTPUT.fullmatch(INDEX.sub("", ref.name or "").rsplit(".", 1)[-1])
+
+
 def add_remote(networks: dict[str, dict], ref: Ref, res: Res) -> None:
-    """Record the network a remote reference reads, once per `Ref.key`. A subnet lookup is no network: what reads its
-    network (`data.aws_subnet.x.vpc_id`) names no network this stack can identify."""
-    if ref.looks_up is not None and ref.looks_up not in NETWORK_LOOKUPS:
-        return
+    """Record the network a remote reference reads, once per `Ref.key`."""
     networks.setdefault(ref.key(), network_fact(network_name(ref.name or ""), [], ref, res))
 
 
@@ -380,7 +386,7 @@ def collect_remote(networks: dict[str, dict], resources: list[Res], network_key:
         within = [net for value in find(r.block.body, subnet_key) for ref in sources(r.inst, value, pattern)
                   for net in ref.within]
         for ref in named + within:
-            if ref.remote and not (ref.state and subnet_key.fullmatch(INDEX.sub("", ref.name or "").rsplit(".", 1)[-1])):
+            if ref.remote and is_network(ref):
                 add_remote(networks, ref, r)
 
 
