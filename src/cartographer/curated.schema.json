@@ -212,6 +212,10 @@
           "id": {
             "type": "string"
           },
+          "external": {
+            "description": "Set by verify on a network frame whose nodes run only in networks this stack does not create. The frame title shows it; a curated value is dropped.",
+            "type": "boolean"
+          },
           "kind": {
             "enum": [
               "cloud",
