@@ -1,3 +1,4 @@
+"""Network facts of the network fixture: local VPC CIDRs, subnet tiers and the one remote VPC."""
 from pathlib import Path
 
 from cartographer import tf_extract
@@ -36,6 +37,7 @@ def test_remote_vpc_found_through_module_variable() -> None:
     assert remote[0]["address"] == "data.tfe_outputs.networking.nonsensitive_values.shared_vpc_id"
     assert remote[0]["name"] == "shared-vpc"
     assert remote[0]["cidrs"] == []
+    assert "stack" not in remote[0]
 
 
 def test_local_subnet_tiers() -> None:

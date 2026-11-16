@@ -1,61 +1,510 @@
-"""Reference following shared by the clouds' network facts: which subnets, networks and remote stacks a value points at."""
+"""Reference following shared by the clouds' network facts: which subnets, networks and remote states a value points at.
+Only `.tf` text is read: a remote state is compared by what its data block says, never opened."""
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
+from cartographer.clouds.hcl_scan import ELEMENT, literals, member_keys
+from cartographer.clouds.remote_state import LITERAL_INDEX, State, remote_key, state_of
+from cartographer.tf_modules import bare, declared_provider
+from cartographer.tf_policies import norm_keys, unq
+from cartographer.tf_values import find
+
 TIERS = ("isolated", "private", "public")
+SUBNET_WORDS = (*TIERS, "subnet", "subnets")  # the words of a name that say it is a subnet
+SUBNET_OUTPUT = re.compile(r"(?:\w*_)?subnets?(?:_(?:ids?|names?|arns?))?")  # `private_subnet_ids`, `app_subnet_name`
 CIDR = re.compile(r"\d{1,3}(\.\d{1,3}){3}/\d{1,2}")
+PATH = r"(?:\.[\w-]+|\[[^\]]*\])*"  # the attributes and indexes after a reference: `.vpc`, `["blue"]`, `[0]`
+SEGMENT = re.compile(r'\.([\w-]+)|\[\s*(?:"([^"]*)"|(\d+)|([^\]]*))\s*\]')
+INSTANCE = re.compile(r"^(?:\[[^\]]*\])+")  # the index of a module call or resource with `count` or `for_each`
+MODULE_PREFIX = re.compile(r'(?:module\.[\w-]+(?:\[(?:"[^"]*"|[^\]"]*)\])?\.)*')  # `module.a["k"].module.b.`
+# the arguments and `filter` names by which a lookup picks one resource of the type it looks up: only these can make
+# it a resource of this stack, and only together with the same provider and the same `AGREE` arguments
+PICKS = {"aws_vpc": ("id", "vpc-id"), "aws_subnet": ("id", "subnet-id"), "aws_subnets": ("subnet-id",),
+         "azurerm_virtual_network": ("name",), "azurerm_subnet": ("name",)}
+AGREE = {"azurerm_virtual_network": ("resource_group_name",),
+         "azurerm_subnet": ("resource_group_name", "virtual_network_name")}
+IN_NETWORK = ("vpc_id", "vpc-id", "virtual_network_name")  # what names the network a subnet lookup is in
+NETWORK_LOOKUPS = ("aws_vpc", "azurerm_virtual_network")  # lookups that find a network, not a subnet
+# the attributes a reference reads through to what they are written as: the tags of a resource or lookup are data
+# (`aws_vpc.main.tags.peer_vpc_id` is a tag value, never the VPC), and a resource's network argument names its network
+# (`aws_subnet.a.vpc_id` is the subnet's VPC)
+TAGS = ("tags", "tags_all")
+READ_THROUGH = ("vpc_id", "virtual_network_name", *TAGS)
+MAX_READS = 10_000  # distinct references one walk reads; only paths that fan out through functions at every level need more
+MAX_HOPS = 100  # locals, variables, outputs and lookups nested deeper only come from generated code; they read nothing
+MAX_PATH = 16  # longer attribute paths only come from a local or variable that reads itself
+SUFFIX = r"ids?|name|arn"  # the attributes that identify a resource rather than read a part of it
+IDENTIFIER = re.compile(rf"(?:{SUFFIX})")
+# a last attribute that identifies the network itself: `id`, `vpc_id`, `vnet_name`
+IDENTIFYING = re.compile(rf"(?:(?:vpc|vnet|virtual_network|network)_)?(?:{SUFFIX})")
+RESOURCE_ARG = re.compile(r"(data\.)?(?!(?:var|local|module|data)\.)([\w-]+)\.([\w-]+)\.([\w-]+)")  # `[data.]type.name.argument`
+PER_BLOCK = re.compile(r"\b(?:each|count)\.")  # what one text reads differently in each block that writes it
+WRITTEN_IN = re.compile(r"(var|local)\.([\w-]+)")  # a variable or local an argument is written as
+INDEX = re.compile(r"\[[^\]]*\]")
+PART = re.compile(r"\[[^\]]*\]|[^.\[]+")  # the words and indexes of a `_render`ed name
+TIER_WORD = re.compile(rf"(?<![a-z])(?:{'|'.join(TIERS)})")  # a tier word that starts a word: never `republic`
 
 if TYPE_CHECKING:
-    from cartographer.tf_modules import Inst
+    from cartographer.tf_modules import Block, Inst, Res
+
+
+class Key(str):
+    """An object key read in brackets (`vpcs["blue"]`, `subnet_ids["eu-west-1a"]`): part of a network name, never the
+    name that gives a subnet tier."""
 
 
 @dataclass(frozen=True)
 class Ref:
-    """A local resource (`name` None) or a reference to another stack (`name` is its output or data source name)."""
+    """A local resource (`name` None), a data source lookup (`name` its name, no `state`), or a remote output
+    (`name` the output, `state` the `State` its data source names, or that data source's full address when its
+    settings are not all literals). A lookup's address carries the module that declares it."""
 
     address: str
-    name: str | None = None
+    name: str | None = None  # the output or lookup and the path it reads: `vpcs.blue.id`, `vpc_ids[0]`, `nets[*]`
+    state: State | str | None = None
+    tier: str | None = None  # the subnet tier the last name in the path gives (`vpcs["private-net"].public_subnet_ids`: public)
+    within: tuple[Ref, ...] = ()  # a subnet lookup's: what names its network (`aws_vpc.main`, a looked-up VPC)
+    looks_up: str | None = None  # a lookup's data source type: `aws_vpc`, `aws_subnets`
 
     @property
     def remote(self) -> bool:
         return self.name is not None
 
+    def key(self) -> str:
+        """The key of the network this reference is or reads: a remote output's state and network name, so modules
+        that read one network of one state share it; a resource's or lookup's address."""
+        return remote_key(self.state, network_name(self.name or "")) if self.state is not None else self.address
+
+
+def _render(name: str, path: tuple[str | None, ...]) -> str:
+    """A name and the path read after it: a list index in brackets, an index that is no literal as `[*]`, an
+    attribute or object key after a dot (`vpcs["blue"].id` -> `vpcs.blue.id`)."""
+    return name + "".join("[*]" if p is None else f"[{p}]" if p.isdecimal() else f".{p}" for p in path)
+
+
+def segments(path: str) -> tuple[str | None, ...]:
+    """The attributes and literal indexes of a reference's path; None for an index that is no literal (`[each.key]`)."""
+    return tuple(m[1] or (Key(m[2]) if m[2] is not None else m[3]) for m in SEGMENT.finditer(path))
+
 
 def token(heads: str, data: str) -> re.Pattern[str]:
     """A reference to a local resource whose type matches `heads`, a data source matching `data`, or a remote output."""
     return re.compile(
-        r"(?<![\w.\-])(?:(?P<remote>data\.(?:tfe_outputs|terraform_remote_state)\.\w+"
-        rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)|data\.(?:{data})\.(?P<ds>\w+))"
-        rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?:\[[^\]]*\])?(?:\.(?P<third>[\w-]+))?)"
+        r"(?<![\w.\-])(?:(?P<remote>data\.(?P<kind>tfe_outputs|terraform_remote_state)\.(?P<state>[\w-]+)(?:\[(?P<index>[^\]]*)\])?"
+        rf"\.(?:nonsensitive_values|values|outputs)\.(?P<out>\w+)(?P<outpath>{PATH})"
+        rf"|(?P<lookup>data\.(?P<ds_type>{data})\.(?P<ds>[\w-]+))(?:\[(?P<ds_index>[^\]]*)\])?(?P<dspath>{PATH}))"
+        rf"|(?P<head>var|local|module|{heads})\.(?P<second>[\w-]+)(?P<path>{PATH}))"
     )
 
 
-def sources(inst: Inst, obj: Any, pattern: re.Pattern[str], seen: set | None = None) -> dict[Ref, None]:
-    """Resources and remote references `obj` points at, followed through locals and module variables."""
-    seen = set() if seen is None else seen
+@dataclass
+class _Budget:
+    left: int = MAX_READS
+
+
+@dataclass
+class _Walk:
+    """One `sources` call: the pattern it follows, the (instance, reference, path) it has read, and what each lookup
+    reads (`_looked_up`), shared so a lookup that many paths reach is followed once."""
+
+    pattern: re.Pattern[str]
+    seen: set = field(default_factory=set)
+    active: set = field(default_factory=set)  # the variables, locals, module outputs and lookups being followed
+    lookups: dict[tuple, tuple[tuple[Ref, ...], Ref | None] | None] = field(default_factory=dict)
+    budget: _Budget = field(default_factory=_Budget)  # shared by every `read`: a walk that fans out stops, never hangs
+
+    def read(self, inst: Inst, value: Any) -> dict[Ref, None]:
+        """What `value` points at, with a fresh `seen` and the lookups and budget this walk shares."""
+        return _follow(inst, value, (), _Walk(self.pattern, active=self.active, lookups=self.lookups, budget=self.budget))
+
+
+def sources(inst: Inst, obj: Any, pattern: re.Pattern[str]) -> dict[Ref, None]:
+    """Resources and remote references `obj` points at, followed through locals, module variables and outputs. An
+    attribute path (`var.base.networking.vpc_id`) reads only its part of an object literal, across every hop."""
+    return _follow(inst, obj, (), _Walk(pattern))
+
+
+def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -> dict[Ref, None]:
+    """`sources`, where `unread` is the attribute path a reference that is all of `obj` still has to read."""
+    text = obj if isinstance(obj, str) else str(obj)
     out: dict[Ref, None] = {}
-    for m in pattern.finditer(obj if isinstance(obj, str) else str(obj)):
-        if (key := (id(inst), m[0])) in seen:
+    matches = list(walk.pattern.finditer(text))
+    keys = member_keys(text, {m.start() for m in matches}) if unread else {}
+    for m in matches:
+        own = m["path"] or m["outpath"] or m["dspath"] or ""
+        if m["head"] not in (None, "var", "local"):
+            own = INSTANCE.sub("", own)  # `module.net[0].x`, `aws_subnet.a[0].vpc_id`: every instance has the same shape
+        if (rest := _under(keys.get(m.start(), ()), unread)) is None:
+            continue  # `merge({vpc_id = x, subnet_ids = y}).vpc_id` reads `x` only
+        path = (*segments(own), *rest)  # `merge(local.a, local.b).vpc_id` reads `vpc_id` of each
+        if len(path) > MAX_PATH or (key := (id(inst), m[0], path)) in walk.seen or walk.budget.left <= 0:
             continue
-        seen.add(key)
-        head, second, third = m["head"], m["second"], m["third"]
-        if m["remote"]:
-            out[Ref(m["remote"], m["out"] or m["ds"])] = None
-        elif head == "var" and inst.parent is not None:
-            for args in inst.args:
-                if second in args:
-                    out |= sources(inst.parent, args[second], pattern, seen)
-        elif head == "local" and second in inst.mod.locals:
-            out |= sources(inst, inst.mod.locals[second], pattern, seen)
-        elif head == "module" and second in inst.children and third in inst.children[second].mod.outputs:
-            child = inst.children[second]
-            out |= sources(child, child.mod.outputs[third], pattern, seen)
-        elif (head, second) in inst.mod.resources:
-            out[Ref(f"{inst.prefix}{head}.{second}")] = None
+        walk.seen.add(key)
+        walk.budget.left -= 1
+        head, second = m["head"], m["second"]
+        if m["kind"]:
+            out[Ref(f"{inst.prefix}{m['remote']}", _render(m["out"], path),
+                    state_of(inst, m["kind"], m["state"], m["index"]), _tier((m["out"], *path)))] = None
+        elif m["ds"] and path and path[0] in TAGS:
+            out |= _read_through(inst, inst.mod.data.get((m["ds_type"], m["ds"])), path, walk)
+        elif m["ds"]:
+            read = _as_read(*_looked_up(inst, m["ds"], m["ds_type"], walk), inst, m)
+            if path and path[0] in IN_NETWORK:  # `data.aws_subnet.x.vpc_id`: the network of the subnet the lookup reads
+                out |= dict.fromkeys(read.within) if read.remote else _read_through(*_owner(inst, read.address), path, walk)
+            else:
+                out[read] = None
+        elif (hops := _hops(inst, head, second, path)) is not None:
+            # a local that reads itself reads nothing more; each module output is its own hop, as Terraform orders them
+            hop = (id(inst), head, second, path[0] if head == "module" else None)
+            if hop not in walk.active and len(walk.active) < MAX_HOPS:
+                walk.active.add(hop)
+                for where, value, rest in hops:
+                    out |= _follow(where, value, rest, walk)
+                walk.active.discard(hop)
+        elif resource := inst.mod.resources.get((head, second)):
+            if path and path[0] in READ_THROUGH:
+                out |= _read_through(inst, resource, path, walk)
+            else:
+                out[Ref(f"{inst.prefix}{head}.{second}")] = None
     return out
+
+
+def _under(keys: tuple[str, ...], unread: tuple[str | None, ...]) -> tuple[str | None, ...] | None:
+    """What of `unread` a reference that is the member value at `keys` still reads, or None when the path names
+    another member. A list element takes an index of any value (a function may reorder the list) and lets an
+    attribute pass: `one([module.net.vpc])` drops the list. A path shorter than the keys reads the whole object."""
+    for key in keys:
+        if not unread:
+            break
+        step = unread[0]
+        if key == ELEMENT and step is not None and not step.isdecimal():
+            continue
+        if key != ELEMENT and step is not None and step != key:
+            return None
+        unread = unread[1:]
+    return unread
+
+
+def _read_through(inst: Inst, block: Any, path: tuple[str | None, ...], walk: _Walk) -> dict[Ref, None]:
+    """What the argument `path[0]` of a resource or lookup block is written as, read along the rest of the path: only
+    its part of an object literal (`tags.peer_vpc_id` reads that one tag)."""
+    value = norm_keys(block.body).get(path[0], "") if block else ""
+    out: dict[Ref, None] = {}
+    for part, rest in _dig(value, path[1:]):
+        out |= _follow(inst, part, rest, walk)
+    return out
+
+
+def _hops(inst: Inst, head: str, second: str, path: tuple[str | None, ...]) -> list[tuple[Inst, Any, tuple]] | None:
+    """Where a variable, local or module output that `inst` reads is defined: each (instance, value, the path still
+    to read there); None when `head.second` is none of these."""
+    if head == "var" and inst.parent is not None:
+        return [(inst.parent, *part) for args in inst.args if second in args for part in _dig(args[second], path)]
+    if head == "local" and second in inst.mod.locals:
+        return [(inst, *part) for part in _dig(inst.mod.locals[second], path)]
+    if head == "module" and second in inst.children and path and path[0] in (child := inst.children[second]).mod.outputs:
+        return [(child, *part) for part in _dig(child.mod.outputs[path[0]], path[1:])]
+    return None
+
+
+def _looked_up(inst: Inst, name: str, ds_type: str, walk: _Walk) -> tuple[tuple[Ref, ...], Ref | None]:
+    """What names the network of the lookup `data.<ds_type>.<name>` (`IN_NETWORK`), and the resource of this stack it
+    picks, if any. Each lookup is followed once per walk, so every path that reaches it finds the same references; a
+    lookup that reads itself reads nothing the second time."""
+    visit = (id(inst), ds_type, name)
+    if visit not in walk.lookups and len(walk.active) < MAX_HOPS:
+        walk.lookups[visit] = None
+        walk.active.add(visit)
+        block = inst.mod.data.get((ds_type, name))
+        body = norm_keys(block.body) if block else {}
+        walk.lookups[visit] = (tuple(walk.read(inst, list(_selected(body, IN_NETWORK)))), _picked(inst, body, ds_type, walk))
+        walk.active.discard(visit)
+    return walk.lookups.get(visit) or ((), None)
+
+
+def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
+    """What a lookup picks: every `PICKS` selector it sets is one whole reference (`id = aws_vpc.main.id`, never
+    `"${aws_vpc.main.tags.Name}-peer"`) and they all read one and the same thing. That is a remote output or another
+    lookup (`id = data.tfe_outputs.n.values.vpc_id`), or a resource of this stack of the looked-up type, with the
+    same `AGREE` arguments: an Azure name is unique only in its resource group (and a subnet's in its network). A
+    resource or lookup must also use the same provider. A remote output needs every `AGREE` argument, traced to where it is
+    written, to be one whole reference to an output of its own state: only that ties the name to the state's network. A
+    literal, a variable, `each.value` or a name built from the state's (`"${...rg_name}-dr"`) does not. A selector that reads two things (`var.create ? aws_vpc.this[0].id :
+    data.tfe_outputs.n.values.vpc_id`) picks nothing. A tag or a name filter picks nothing: a peer or DR network is
+    often found by the tags of a local one. A remote output or lookup picks only a lookup of its own kind: a network
+    lookup a network, a subnet lookup a subnet."""
+    picks = list(_selected(body, PICKS.get(ds_type, ())))
+    if not picks or not all(_whole(v, walk.pattern) for v in picks):
+        return None
+    found = [set(walk.read(inst, v)) for v in picks]
+    if len(found[0]) != 1 or any(f != found[0] for f in found):
+        return None
+    ref = found[0].pop()
+    kind = ds_type.removesuffix("s")
+    if ref.remote and is_network(ref) != (ds_type in NETWORK_LOOKUPS) or not ref.remote and ref.address.split(".")[-2] != kind:
+        return None
+    if ref.remote and ref.looks_up is None:
+        return ref if all(_of_state(*_written(inst, body.get(arg)), ref, walk) for arg in AGREE.get(ds_type, ())) else None
+    owner, block = _owner(inst, ref.address)
+    if owner is None or block is None:
+        return None
+    other = norm_keys(block.body)
+    provider = _provider(inst, body, kind)  # key "": the calls of one instance give it different providers
+    same = provider[1] != "" and provider == _provider(owner, other, kind) and all(
+        _agree(inst, body.get(arg), owner, other.get(arg)) for arg in AGREE.get(ds_type, ()))
+    return ref if same else None
+
+
+def _owner(inst: Inst, address: str) -> tuple[Inst, Block] | tuple[None, None]:
+    """The module instance that declares the resource or lookup at `address`, and its block."""
+    for i in _root(inst).walk():
+        if address.startswith(i.prefix):
+            key = tuple(INDEX.sub("", address.removeprefix(i.prefix)).split("."))
+            if block := i.mod.data.get(key[1:]) if key[0] == "data" else i.mod.resources.get(key):  # type: ignore[arg-type]
+                return i, block
+    return None, None
+
+
+def _selected(body: dict, names: tuple[str, ...]) -> Iterator[Any]:
+    """The values of the arguments and `filter` blocks of a lookup that `names` names, each list item on its own."""
+    found = [body[n] for n in names if n in body]
+    found += [f.get("values") for f in blocks(body.get("filter")) if unq(str(f.get("name", ""))) in names]
+    for value in found:
+        yield from value if isinstance(value, list) else [value]
+
+
+def _whole(value: Any, pattern: re.Pattern[str]) -> bool:
+    """True when `value` is one reference and nothing else: `${aws_vpc.main.id}`, `"${local.vpc_id}"`."""
+    expr = bare(value)
+    return bool((m := pattern.match(expr)) and re.fullmatch(PATH, expr[m.end():]))
+
+
+def _root(inst: Inst) -> Inst:
+    while inst.parent is not None:
+        inst = inst.parent
+    return inst
+
+
+def _provider(inst: Inst, body: dict, kind: str) -> tuple[int | None, str]:
+    """The provider a block uses: the instance that declares it and its key there."""
+    owner, key = declared_provider(inst, bare(body.get("provider", kind.split("_")[0])))
+    return id(owner) if owner else None, key
+
+
+def _of_state(inst: Inst, value: Any, output: Ref, walk: _Walk) -> bool:
+    """Whether `value`, as written in `inst`, is one whole reference to a remote output of the state `output` is from."""
+    read = walk.read(inst, value)
+    return _whole(value, walk.pattern) and bool(read) and all(
+        r.remote and r.looks_up is None and r.state == output.state for r in read)
+
+
+def _agree(inst: Inst, value: Any, owner: Inst, other: Any) -> bool:
+    """True when two arguments, each traced to where it is written (`_written`), give the same literal, or are the
+    same expression in one module instance. Text that reads `each.` or `count.` is bound per block, never shared."""
+    (inst, value), (owner, other) = _written(inst, value), _written(owner, other)
+    literal = inst.value(value)
+    if isinstance(literal, str):
+        return literal == owner.value(other)
+    return inst is owner and value is not None and value == other and not PER_BLOCK.search(str(value))
+
+
+def _written(inst: Inst, value: Any) -> tuple[Inst, Any]:
+    """Where an argument is written, and as what. A whole reference to an argument a resource or lookup of the module
+    sets (`azurerm_resource_group.rg.name`, `data.azurerm_virtual_network.hub.resource_group_name`) is that argument, a
+    local is its value, and a variable every call passes as the same text is that text in the calling module."""
+    for _ in range(MAX_HOPS):
+        arg, name = RESOURCE_ARG.fullmatch(bare(value)), WRITTEN_IN.fullmatch(bare(value))
+        passed = {str(a.get(name[2])) for a in inst.args} if name else set()
+        if arg and (block := (inst.mod.data if arg[1] else inst.mod.resources).get((arg[2], arg[3]))) and arg[4] in (body := norm_keys(block.body)):
+            value = body[arg[4]]
+        elif name and name[1] == "local" and name[2] in inst.mod.locals:
+            value = inst.mod.locals[name[2]]
+        elif name and name[1] == "var" and inst.parent and len(passed) == 1 and passed != {"None"}:
+            inst, value = inst.parent, inst.args[0][name[2]]
+        else:
+            break
+    return inst, value
+
+
+def _as_read(within: tuple[Ref, ...], picked: Ref | None, inst: Inst, m: re.Match[str]) -> Ref:
+    """What a reference to the lookup `m` reads, given what names its network and what it picks (`_looked_up`): the
+    lookup itself, or what it picks. A subnet output or subnet lookup that
+    picks a subnet lookup keeps its own state and name, in the network the lookup names and with the lookup's tier
+    when its own name gives none (`id = ...app_subnet_id` of `data.aws_subnet.app_private`: private)."""
+    lookup = _lookup(inst, m, within)
+    if picked is None:
+        return lookup
+    if picked.remote and not is_network(picked):
+        return replace(picked, within=lookup.within or picked.within, tier=picked.tier or lookup.tier)
+    return picked
+
+
+def _lookup(inst: Inst, m: re.Match[str], within: tuple[Ref, ...]) -> Ref:
+    """What a lookup that selects no resource of its own type in this stack reads: an external network, one for
+    each literal index of a `count` or `for_each` lookup, or a subnet `within` the resources its selectors read."""
+    index = LITERAL_INDEX.fullmatch(m["ds_index"] or "")
+    key = (Key(index[0].strip('"')),) if index else ()
+    suffix = f"[{index[0]}]" if index else ""
+    return Ref(f"{inst.prefix}{m['lookup']}{suffix}", _render(m["ds"], key), tier=_tier((m["ds"], *key)),
+               within=within, looks_up=m["ds_type"])
+
+
+def _tier(path: tuple[str | None, ...]) -> str | None:
+    """The tier the end of a path gives: its last key in brackets when that key names a tier (`subnets["private"]`),
+    else its last name (`private_subnet_ids["eu-west-1a"]`). No other key or name sets the tier (`vpcs["private-net"]
+    ["subnet_ids"]` gives none); an index and an identifier attribute (`.id`) are skipped."""
+    words = [p for p in path if p is not None and not p.isdecimal() and not IDENTIFIER.fullmatch(p)]
+    if words and isinstance(words[-1], Key) and (tier := tier_in(words[-1])):
+        return tier
+    return tier_in(next((p for p in reversed(words) if not isinstance(p, Key)), ""))
+
+
+def _dig(value: Any, path: tuple[str | None, ...]) -> list[tuple[Any, tuple[str | None, ...]]]:
+    """The parts of an object or list literal a path reads, each with the rest of the path where the literal ends. A
+    key or index the literal does not have reads nothing; an index that is no literal reads the rest of the path
+    from every element (`local.nets[each.key].private_subnet_id`)."""
+    for i, attr in enumerate(path):
+        if attr is None and isinstance(value, (list, dict)):
+            return [part for v in (value if isinstance(value, list) else value.values()) for part in _dig(v, path[i + 1:])]
+        if attr is not None and isinstance(value, list) and attr.isdecimal():
+            value = value[int(attr)] if int(attr) < len(value) else ""
+        elif attr is not None and isinstance(value, dict):
+            value = next((v for k, v in value.items() if unq(k) == attr), "")
+        else:
+            return [(value, path[i:])]
+    return [(value, ())]
+
+
+def network_fact(name: str, cidrs: list[str], ref: Ref, res: Res) -> dict:
+    """A network fact for the network `ref` is or reads, cited at `res`."""
+    return {"address": ref.address, "name": name, "cidrs": cidrs, "remote": ref.remote, "file": res.block.file,
+            "line": res.block.line}
+
+
+def is_network(ref: Ref) -> bool:
+    """Whether a remote output or a lookup can be a network: a network lookup, or an output whose name is no subnet
+    output in any part of its name (`vpc_id`, never `private_subnet_ids`, `subnet_ids.private` or `app_subnet.id`). A subnet lookup and a subnet output name the subnet, not its network."""
+    if ref.looks_up is not None:
+        return ref.looks_up in NETWORK_LOOKUPS
+    return not any(SUBNET_OUTPUT.fullmatch(part) for part in INDEX.sub("", ref.name or "").split("."))
+
+
+def add_remote(networks: dict[str, dict], ref: Ref, res: Res) -> None:
+    """Record the network a remote reference reads, once per `Ref.key`."""
+    networks.setdefault(ref.key(), network_fact(network_name(ref.name or ""), [], ref, res))
+
+
+def place_remote(networks: dict[str, dict], ref: Ref, why: dict[str, list[str]], address: str) -> tuple[str, str, str] | None:
+    """(network key, tier, what decided the tier) for a subnet another stack or a lookup gives to the resource at
+    `address`. A lookup `within` a network this stack knows is in that network; otherwise `_candidates` rank the
+    networks. When no network fits, two fit equally well, or the subnet name gives no tier, the result is None and
+    `why` gets the reason for `address`."""
+    via = ref.name or ""
+    candidates = {k: () for r in ref.within if (k := r.key()) in networks} or _candidates(networks, ref)
+    ranked = sorted(candidates, key=candidates.__getitem__, reverse=True)
+    if not ranked:
+        reason = f"{via} fits no network this stack knows"
+    elif len(ranked) > 1 and candidates[ranked[0]] == candidates[ranked[1]]:
+        reason = f"{via} fits networks {' and '.join(sorted(networks[k]['address'] for k in ranked[:2]))} equally well"
+    elif not ref.tier:
+        reason = f"{via} is in {networks[ranked[0]]['address']}, its name gives no subnet tier"
+    else:
+        return ranked[0], ref.tier, via
+    why.setdefault(address, []).append(reason)
+    return None
+
+
+def collect_remote(networks: dict[str, dict], resources: list[Res], network_key: re.Pattern[str],
+                   subnet_key: re.Pattern[str], pattern: re.Pattern[str]) -> None:
+    """Record the remote networks the resources name: in a network argument (`vpc_id`), or as what a subnet lookup is
+    in (`vpc-id = data.aws_vpc.shared.id`). A subnet output is never a network, also when a projection the walk does not
+    follow (`lookup(local.net, "vpc_id", null)`, a `for` expression) reads the subnet outputs beside the network."""
+    for r in resources:
+        named = [ref for value in find(r.block.body, network_key) for ref in sources(r.inst, value, pattern)]
+        within = [net for value in find(r.block.body, subnet_key) for ref in sources(r.inst, value, pattern)
+                  for net in ref.within]
+        for ref in named + within:
+            if ref.remote and is_network(ref):
+                add_remote(networks, ref, r)
+
+
+def _candidates(networks: dict[str, dict], ref: Ref) -> dict[str, tuple]:
+    """The remote networks a subnet name fits, each with its rank. A network fits when its name without indexes
+    starts the subnet's (`shared-vpc` for `shared-vpc-private-subnet`, `vpcs.blue` for `vpcs.blue.private-subnet`,
+    never `vpcs.blue` for `vpcs.blue-east.private-subnet`) and its indexes are the subnet's or none. A remote output's
+    subnet only fits a network of its own state or a lookup; one whose name names no network (`private_subnet_ids`)
+    fits every network of its own state. Rank: own state, then the subnet's indexes, then the longest name it names,
+    then for a lookup one its own module looks up: a peer lookup named `private` never takes `private_subnet_ids`
+    from the network of their state."""
+    stem, indexes = _stem(network_name(ref.name or ""))
+    fits: dict[str, tuple] = {}
+    for key, n in networks.items():
+        own = ref.state is not None and key == remote_key(ref.state, n["name"])
+        lookup = key == n["address"]
+        name, own_indexes = _stem(n["name"])
+        if not n["remote"] or not (own or ref.state is None or lookup) or own_indexes not in ((), indexes):
+            continue
+        rank = (own, own_indexes == indexes)
+        if _starts(name.split("."), stem.split(".")):
+            fits[key] = (*rank, len(name), ref.state is None and lookup and _module(key) == _module(ref.address))
+        elif own and not _names_network(stem):
+            fits[key] = (*rank, 0, False)
+    return fits
+
+
+def _starts(network: list[str], subnet: list[str]) -> bool:
+    """True when a network's parts start a subnet's: all but the last part equal, and the last part equal or the first
+    words of a part whose other words are all about subnets (`shared-vpc` of `shared-vpc-private-subnet`, `vpc` of
+    `vpc-subnets`, but not `blue` of `blue-east` or `blue-vpc` of `blue-vpc-east-private-subnet`)."""
+    last = len(network) - 1
+    if len(network) > len(subnet) or network[:last] != subnet[:last]:
+        return False
+    head, part = network[last], subnet[last]
+    return part == head or (part.startswith(head + "-") and set(part[len(head) + 1:].split("-")) <= set(SUBNET_WORDS))
+
+
+def _names_network(stem: str) -> bool:
+    """True when a subnet name says more than its tier: `other-vpc-private-subnet` names a network, `private-subnet`
+    does not."""
+    return any(word not in SUBNET_WORDS for word in re.split(r"[.-]", stem))
+
+
+def _stem(name: str) -> tuple[str, tuple[str, ...]]:
+    """A network name without its indexes, and those indexes: `shared-vpc[0]` -> (`shared-vpc`, (`[0]`,))."""
+    return INDEX.sub("", name), tuple(INDEX.findall(name))
+
+
+def _module(address: str) -> str:
+    """The module path a data source address starts with: `module.a.` for `module.a.data.aws_vpc.main`."""
+    return MODULE_PREFIX.match(address)[0]
+
+
+def only_network(networks: dict[str, dict], keys: Iterable[str], why: dict[str, list[str]], address: str,
+                 via: str) -> str | None:
+    """The one network of `keys` this stack knows. When the subnet `via` reads two (`vpc_id = var.create ?
+    aws_vpc.this[0].id : data.tfe_outputs.n.values.vpc_id`), the result is None and `why` gets the reason for
+    `address`."""
+    known = sorted({k for k in keys if k in networks})
+    if len(known) > 1:
+        why.setdefault(address, []).append(
+            f"{via} is in network {' or '.join(networks[k]['address'] for k in known)}, it does not single out one")
+    return known[0] if len(known) == 1 else None
+
+
+def placement_facts(found: dict[tuple[str, str, str], tuple[str, Res]]) -> list[dict]:
+    """The placement facts of (resource, network, tier) -> (what decided the tier, the resource)."""
+    return [{"resource": address, "network": network, "tier": tier, "via": via, "file": r.block.file, "line": r.block.line}
+            for (address, network, tier), (via, r) in sorted(found.items())]
+
+
+def unplaced(why: dict[str, list[str]]) -> dict[str, str]:
+    """Why each resource has a subnet that could not be placed, every reason once: it is marked, also when another
+    of its subnets is placed."""
+    return {address: "; ".join(dict.fromkeys(reasons)) for address, reasons in why.items()}
 
 
 def blocks(value: Any) -> list[dict]:
@@ -63,10 +512,37 @@ def blocks(value: Any) -> list[dict]:
     return [b for b in (value if isinstance(value, list) else [value]) if isinstance(b, dict)]
 
 
-def derive(name: str, suffixes: str = "ids?") -> str:
-    """The network name a remote output or data source name implies: `shared_vpc_id` -> `shared-vpc`."""
-    return re.sub(rf"_({suffixes})$", "", name).replace("_", "-")
+def network_name(name: str) -> str:
+    """The network a remote output or lookup and the path it reads name: each attribute or key `derive`d, joined by
+    `.`, each index kept in brackets (`shared_vpc_ids[0]` -> `shared-vpc[0]`). A last attribute that identifies the
+    network itself is no part of it (`network.vpc_id` -> `network`, `vpcs.blue.id` -> `vpcs.blue`), another one is
+    (`network.app_vpc_id` -> `network.app-vpc`)."""
+    parts = PART.findall(name)
+    if len(parts) > 1 and IDENTIFYING.fullmatch(parts[-1]):
+        parts = parts[:-1]
+    return "".join(p if p.startswith("[") else f".{derive(p)}" for p in parts).removeprefix(".")
+
+
+def derive(name: str) -> str:
+    """The network name a remote output or data source name implies: `shared_vpc_id` -> `shared-vpc`,
+    `hub_vnet_name` -> `hub-vnet`."""
+    return re.sub(rf"_(?:{SUFFIX})$", "", name).replace("_", "-")
 
 
 def tier_in(name: str) -> str | None:
-    return next((t for t in TIERS if t in name.lower()), None)
+    """The tier word nearest the end of a name: a subnet's own tier follows its network's (`private_vpc_public_subnet`
+    is public)."""
+    words = TIER_WORD.findall(name.lower())
+    return words[-1] if words else None
+
+
+def named_tier(body: dict) -> str | None:
+    """The tier the literal text of a local subnet's `name` and `Name` tag gives: the tier of each string literal,
+    outside interpolations (`"private-${var.public_zone}"` is private, `format("%s-public", var.p)` is public). Literals
+    that give different tiers give none: `var.private ? "private" : "public"` can be either. The `Name` tag can sit in a
+    function: `merge(local.tags, {Name = "app-public"})`."""
+    tags = body.get("tags")
+    tagged = ([lit for k, v in tags.items() if unq(k) == "Name" for lit in literals(str(v))] if isinstance(tags, dict)
+              else literals(str(tags or ""), under="Name"))
+    tiers = {tier for part in (*literals(str(body.get("name", ""))), *tagged) if (tier := tier_in(part))}
+    return tiers.pop() if len(tiers) == 1 else None
