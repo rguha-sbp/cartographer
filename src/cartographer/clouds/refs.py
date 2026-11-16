@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from cartographer.clouds.hcl_scan import ELEMENT, literals, member_keys
@@ -151,7 +151,10 @@ def _follow(inst: Inst, obj: Any, unread: tuple[str | None, ...], walk: _Walk) -
             out |= _read_through(inst, inst.mod.data.get((m["ds_type"], m["ds"])), path, walk)
         elif m["ds"]:
             within, picked = _looked_up(inst, m["ds"], m["ds_type"], walk)
-            out[picked or _lookup(inst, m, within)] = None
+            if path and path[0] in IN_NETWORK:  # `data.aws_subnet.x.vpc_id` is the network the subnet lookup is in
+                out |= dict.fromkeys(within)
+            else:
+                out[_as_read(picked, _lookup(inst, m, within))] = None
         elif (hops := _hops(inst, head, second, path)) is not None:
             # a local that reads itself reads nothing more; each module output is its own hop, as Terraform orders them
             hop = (id(inst), head, second, path[0] if head == "module" else None)
@@ -227,7 +230,8 @@ def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
     lookup (`id = data.tfe_outputs.n.values.vpc_id`), or a resource of this stack of the looked-up type that uses the
     same provider and the same `AGREE` arguments. A selector that reads two things (`var.create ? aws_vpc.this[0].id :
     data.tfe_outputs.n.values.vpc_id`) picks nothing. A tag or a name filter picks nothing: a peer or DR network is
-    often found by the tags of a local one."""
+    often found by the tags of a local one. A remote output or lookup picks only a lookup of its own kind: a network
+    lookup a network, a subnet lookup a subnet."""
     picks = list(_selected(body, PICKS.get(ds_type, ())))
     if not picks or not all(_whole(v, walk.pattern) for v in picks):
         return None
@@ -236,7 +240,7 @@ def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
         return None
     ref = found[0].pop()
     if ref.remote:
-        return ref if ds_type in NETWORK_LOOKUPS and is_network(ref) else None
+        return ref if is_network(ref) == (ds_type in NETWORK_LOOKUPS) else None
     kind = ds_type.removesuffix("s")
     if ref.address.split(".")[-2] != kind:
         return None
@@ -299,6 +303,17 @@ def _written(inst: Inst, value: Any) -> Any:
             break
         value = body[m[3]]
     return value
+
+
+def _as_read(picked: Ref | None, lookup: Ref) -> Ref:
+    """What a reference to a lookup reads: the lookup itself, or what it picks. A subnet output or subnet lookup that
+    picks a subnet lookup keeps its own state and name, in the network the lookup names and with the lookup's tier
+    when its own name gives none (`id = ...app_subnet_id` of `data.aws_subnet.app_private`: private)."""
+    if picked is None:
+        return lookup
+    if picked.remote and not is_network(picked):
+        return replace(picked, within=lookup.within or picked.within, tier=picked.tier or lookup.tier)
+    return picked
 
 
 def _lookup(inst: Inst, m: re.Match[str], within: tuple[Ref, ...]) -> Ref:

@@ -409,3 +409,31 @@ def test_a_vpc_lookup_by_the_vpc_of_a_subnet_lookup_is_a_network(tmp_path: Path)
         'data "aws_vpc" "shared" { id = data.aws_subnet.app_private.vpc_id }\n'
         'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.shared.id }\n')
     assert [(n["address"], n["remote"]) for n in facts["networks"]] == [("data.aws_vpc.shared", True)]
+
+
+def test_a_subnet_lookup_picked_by_a_subnet_output_keeps_the_state_of_that_output(tmp_path: Path) -> None:
+    facts = extract_tf(tmp_path,
+        tfe_state("a", name="a").replace("sg", "sa") + tfe_state("b", name="b").replace("shared_vpc_id", "vpc_id") +
+        'data "aws_subnet" "shared_vpc_private" { id = data.tfe_outputs.b.values.private_subnet_id }\n'
+        'resource "aws_instance" "app" { subnet_id = data.aws_subnet.shared_vpc_private.id }\n')
+    assert placed_in(facts) == {"aws_instance.app": "data.tfe_outputs.b.values.vpc_id"}
+
+
+def test_a_subnet_lookup_picked_by_a_subnet_output_takes_the_tier_of_that_output(tmp_path: Path) -> None:
+    facts = extract_tf(tmp_path, TFE +
+        'data "aws_subnet" "app" { id = data.tfe_outputs.n.values.private_subnet_ids[0] }\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.tfe_outputs.n.values.vpc_id }\n'
+        'resource "aws_instance" "app" { subnet_id = data.aws_subnet.app.id }\n')
+    assert placed_in(facts, "name") == {"aws_instance.app": "vpc"}
+    assert facts["placements"][0]["tier"] == "private"
+
+
+def test_a_vpc_lookup_by_the_vpc_of_a_subnet_lookup_is_the_network_that_subnet_lookup_names(tmp_path: Path) -> None:
+    facts = extract_tf(tmp_path, TFE +
+        'data "aws_subnet" "app_private" {\n  id = data.tfe_outputs.n.values.app_subnet_id\n'
+        '  vpc_id = data.tfe_outputs.n.values.vpc_id\n}\n'
+        'data "aws_vpc" "shared" { id = data.aws_subnet.app_private.vpc_id }\n'
+        'resource "aws_security_group" "sg" { vpc_id = data.aws_vpc.shared.id }\n'
+        'resource "aws_instance" "app" { subnet_id = data.aws_subnet.app_private.id }\n')
+    assert [n["address"] for n in facts["networks"]] == ["data.tfe_outputs.n.values.vpc_id"]
+    assert placed_in(facts, "name") == {"aws_instance.app": "vpc"}

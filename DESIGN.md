@@ -269,9 +269,11 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     reference that reads the same one resource of the looked-up type, with the same provider and, for Azure, the same
     `resource_group_name` (and `virtual_network_name` for a subnet). Selectors that all read one and the same remote
     output or other lookup (`id = data.tfe_outputs.n.values.vpc_id`) make the lookup that network. Only a network
-    lookup is picked this way, and only by a network (`refs.is_network`): a subnet lookup or a subnet output
-    (`app_subnet_id`) names the subnet, so a subnet lookup keeps the network its `vpc_id` reads and a `data.aws_vpc`
-    whose `id` reads a subnet lookup's `vpc_id` stays an external network. A selector that
+    lookup is picked this way, and only by a network (`refs.is_network`). A subnet lookup is picked only by a subnet
+    output or subnet lookup; it keeps that output's state and name, in the network its own `vpc_id` names, with its own
+    tier when the output's name gives none (`refs._as_read`). `data.aws_subnet.x.vpc_id` reads the network the subnet
+    lookup is in, so a `data.aws_vpc` with that `id` is that network, or an external network when the subnet lookup
+    names none. A selector that
     reads two things (`var.create ? aws_vpc.this[0].id : data.tfe_outputs.n.values.vpc_id`) picks nothing. A tag, a name filter, a value built from a local
     network (`"${aws_vpc.main.tags.Name}-peer"`) or another provider keeps it external: a peer or DR network is often
     found by the tags of a local one. Each lookup is followed once per reference walk, a local that reads itself
