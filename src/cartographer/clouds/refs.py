@@ -231,9 +231,9 @@ def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
     `"${aws_vpc.main.tags.Name}-peer"`) and they all read one and the same thing. That is a remote output or another
     lookup (`id = data.tfe_outputs.n.values.vpc_id`), or a resource of this stack of the looked-up type, with the
     same `AGREE` arguments: an Azure name is unique only in its resource group (and a subnet's in its network). A
-    resource or lookup must also use the same provider. A remote output needs `AGREE` arguments that are each a literal or
-    one whole reference to an output of its own state, and at least one of them a reference: a resource group read from
-    that state ties the name to it, a literal or a name built from it (`"${...rg_name}-dr"`) does not. A selector that reads two things (`var.create ? aws_vpc.this[0].id :
+    resource or lookup must also use the same provider. A remote output needs every `AGREE` argument, traced to where it is
+    written, to be one whole reference to an output of its own state: only that ties the name to the state's network. A
+    literal, a variable, `each.value` or a name built from the state's (`"${...rg_name}-dr"`) does not. A selector that reads two things (`var.create ? aws_vpc.this[0].id :
     data.tfe_outputs.n.values.vpc_id`) picks nothing. A tag or a name filter picks nothing: a peer or DR network is
     often found by the tags of a local one. A remote output or lookup picks only a lookup of its own kind: a network
     lookup a network, a subnet lookup a subnet."""
@@ -248,10 +248,7 @@ def _picked(inst: Inst, body: dict, ds_type: str, walk: _Walk) -> Ref | None:
     if ref.remote and is_network(ref) != (ds_type in NETWORK_LOOKUPS) or not ref.remote and ref.address.split(".")[-2] != kind:
         return None
     if ref.remote and ref.looks_up is None:
-        reads = {arg: walk.read(inst, body.get(arg)) for arg in AGREE.get(ds_type, ())}
-        of_state = all(not read or _whole(body.get(arg), walk.pattern) and all(
-            r.remote and r.looks_up is None and r.state == ref.state for r in read) for arg, read in reads.items())
-        return ref if of_state and (any(reads.values()) or not reads) else None
+        return ref if all(_of_state(*_written(inst, body.get(arg)), ref, walk) for arg in AGREE.get(ds_type, ())) else None
     owner, block = _owner(inst, ref.address)
     if owner is None or block is None:
         return None
@@ -296,6 +293,13 @@ def _provider(inst: Inst, body: dict, kind: str) -> tuple[int | None, str]:
     """The provider a block uses: the instance that declares it and its key there."""
     owner, key = declared_provider(inst, bare(body.get("provider", kind.split("_")[0])))
     return id(owner) if owner else None, key
+
+
+def _of_state(inst: Inst, value: Any, output: Ref, walk: _Walk) -> bool:
+    """Whether `value`, as written in `inst`, is one whole reference to a remote output of the state `output` is from."""
+    read = walk.read(inst, value)
+    return _whole(value, walk.pattern) and bool(read) and all(
+        r.remote and r.looks_up is None and r.state == output.state for r in read)
 
 
 def _agree(inst: Inst, value: Any, owner: Inst, other: Any) -> bool:

@@ -270,9 +270,11 @@ per tile) and fills the `tiles` of each sheet entry. The reviewer reads the shee
     `resource_group_name` (and `virtual_network_name` for a subnet). Selectors that all read one and the same remote
     output or other lookup (`id = data.tfe_outputs.n.values.vpc_id`) make the lookup that network. An Azure name is
     unique only in its resource group, so `AGREE` holds for these picks too: another lookup must agree as a resource
-    does, and a remote output needs `resource_group_name` (or a subnet's `virtual_network_name`) to be a literal or one
-    whole reference to an output of its state, at least one of them a reference. A DR lookup by the remote `vnet_name`
-    in a literal resource group, or in one built from the state's (`"${...rg_name}-dr"`), is another network. Only a network
+    does, and a remote output needs `resource_group_name` (and a subnet's `virtual_network_name`), each traced to where
+    it is written (`refs._written`), to be one whole reference to an output of its state (`refs._of_state`). A literal,
+    a variable, `each.value` or a value built from the state's proves nothing: a DR lookup by the remote `vnet_name` in
+    `"rg-network-dr"` or `"${...rg_name}-dr"` (inline or through a local) is another network, and a subnet lookup by a
+    remote subnet name in another VNet is not placed in the state's. Only a network
     lookup is picked this way, and only by a network (`refs.is_network`). A subnet lookup is picked only by a subnet
     output or subnet lookup; it keeps that output's state and name, in the network its own `vpc_id` names, with its own
     tier when the output's name gives none (`refs._as_read`). `data.aws_subnet.x.vpc_id` reads the network the subnet
