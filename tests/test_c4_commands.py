@@ -139,7 +139,25 @@ def test_build_c4_lists_what_rests_only_on_stated(tmp_path: Path, capsys, render
 def test_build_c4_writes_the_model_as_a_structurizr_workspace(tmp_path: Path, renderer) -> None:
     _model(_shop())
     assert _build(tmp_path) == 0
-    assert (tmp_path / "out" / DSL).read_text() == c4_structurizr.workspace(_shop())
+    assert (tmp_path / "out" / DSL).read_text(encoding="utf-8") == c4_structurizr.workspace(_shop())
+
+
+def test_build_c4_writes_the_workspace_as_utf8(tmp_path: Path, renderer) -> None:
+    model = _shop()
+    model["elements"][0]["name"] = "Zoë"
+    _model(model)
+    assert _build(tmp_path) == 0
+    assert '"Zoë"'.encode() in (tmp_path / "out" / DSL).read_bytes()
+
+
+def test_build_c4_builds_a_system_without_containers(tmp_path: Path, renderer) -> None:
+    """On main this model built; the workspace must not stop it."""
+    _model({"source": "description",
+            "elements": [el("user", "person"), el("shop", "system"), el("psp", "system", external=True)],
+            "relationships": [rel("r1", "user", "shop", "buys"), rel("r2", "user", "psp", "pays")],
+            "scenarios": [{"id": "buy", "name": "Buy", "steps": ["r1"]}]})
+    assert _build(tmp_path) == 0
+    assert (tmp_path / "out" / DSL).exists()
 
 
 def test_build_c4_writes_no_workspace_when_verify_fails(tmp_path: Path, renderer) -> None:

@@ -2,20 +2,24 @@
 viewers drill down from Context to Container to Component, and `structurizr export -format static` turns the
 workspace into a static site.
 
-Structurizr's implied relationships are turned off. Each rolled-up edge of a core view is written as an explicit
-relationship with the text the draw.io page shows (its own label, else the shared summary), so a Structurizr view
-and the matching page of the .drawio carry the same arrows. Code elements are left out: Structurizr models nothing
-below a component.
+Every view is driven by the matching page of the .drawio, `View.curated`: it includes exactly the page's elements,
+and its arrows are the page's edges. The workspace's relationships are therefore those edges, one per ordered pair
+and text, not the model's own relationships: each keeps the ids, labels and evidence of the relationships behind it
+as properties. Structurizr's implied relationships are off, and a view excludes any relationship between its
+elements that its page does not draw. Code views are left out: Structurizr models nothing below a component.
 """
 
 import re
-from collections.abc import Iterator
+from typing import NamedTuple
 
 from cartographer import c4_views
-from cartographer.c4_model import Model, edge_parts, elements, in_scope, visible
+from cartographer.c4_model import Model, in_scope
+from cartographer.c4_views import View
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9_]")
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
 _KINDS = {"person": "person", "system": "softwareSystem", "container": "container", "component": "component"}
+_STATIC = {c4_views.CONTEXT: "systemContext", c4_views.CONTAINER: "container", c4_views.COMPONENT: "component"}
 _STYLES = (
     ('element "Person"', ("shape person", "background #08427b", "color #ffffff")),
     ('element "Software System"', ("background #1168bd", "color #ffffff")),
@@ -35,7 +39,8 @@ def dsl_name(name: str) -> str:
 
 
 def _q(text: str | None) -> str:
-    return '"' + (text or "").replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ") + '"'
+    """A DSL string: quotes and backslashes escaped, line breaks, tabs and other control characters as one space."""
+    return '"' + _CONTROL.sub(" ", (text or "").replace("\\", "\\\\").replace('"', '\\"')) + '"'
 
 
 def _evidence(evidence: list[dict]) -> str:
@@ -51,7 +56,7 @@ def _evidence(evidence: list[dict]) -> str:
 
 
 class _Ids:
-    """DSL identifiers for model and deployment ids: letters, digits and underscores, unique."""
+    """DSL identifiers for model, deployment and relationship ids: letters, digits and underscores, unique."""
 
     def __init__(self) -> None:
         self._by_id: dict[str, str] = {}
@@ -85,6 +90,38 @@ class _Lines:
         self.add("}")
 
 
+class _Arrow(NamedTuple):
+    """A relationship of the workspace: an edge that a page draws. `step` marks one that only a Dynamic page draws."""
+
+    ident: str
+    edge: dict
+    step: bool
+
+
+Key = tuple[str, str, str]
+STEP_TAG = "Step"
+
+
+def _key(edge: dict) -> Key:
+    return edge["src"], edge["dst"], edge["text"]
+
+
+def _arrows(views: list[View], ids: _Ids) -> dict[Key, _Arrow]:
+    """One relationship for each edge of the pages, by its ends and text: Structurizr allows one relationship per
+    ordered pair and description. A pair that several static pages draw (people and external systems on Context and
+    Container) lifts the same relationships on each, so it is one. A Dynamic page draws a step with its own label,
+    and Structurizr matches a step to a relationship by its ends, description and technology, so a step whose text
+    no static page draws for its pair gets a relationship of its own."""
+    static = [v for v in views if v.kind in _STATIC]
+    dynamic = [v for v in views if v.kind == c4_views.DYNAMIC]
+    arrows: dict[Key, _Arrow] = {}
+    for step, pages in ((False, static), (True, dynamic)):
+        for edge in (edge for view in pages for edge in view.curated["edges"]):
+            if _key(edge) not in arrows:
+                arrows[_key(edge)] = _Arrow(ids[f"rel:{len(arrows) + 1}"], edge, step)
+    return arrows
+
+
 def _tags(element: dict) -> list[str]:
     tags = ["External"] if element.get("external") else []
     shape = element.get("shape")
@@ -105,109 +142,101 @@ def _element(out: _Lines, ids: _Ids, element: dict, children: dict[str, list[dic
     out.close()
 
 
-def _relationship(out: _Lines, ids: _Ids, src: str, dst: str, text: str, technology: str | None, dashed: bool,
-                  props: dict[str, str]) -> None:
-    out.open(f"{ids[src]} -> {ids[dst]} {_q(text)} {_q(technology)}")
-    if dashed:
-        out.add('tags "Async"')
+def _relationship(out: _Lines, ids: _Ids, arrow: _Arrow, relationships: dict[str, dict]) -> None:
+    edge = arrow.edge
+    technology = f" {_q(edge['technology'])}" if edge["technology"] else ""
+    out.open(f"{arrow.ident} = {ids[edge['src']]} -> {ids[edge['dst']]} {_q(edge['text'])}{technology}")
+    if tags := ["Async"] * edge["dashed"] + [STEP_TAG] * arrow.step:
+        out.add("tags " + " ".join(_q(t) for t in tags))
+    behind = [relationships[rid] for rid in edge["relationships"]]
     out.open("properties")
-    for key, value in props.items():
-        out.add(f"{_q(key)} {_q(value)}")
+    out.add(f'"relationships" {_q(", ".join(edge["relationships"]))}')
+    out.add(f'"evidence" {_q(" | ".join(f"{r["label"]}: {_evidence(r["evidence"])}" for r in behind))}')
     out.close()
     out.close()
-
-
-def rolled_up(model: Model) -> Iterator[tuple[str, str, str, str | None, bool, list[str]]]:
-    """Each edge of a core view that is not a relationship of the model itself, once per ordered pair:
-    (src, dst, text, technology, dashed, ids of the relationships behind it)."""
-    by_id = {r["id"]: r for r in model["relationships"]}
-    own = {(r["src"], r["dst"]) for r in model["relationships"]}
-    seen: set[tuple[str, str]] = set()
-    for view in c4_views.core(model):
-        if view.slug.startswith(c4_views.CODE):
-            continue
-        for edge in view.curated["edges"]:
-            pair = (edge["src"], edge["dst"])
-            if pair in own or pair in seen:
-                continue
-            seen.add(pair)
-            parts = [by_id[rid] for rid in edge["relationships"]]
-            text, technology = edge_parts(pair, parts)
-            yield (*pair, text, technology, edge["dashed"], edge["relationships"])
-
-
-def _steps(model: Model, system: dict, scenario_id: str) -> list[tuple[str, str, str]]:
-    """The scenario's steps at container level, as the Dynamic view draws them: (src, dst, label)."""
-    by_id = elements(model)
-    shown = {e["id"] for e in model["elements"]
-             if (e["type"] == "container" and e.get("parent") == system["id"])
-             or e["type"] == "person" or (e["type"] == "system" and e.get("external"))}
-    relationships = {r["id"]: r for r in model["relationships"]}
-    (scenario,) = (s for s in model["scenarios"] if s["id"] == scenario_id)
-    steps = []
-    for step in scenario["steps"]:
-        r = relationships[step]
-        src, dst = visible(by_id, r["src"], shown), visible(by_id, r["dst"], shown)
-        if src != dst:
-            steps.append((src, dst, r["label"]))
-    return steps
 
 
 def _deployment(out: _Lines, ids: _Ids, model: Model) -> None:
     deployment = model["deployment"]
-    nodes = deployment["nodes"]
     kids: dict[str | None, list[dict]] = {}
-    for node in nodes:
+    for node in deployment["nodes"]:
         kids.setdefault(node.get("parent"), []).append(node)
     hosted: dict[str, list[str]] = {}
     for instance in deployment["instances"]:
         hosted.setdefault(instance["node"], []).append(instance["container"])
 
-    def emit(node: dict) -> None:
-        holds = node["id"] in hosted or node["id"] in kids
-        kind = "deploymentNode" if holds or "frame" in node else "infrastructureNode"
+    def emit(node: dict, root: bool) -> None:
+        # Infrastructure that holds nothing is an infrastructureNode, which the DSL allows only inside a
+        # deploymentNode: at the root it stays a deploymentNode.
+        leaf = node["id"] not in hosted and node["id"] not in kids and "frame" not in node
+        kind = "infrastructureNode" if leaf and not root else "deploymentNode"
         out.open(f"{ids['node:' + node['id']]} = {kind} {_q(node['name'])} {_q('')} {_q(node['technology'])}")
         if node.get("tf"):
             out.open("properties")
             out.add(f'"terraform" {_q(", ".join(node["tf"]))}')
             out.close()
         for child in kids.get(node["id"], []):
-            emit(child)
+            emit(child, False)
         for container in hosted.get(node["id"], []):
             out.add(f"containerInstance {ids[container]}")
         out.close()
 
     out.open(f"deploymentEnvironment {_q(deployment['environment'])}")
     for root in kids.get(None, []):
-        emit(root)
+        emit(root, True)
     out.close()
 
 
-def _views(out: _Lines, ids: _Ids, model: Model, system: dict) -> None:
+def _static(out: _Lines, ids: _Ids, view: View, arrows: dict[Key, _Arrow]) -> None:
+    """A Context, Container or Component view of exactly the page's elements and edges."""
+    curated = view.curated
+    shown = [n["id"] for n in curated["nodes"]] + [e["id"] for e in curated["externals"]]
+    drawn = {_key(edge) for edge in curated["edges"]}
+    hidden = [arrow.ident for key, arrow in arrows.items()
+              if key[0] in shown and key[1] in shown and key not in drawn]
+    out.open(f"{_STATIC[view.kind]} {ids[view.subject]} {_q(view.slug)}")
+    out.add(f"title {_q(view.title)}")
+    if shown:
+        out.add("include " + " ".join(ids[eid] for eid in shown))
+    if hidden:
+        out.add("exclude " + " ".join(hidden))
+    out.add("autoLayout lr")
+    out.close()
+
+
+def _dynamic(out: _Lines, ids: _Ids, view: View, system: dict, arrows: dict[Key, _Arrow]) -> None:
+    """The page's steps, each with its number in the scenario and its own label. The technology is that of the
+    relationship the step names, which is the step's own unless a static page draws the same text over more."""
+    # Scoped to the system, a Dynamic view shows its containers; one without a boundary is at Context level and
+    # shows the system itself, which only the unscoped view may.
+    scope = ids[system["id"]] if view.curated["groups"] else "*"
+    out.open(f"dynamic {scope} {_q(view.slug)}")
+    out.add(f"title {_q(view.title)}")
+    for edge in view.curated["edges"]:
+        technology = arrows[_key(edge)].edge["technology"]
+        technology = f" {_q(technology)}" if technology else ""
+        out.add(f"{edge['step']}: {ids[edge['src']]} -> {ids[edge['dst']]} {_q(edge['text'])}{technology}")
+    out.add("autoLayout lr")
+    out.close()
+
+
+def _views(out: _Lines, ids: _Ids, model: Model, views: list[View], arrows: dict[Key, _Arrow]) -> None:
+    system = in_scope(model)
     out.open("views")
-    for view in c4_views.views(model):
-        slug, title = view.slug, _q(view.title)
-        if slug == c4_views.CONTEXT:
-            out.open(f"systemContext {ids[system['id']]} {_q(slug)} {title}")
-        elif slug == c4_views.CONTAINER:
-            out.open(f"container {ids[system['id']]} {_q(slug)} {title}")
-        elif slug.startswith(c4_views.COMPONENT):
-            container = slug.removeprefix(c4_views.COMPONENT + "-")
-            out.open(f"component {ids[container]} {_q(slug)} {title}")
-        elif slug == c4_views.DEPLOYMENT:
-            out.open(f"deployment {ids[system['id']]} {_q(model['deployment']['environment'])} {_q(slug)} {title}")
-        elif slug.startswith(c4_views.DYNAMIC):
-            out.open(f"dynamic {ids[system['id']]} {_q(slug)} {title}")
-            for src, dst, label in _steps(model, system, slug.removeprefix(c4_views.DYNAMIC + "-")):
-                out.add(f"{ids[src]} -> {ids[dst]} {_q(label)}")
+    for view in views:
+        if view.kind in _STATIC:
+            _static(out, ids, view, arrows)
+        elif view.kind == c4_views.DYNAMIC:
+            _dynamic(out, ids, view, system, arrows)
+        elif view.kind == c4_views.DEPLOYMENT:
+            # Structurizr gives container instances the relationships of their containers. Without the Dynamic
+            # steps' own relationships those are the Container page's edges: the same arrows as the Deployment page.
+            out.open(f"deployment {ids[system['id']]} {_q(model['deployment']['environment'])} {_q(view.slug)}")
+            out.add(f"title {_q(view.title)}")
+            out.add("include *")
+            out.add(f'exclude "relationship.tag=={STEP_TAG}"')
             out.add("autoLayout lr")
             out.close()
-            continue
-        else:  # a Code view: Structurizr has no level below components
-            continue
-        out.add("include *")
-        out.add("autoLayout lr")
-        out.close()
     out.open("styles")
     for selector, rules in _STYLES:
         out.open(selector)
@@ -221,7 +250,7 @@ def _views(out: _Lines, ids: _Ids, model: Model, system: dict) -> None:
 def workspace(model: Model) -> str:
     """The whole model and its views as one Structurizr DSL workspace."""
     system = in_scope(model)
-    by_id = elements(model)
+    views = [v for v in c4_views.views(model) if v.kind != c4_views.CODE]
     children: dict[str, list[dict]] = {}
     for element in model["elements"]:
         if element["type"] != "code" and (parent := element.get("parent")):
@@ -234,18 +263,15 @@ def workspace(model: Model) -> str:
     for element in model["elements"]:
         if element["type"] in ("person", "system"):
             _element(out, ids, element, children)
+    arrows = _arrows(views, ids)
+    relationships = {r["id"]: r for r in model["relationships"]}
     out.add("")
-    for r in model["relationships"]:
-        if by_id[r["src"]]["type"] == "code" or by_id[r["dst"]]["type"] == "code":
-            continue
-        props = {"evidence": _evidence(r["evidence"])} | ({"summary": r["summary"]} if r.get("summary") else {})
-        _relationship(out, ids, r["src"], r["dst"], r["label"], r.get("technology"), r["dashed"], props)
-    for src, dst, text, technology, dashed, behind in rolled_up(model):
-        _relationship(out, ids, src, dst, text, technology, dashed, {"rolls up": ", ".join(behind)})
+    for arrow in arrows.values():
+        _relationship(out, ids, arrow, relationships)
     if "deployment" in model:
         out.add("")
         _deployment(out, ids, model)
     out.close()
-    _views(out, ids, model, system)
+    _views(out, ids, model, views, arrows)
     out.close()
     return "\n".join(out.lines) + "\n"
