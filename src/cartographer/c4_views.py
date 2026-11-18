@@ -15,11 +15,22 @@ COMPONENT, CODE, DYNAMIC = "3-component", "4-code", "6-dynamic"
 ID = SHAPE["$defs"]["id"]["pattern"].strip("^$")
 
 
+_ONCE = (CONTEXT, CONTAINER, DEPLOYMENT)
+
+
 @dataclass(frozen=True)
 class View:
-    slug: str
+    """One diagram: its kind (CONTEXT ... DYNAMIC), the id of what it is about (the system in scope, or the
+    container, component or scenario), its title and what the layout engine draws."""
+
+    kind: str
+    subject: str
     title: str
     curated: dict
+
+    @property
+    def slug(self) -> str:
+        return self.kind if self.kind in _ONCE else f"{self.kind}-{self.subject}"
 
 
 def _element_external(element: dict) -> dict:
@@ -65,25 +76,31 @@ def _component(model: Model, title: str, container: dict, components: list[dict]
 
 
 def _dynamic(model: Model, system: dict, scenario: dict, title: str) -> dict:
-    """The scenario's steps at container level: containers inside the system boundary, the rest outside."""
+    """The scenario's steps at container level: containers inside the system boundary, the rest outside; for a
+    system without containers, at Context level. A step inside one element, or with an end that level does not
+    show, is not drawn; the others keep their number in the scenario."""
     containers = _children(model, system, "container")
-    shown, by_id = _shown(model, containers), elements(model)
+    level = containers or [system]  # a system without containers: its steps at Context level, no boundary
+    shown, by_id = _shown(model, level), elements(model)
     relationships = {r["id"]: r for r in model["relationships"]}
     edges = []
     for number, step in enumerate(scenario["steps"], 1):
         r = relationships[step]
         src, dst = visible(by_id, r["src"], shown), visible(by_id, r["dst"], shown)
-        if src != dst:
-            edges.append({"src": src, "dst": dst, "label": f"{number}. {edge_text(r['label'], r.get('technology'))}",
-                          "dashed": r["dashed"]})
+        if src and dst and src != dst:
+            text, technology = r["label"], r.get("technology")
+            edges.append({"src": src, "dst": dst, "label": f"{number}. {edge_text(text, technology)}", "text": text,
+                          "technology": technology, "dashed": r["dashed"], "relationships": [r["id"]],
+                          "step": number})
     ends = {end for edge in edges for end in (edge["src"], edge["dst"])}
-    return _curated(model, title, system, [c for c in containers if c["id"] in ends], edges)
+    return _curated(model, title, system if containers else None, [e for e in level if e["id"] in ends], edges)
 
 
 def _code(model: Model, component: dict, classes: list[dict], title: str) -> dict:
     """The component's code elements and the relationships between them; links that leave it are not drawn."""
     ids = {c["id"] for c in classes}
     edges = [{"src": r["src"], "dst": r["dst"], "label": edge_text(r["label"], r.get("technology")),
+              "text": r["label"], "technology": r.get("technology"),
               "dashed": r["dashed"] and r.get("kind", "uses") == "uses",  # the head draws inherits and implements
               "head": HEADS[r.get("kind", "uses")], "relationships": [r["id"]]}
              for r in model["relationships"] if {r["src"], r["dst"]} <= ids]
@@ -98,20 +115,20 @@ def core(model: Model) -> list[View]:
     containers = _children(model, system, "container")
     context, container_title = f"System Context diagram for {name}", f"Container diagram for {name}"
     result = [
-        View(CONTEXT, context, _curated(model, context, None, [system], rollup(model, _shown(model, [system])))),
-        View(CONTAINER, container_title,
+        View(CONTEXT, system["id"], context, _curated(model, context, None, [system], rollup(model, _shown(model, [system])))),
+        View(CONTAINER, system["id"], container_title,
              _curated(model, container_title, system, containers, rollup(model, _shown(model, containers)))),
     ]
     for container in containers:
         if components := _children(model, container, "component"):
             title = f"Component diagram for {name}: {container['name']}"
             siblings = [c for c in containers if c["id"] != container["id"]]
-            result.append(View(f"{COMPONENT}-{container['id']}", title,
+            result.append(View(COMPONENT, container["id"], title,
                                _component(model, title, container, components, siblings)))
     for component in (e for e in model["elements"] if e["type"] == "component"):
         if classes := _children(model, component, "code"):
             title = f"Code diagram for {name}: {component['name']}"
-            result.append(View(f"{CODE}-{component['id']}", title, _code(model, component, classes, title)))
+            result.append(View(CODE, component["id"], title, _code(model, component, classes, title)))
     return result
 
 
@@ -122,10 +139,10 @@ def views(model: Model) -> list[View]:
     result = core(model)
     if "deployment" in model:
         title = f"Deployment diagram for {name}: {model['deployment']['environment']}"
-        result.append(View(DEPLOYMENT, title, deployment(model, title)))
+        result.append(View(DEPLOYMENT, system["id"], title, deployment(model, title)))
     for scenario in model.get("scenarios", []):
         title = f"Dynamic diagram for {name}: {scenario['name']}"
-        result.append(View(f"{DYNAMIC}-{scenario['id']}", title, _dynamic(model, system, scenario, title)))
+        result.append(View(DYNAMIC, scenario["id"], title, _dynamic(model, system, scenario, title)))
     return result
 
 

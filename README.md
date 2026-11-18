@@ -23,13 +23,7 @@ regenerates the image. When you close the window, the server stops.
   `git` clones over HTTPS.
 - `uv` (`uv --version` must work). You do not need a Python install: if the machine has none, `uv` gets one.
 - Google Chrome or Chromium on macOS, Linux or Windows. Chrome opens the editor window. Chrome also renders images and
-  screenshots in headless mode. cartographer looks for an installed Chrome or Chromium, then on `PATH`, then for a
-  Chromium that Playwright installed (`PLAYWRIGHT_BROWSERS_PATH`, else Playwright's default folder). Without admin
-  rights, for example in a dev container, `uvx playwright install chromium` gets one. That Chromium still needs the
-  system libraries a browser uses: when one is missing, the error says so and names the fix. Containers often also
-  lack the user namespaces Chrome's sandbox needs, and Chrome then stops with "No usable sandbox". Set
-  `CARTOGRAPHER_CHROME_NO_SANDBOX=1` to run it without its sandbox; that is your call, so cartographer never does it
-  by itself.
+  screenshots in headless mode.
 
 ## What gets installed
 
@@ -171,26 +165,29 @@ Commit the four files that always exist: the `.drawio`, the `.svg`, the curated 
 A C4 set writes different files. It writes one `<name>-c4.drawio` with a page (a tab in draw.io) for each view. It
 writes an `.svg` for each view (for example `shop-c4-1-context.svg`, `shop-c4-2-container.svg`,
 `shop-c4-3-component-api.svg`, `shop-c4-5-deployment.svg`). It also writes the index `README.md`, with one row for each
-view, and `<name>-c4.dsl`, the same model as a Structurizr workspace. There is no curated file to commit.
+view, and `<name>-c4.dsl`, the same views as a Structurizr workspace. There is no curated file to commit.
 
 ### Explore a C4 set interactively
 
 C4 is most useful when you can drill down: from the system to its containers, and from a container to its components.
 The `.drawio` pages are static, so every C4 build also writes `<name>-c4.dsl`, a
-[Structurizr](https://structurizr.com) workspace of the same model. Its views carry the same arrows as the `.drawio`
-pages: an arrow that several relationships roll up onto reads their shared `summary`, as on the page. Code elements are
-left out, since Structurizr models nothing below a component. Each element and relationship keeps its evidence as a
-property, which the viewer shows as a tooltip.
+[Structurizr](https://structurizr.com) workspace with the same views: each shows the elements and arrows of its page,
+and an arrow that several relationships roll up onto reads their shared `summary`, as on the page. Code views are left
+out, since Structurizr models nothing below a component. Each element and arrow keeps its evidence as a property,
+which the viewer shows as a tooltip.
 
-Turn the workspace into a static site with the Structurizr CLI (it needs Java and Graphviz, or use the
-`structurizr/cli` Docker image):
+Turn the workspace into a static site with Structurizr. Its [binaries](https://docs.structurizr.com/binaries) are a
+Docker image and a Java 21 `.war`:
 
 ```
-structurizr export -w docs/architecture/diagrams/<name>-c4.dsl -f static -o site
+docker run --rm -v "$PWD:/usr/local/structurizr" structurizr/structurizr \
+  export -w docs/architecture/diagrams/<name>-c4.dsl -f static -o site
+java -jar structurizr.war export -w docs/architecture/diagrams/<name>-c4.dsl -f static -o site
 ```
 
-Open `site/index.html` in a browser. It needs no server. Double-click an element with a magnifying glass to go one
-level down; the arrow keys move between views and `,` and `.` step through a Dynamic view.
+Open `site/index.html` in a browser. It needs no server: the export embeds the workspace in `site/workspace.js`.
+Double-click an element with a magnifying glass to go one level down; the arrow keys move between views and `,` and
+`.` step through a Dynamic view.
 
 The intermediates (facts, schema, screenshots) stay in the plugin data folder (`~/.cache/cartographer/<name>/` for the
 standalone CLI). Do not commit them. Claude never commits or pushes for you.
@@ -201,8 +198,14 @@ An L7 diagram nests these levels: cloud, region, account (an Azure subscription)
 network), subnet tier and workload. A diagram that uses both clouds has one top-level frame for each cloud, side by
 side:
 
-- A network frame shows its address ranges in the title, for example `shop-vpc (10.0.0.0/16)`. It does this only when
+- A network frame shows its address ranges in the title, for example `Shop VPC (10.0.0.0/16)`. It does this only when
   the Terraform or you gave the ranges. The tool never guesses a CIDR.
+- A network frame for a network that this stack does not create (a remote state output or a data source lookup)
+  shows `External` in the title, for example `Shared VPC (External)`. Verify writes this; the curator does not. The
+  frame stays in your workload account, because the services in it belong to that account.
+- Each service with a subnet in the Terraform sits in the frame of the network it runs in. Verify moves a service out
+  of a network frame it does not run in, and notes a service drawn outside every network frame.
+- Cartographer reads only the `.tf` files. It never opens a state file, contacts a backend or runs Terraform.
 - Subnet frames group the services of one tier: public, private or isolated. The tool does not draw Availability
   Zones.
 - Workload frames hold the services of one application, so that separate workloads look separate. A workload frame is inside a subnet frame, or directly under the account for regional services such as S3 or Azure Storage.
@@ -281,7 +284,7 @@ latest release at https://github.com/rguha-sbp/cartographer/releases/latest.
 | `prompt --name NAME [--describe]` | print the curation prompt, or the describe prompt for a new solution |
 | `prompt --name NAME --c4 [--describe]` | print the C4 curation prompt, or the C4 prompt that starts with an interview |
 | `build --name NAME [--replace \| --side-file]` | verify, then write the `.drawio`, the `.svg` and the folder index |
-| `build --name NAME --c4` | verify `model.json`, then write `NAME-c4.drawio` with a page and an `.svg` for each C4 view, and `NAME-c4.dsl`, the model as a Structurizr workspace. It overwrites files and deletes stale view images |
+| `build --name NAME --c4` | verify `model.json`, then write `NAME-c4.drawio` with a page and an `.svg` for each C4 view, and `NAME-c4.dsl`, the views as a Structurizr workspace. It overwrites files and deletes stale view images |
 | `image FILE.drawio` | regenerate the `.svg` next to a `.drawio`, one for each page of a file with several pages |
 | `check FOLDER` | offline: fail when a page of a `.drawio` has no image or has a stale image |
 | `snapshot FILE.drawio -o DIR` | for each page: print `view: <page name>`, then its PNG and tiles from the bundled draw.io, for the visual review |

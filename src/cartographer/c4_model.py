@@ -69,20 +69,19 @@ def edge_parts(pair: tuple[str, str], parts: list[dict]) -> tuple[str, str | Non
     return texts.pop(), ", ".join(technologies) or None
 
 
-def _edge_label(pair: tuple[str, str], parts: list[dict]) -> str:
-    return edge_text(*edge_parts(pair, parts))
-
-
 def rollup(model: Model, shown: set[str]) -> list[dict]:
-    """Relationships lifted to the shown elements, one edge per ordered pair, naming the relationships behind it."""
+    """Relationships lifted to the shown elements, one edge per ordered pair, naming the relationships behind it.
+    `label` is what the page draws; `text` and `technology` are its two parts."""
     groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
     by_id = elements(model)
     for r in model["relationships"]:
         src, dst = visible(by_id, r["src"], shown), visible(by_id, r["dst"], shown)
         if src and dst and src != dst:
             groups[src, dst].append(r)
-    return [
-        {"src": src, "dst": dst, "label": _edge_label((src, dst), parts), "dashed": all(r["dashed"] for r in parts),
-         "relationships": sorted(r["id"] for r in parts)}
-        for (src, dst), parts in sorted(groups.items())
-    ]
+    edges = []
+    for (src, dst), parts in sorted(groups.items()):
+        text, technology = edge_parts((src, dst), parts)
+        edges.append({"src": src, "dst": dst, "label": edge_text(text, technology), "text": text,
+                      "technology": technology, "dashed": all(r["dashed"] for r in parts),
+                      "relationships": sorted(r["id"] for r in parts)})
+    return edges

@@ -82,14 +82,18 @@ def render_images(drawio: Path, mxfile: str, drawio_url: str | None) -> dict[Pat
         return svg_export.images(drawio, mxfile, url)
 
 
-def publish(drawio: Path, mxfile: str, images: dict[Path, str]) -> None:
-    """Write the .drawio and its images, refresh the folder index and print every written path."""
+def publish(drawio: Path, mxfile: str, images: dict[Path, str], others: dict[Path, str] | None = None) -> None:
+    """Write the .drawio, its images and any other files beside it (as UTF-8, whatever the locale), refresh the
+    folder index and print every written path."""
+    others = others or {}
     drawio.parent.mkdir(parents=True, exist_ok=True)
     drawio.write_bytes(mxfile.encode())
     for image, svg in images.items():
         image.write_text(svg)
+    for path, text in others.items():
+        path.write_bytes(text.encode())
     index.write_index(drawio.parent)
-    print(drawio, *images, sep="\n")
+    print(drawio, *images, *others, sep="\n")
 
 
 def _verify_terraform(name: str, curated: dict, repo: Path) -> tuple[dict, str]:

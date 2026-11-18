@@ -21,7 +21,7 @@ class Launch(NamedTuple):
 
 def chrome_argv(chrome: str, profile: Path, url: str) -> list[str]:
     return [
-        chrome, *snapshot.sandbox_flags(), f"--user-data-dir={profile}",
+        chrome, f"--user-data-dir={profile}",
         "--no-first-run", "--no-default-browser-check", f"--app={url}",
     ]
 

@@ -47,8 +47,11 @@ def box_size(n: dict[str, Any]) -> Size:
 
 
 def group_label(g: dict[str, Any]) -> str:
-    """A group's title: a VPC also names its address ranges."""
-    return f"{g['label']} ({', '.join(g['cidrs'])})" if g.get("cidrs") else g["label"]
+    """A group's title: a VPC also names its address ranges and, when this stack does not create it, `External`."""
+    notes = list(g.get("cidrs") or [])
+    if g.get("external"):
+        notes.append("External")
+    return f"{g['label']} ({', '.join(notes)})" if notes else g["label"]
 
 
 def _label(n: dict[str, Any]) -> str:
@@ -112,7 +115,7 @@ class Blocks:
         g = self.groups[bid]
         _, h = self.measure(bid)
         self.out_groups.append(Group(bid, group_label(g), x, y, w, h, g["parent"], g["kind"], g.get("tier"),
-                                     stroke=self.colours.group(bid) or GREY, cloud=g.get("cloud")))
+                                     color=self.colours.group(bid) or GREY, cloud=g.get("cloud")))
         top = y + GROUP_PAD_TOP
         for c in self.children[bid]:
             top += self.place(c, x + GROUP_PAD_X, top, self.measure(c)[0]) + self.row_gap

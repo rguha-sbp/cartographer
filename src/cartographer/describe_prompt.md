@@ -31,13 +31,16 @@ Fields for a described diagram
 - Tier: from what the engineer said. When they did not say, ask; propose gateways and public load balancers public, compute
   and data private (on Azure too). The tier is never marked on the diagram. A subnet group's `evidence` is a
   `stated` item when the engineer named the tier.
+- Shared network: when another account owns the network (AWS VPC sharing), its `network` group still sits in the account
+  of the services that run in it and is named after the network itself plus `VPC` or `VNet`, for example "Shared VPC". Never draw an account
+  frame for the owner or name it in a group label. Never set `external`: only verify sets it, from Terraform facts.
 - CIDR: set `cidrs` on the `network` group only when the engineer stated the address range, with a `stated` or `file`
   item in the group's `evidence`. Never guess or invent an address range; leave `cidrs` out instead.
 - Workloads: role groups (`kind` null, for example "Storefront" or "Orders") are the application or service
   boundaries the engineer named. Each has `parent` set to the subnet group where its network-attached services run, or to
   the account for its regional services. A workload that has both gets one frame in each place, with the same label.
   Without a workload split, use plain role groups ("Edge", "Data stores") under the same parents.
-- Label: short name, a newline, then a 2 to 4 word role. Plain ASCII, no em dashes, en dashes or smart quotes.
+- Label: short name, a newline, then a 2 to 4 word role. The name starts with a capital letter and the role starts lower case. Group labels start with a capital letter. Edge labels start lower case. A product or identifier keeps its own spelling (`npm`, `eu-west-1`). Plain ASCII, no em dashes, en dashes or smart quotes.
 
 Evidence
 - Every edge and every external needs at least one evidence item. Two forms are allowed:

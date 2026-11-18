@@ -63,8 +63,5 @@ def build(args: argparse.Namespace) -> int:
     for stale in out.glob("*"):
         if stale not in images and c4_views.written_by_c4(args.name, stale):
             stale.unlink()
-    publish(drawio, mxfile, images)
-    dsl = out / c4_structurizr.dsl_name(args.name)
-    dsl.write_text(workspace)
-    print(dsl)
+    publish(drawio, mxfile, images, {out / c4_structurizr.dsl_name(args.name): workspace})
     return 0
