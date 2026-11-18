@@ -51,7 +51,9 @@ relationships consistent across levels. This design takes the second approach an
 
 - Other diagram kinds (data flow with trust boundaries, CI/CD pipeline, IAM access view, network topology, BPMN). They
   come later as further views over the same pipeline; this design only has to leave room for them.
-- Structurizr DSL, PlantUML or Mermaid output. draw.io is the deliverable.
+- PlantUML or Mermaid output. draw.io is the deliverable. A Structurizr DSL workspace is written beside it, so the
+  same views can be explored with drill-down (see "Structurizr workspace" below). It adds no view, element or arrow of
+  its own: each of its views is driven by the matching draw.io page.
 - Rendering from a running cloud account. No credentials, as today.
 
 ## Anti-goals
@@ -223,3 +225,29 @@ is built and the model has no `code` elements.
 - C4 notation: https://c4model.com/diagrams/notation
 - C4 review checklist: https://c4model.com/diagrams/checklist
 - Models as code (Structurizr): https://docs.structurizr.com/as-code
+
+## Structurizr workspace
+
+Added after the first release. C4's main strength is moving between levels, and static draw.io pages cannot be drilled
+into. `build --c4` therefore also writes `<name>-c4.dsl`, a Structurizr DSL workspace of the same model
+(`c4_structurizr.py`), from which `structurizr export -f static` makes a static site with drill-down, Dynamic view
+playback and evidence tooltips.
+
+- Each Structurizr view is driven by the page's `View.curated`. Its relationships are the pages' edges, one per
+  ordered pair and text (Structurizr allows no more), each with the ids, labels and evidence of the relationships
+  behind it; the model's own relationships are not written separately. Implied relationships are off.
+- A Context, Container or Component view includes exactly the page's elements and excludes any relationship between
+  them that the page does not draw, so `include *` never adds or drops anything.
+- A Dynamic step names its number in the scenario, so a step the page skips leaves the same gap. Structurizr matches a
+  step to a relationship by ends, description and technology, so a step whose text no static page draws gets a
+  relationship of its own, tagged `Step` and excluded from the other views. When a static page draws the same text over
+  more technologies, the step shows those.
+- The Deployment view includes everything in the environment: container instances take their containers'
+  relationships, which are the Container page's edges, as on the Deployment page. A root deployment node is always a
+  `deploymentNode`, as the DSL allows no `infrastructureNode` there.
+- Views keep the slugs (as keys) and titles (as `title`) of the draw.io pages. Code views and code elements are left
+  out: Structurizr has no level below components.
+- `tests/test_c4_structurizr_parser.py` exports each test model with the real Structurizr (set
+  `CARTOGRAPHER_STRUCTURIZR`) and checks every view's elements and arrows against its page.
+- Evidence travels as element and relationship properties; deployment nodes keep their Terraform addresses.
+- The workspace is computed before anything is written, like the images, so a failed build leaves the folder as it was.

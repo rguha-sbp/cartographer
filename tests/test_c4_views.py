@@ -169,6 +169,35 @@ def _shop_with_code():
     return model
 
 
+def test_views_name_their_kind_and_subject():
+    found = {v.slug: (v.kind, v.subject) for v in views(_shop())}
+    assert found["1-context"] == ("1-context", "shop")
+    assert found["2-container"] == ("2-container", "shop")
+    assert found["3-component-api"] == ("3-component", "api")
+    assert found["6-dynamic-buy"] == ("6-dynamic", "buy")
+
+
+def test_dynamic_of_a_system_without_containers_is_at_context_level():
+    model = {"source": "description", "elements": [el("user", "person"), el("shop", "system")],
+             "relationships": [rel("r1", "user", "shop", "buys")],
+             "scenarios": [{"id": "buy", "name": "Buy", "steps": ["r1"]}]}
+    dyn = _view(model, "6-dynamic-buy").curated
+    assert [(e["src"], e["dst"], e["label"]) for e in dyn["edges"]] == [("user", "shop", "1. buys")]
+    assert dyn["groups"] == [] and _ids(dyn["nodes"]) == {"shop"} and _ids(dyn["externals"]) == {"user"}
+
+
+def test_dynamic_skips_a_step_with_an_end_its_level_does_not_show():
+    model = _shop(components=False)
+    model["relationships"].append(rel("r9", "user", "shop", "buys", summary="uses shop"))
+    model["scenarios"] = [{"id": "buy", "name": "Buy", "steps": ["r9", "r1"]}]
+    assert [e["label"] for e in _view(model, "6-dynamic-buy").curated["edges"]] == ["2. browses\n[HTTPS]"]
+
+
+def test_dynamic_edges_carry_their_step_and_relationship():
+    (first, *_) = _view(_shop(), "6-dynamic-buy").curated["edges"]
+    assert (first["step"], first["text"], first["technology"], first["relationships"]) == (1, "browses", "HTTPS", ["r1"])
+
+
 def test_no_code_view_without_code_elements():
     assert not [v for v in views(_shop()) if v.slug.startswith("4-code")]
 
