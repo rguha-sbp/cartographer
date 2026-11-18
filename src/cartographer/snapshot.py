@@ -32,17 +32,21 @@ CHROME_HINT = (
     "install Google Chrome or Chromium (macOS app bundle, or the Windows per-machine or per-user install), "
     "put google-chrome / chromium on PATH, or, without admin rights, run `uvx playwright install chromium`"
 )
-# Playwright's own builds of full Chromium, newest revision first. Its headless shell is left out: it has no window,
-# so the editor could not open in it.
-PLAYWRIGHT_CHROMIUM = (
-    "chromium-*/chrome-linux*/chrome",
-    "chromium-*/chrome-mac*/Chromium.app/Contents/MacOS/Chromium",
-    "chromium-*/chrome-mac*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-    "chromium-*/chrome-win*/chrome.exe",
-)
+# Playwright's own builds of full Chromium for this platform, newest revision first. Its headless shell is left out:
+# it has no window, so the editor could not open in it.
+PLAYWRIGHT_CHROMIUM = {
+    "linux": ("chromium-*/chrome-linux*/chrome",),
+    "darwin": (
+        "chromium-*/chrome-mac*/Chromium.app/Contents/MacOS/Chromium",
+        "chromium-*/chrome-mac*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    ),
+    "win32": ("chromium-*/chrome-win*/chrome.exe",),
+}
+# Playwright writes this marker last, so a revision without it is still downloading or was cut off.
+PLAYWRIGHT_COMPLETE = "INSTALLATION_COMPLETE"
 MISSING_LIBRARIES = (
     "Chrome is installed but a system library it needs is missing: install your distribution's chromium package, "
-    "which pulls the libraries in, or run `playwright install-deps chromium` as root"
+    "which pulls the libraries in, or run `uvx playwright install-deps chromium` as root"
 )
 # Opt-in only: Chrome's sandbox is a security boundary, and turning it off is the user's call. Containers often
 # disable the unprivileged user namespaces it needs, and then Chrome aborts at start-up.
@@ -51,7 +55,15 @@ NO_SANDBOX = (
     "Chrome found no usable sandbox, as happens in containers without unprivileged user namespaces: enable them, "
     f"or set {NO_SANDBOX_ENV}=1 to run Chrome without its sandbox"
 )
-_CAUSES = (("error while loading shared libraries", MISSING_LIBRARIES), ("No usable sandbox", NO_SANDBOX))
+AS_ROOT = (
+    "Chrome will not run as root with its sandbox, as happens in containers that run as root: run as a non-root "
+    f"user, or set {NO_SANDBOX_ENV}=1 to run Chrome without its sandbox"
+)
+_CAUSES = (
+    ("error while loading shared libraries", MISSING_LIBRARIES),
+    ("No usable sandbox", NO_SANDBOX),
+    ("Running as root without --no-sandbox", AS_ROOT),
+)
 DRAWIO_DOWN = "no draw.io answers at the given --drawio-url: start it, or omit the flag to use the bundled one"
 OFFLINE_RULES = "MAP * ~NOTFOUND , EXCLUDE 127.0.0.1 , EXCLUDE localhost"
 
@@ -168,18 +180,24 @@ def playwright_root() -> Path:
     return Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "ms-playwright"
 
 
-def _revision(path: Path, root: Path) -> int:
-    return int(path.relative_to(root).parts[0].removeprefix("chromium-"))
+def _revision(path: Path, root: Path) -> int | None:
+    """The revision of a complete Playwright Chromium install that holds `path`, else None."""
+    folder = path.relative_to(root).parts[0]
+    revision = folder.removeprefix("chromium-")
+    if not revision.isdigit() or not (root / folder / PLAYWRIGHT_COMPLETE).is_file():
+        return None
+    return int(revision)
 
 
 def playwright_chromium() -> Path | None:
-    """The newest full Chromium that Playwright installed, if any."""
+    """The newest complete full Chromium that Playwright installed for this platform, if any."""
     root = playwright_root()
     if not root.is_dir():
         return None
-    found = [p for pattern in PLAYWRIGHT_CHROMIUM for p in root.glob(pattern)
-             if p.is_file() and p.relative_to(root).parts[0].removeprefix("chromium-").isdigit()]
-    return max(found, key=lambda p: _revision(p, root), default=None)
+    patterns = PLAYWRIGHT_CHROMIUM.get(sys.platform, PLAYWRIGHT_CHROMIUM["linux"])
+    found = {p: rev for pattern in patterns for p in root.glob(pattern)
+             if p.is_file() and (rev := _revision(p, root)) is not None}
+    return max(found, key=found.__getitem__, default=None)
 
 
 def find_chrome() -> str:

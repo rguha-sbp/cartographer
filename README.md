@@ -23,7 +23,13 @@ regenerates the image. When you close the window, the server stops.
   `git` clones over HTTPS.
 - `uv` (`uv --version` must work). You do not need a Python install: if the machine has none, `uv` gets one.
 - Google Chrome or Chromium on macOS, Linux or Windows. Chrome opens the editor window. Chrome also renders images and
-  screenshots in headless mode.
+  screenshots in headless mode. cartographer looks for an installed Chrome or Chromium, then on `PATH`, then for a
+  Chromium that Playwright installed (`PLAYWRIGHT_BROWSERS_PATH`, else Playwright's default folder). Without admin
+  rights, for example in a dev container, `uvx playwright install chromium` gets one. That Chromium still needs the
+  system libraries a browser uses: when one is missing, the error says so and names the fix. Containers often also
+  lack the user namespaces Chrome's sandbox needs, or run as root, and Chrome then refuses to start. Set
+  `CARTOGRAPHER_CHROME_NO_SANDBOX=1` to run it without its sandbox; that is your call, so cartographer never does it
+  by itself.
 
 ## What gets installed
 

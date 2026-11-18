@@ -115,6 +115,44 @@ def test_launch_without_chrome_falls_back_to_the_default_browser(monkeypatch) ->
     assert "default browser" in result.note
 
 
+class _FailedChrome:
+    returncode = 1
+
+    def poll(self) -> int:
+        return self.returncode
+
+
+def test_failure_names_why_the_editor_chrome_stopped(tmp_path) -> None:
+    log = tmp_path / "stderr.log"
+    log.write_text("[0:0:ERROR:zygote_host_impl_linux.cc:101] Running as root without --no-sandbox is not supported.")
+    reason = view_browser.failure(view_browser.Launch(_FailedChrome(), tmp_path, "", log))
+    assert snapshot.NO_SANDBOX_ENV in reason
+
+
+def test_failure_is_empty_for_a_running_or_cleanly_closed_chrome(tmp_path) -> None:
+    log = tmp_path / "stderr.log"
+    log.write_text("No usable sandbox!")
+    running, closed = _FailedChrome(), _FailedChrome()
+    running.returncode, closed.returncode = None, 0
+    assert view_browser.failure(view_browser.Launch(running, tmp_path, "", log)) == ""
+    assert view_browser.failure(view_browser.Launch(closed, tmp_path, "", log)) == ""
+    assert view_browser.failure(view_browser.Launch(None, None, "")) == ""
+
+
+def test_launch_sends_chrome_stderr_to_a_file_in_its_profile(monkeypatch, tmp_path) -> None:
+    seen = {}
+
+    def popen(argv, stdout, stderr):
+        seen["stderr"] = Path(stderr.name)
+        return _FailedChrome()
+
+    monkeypatch.setattr(view_browser.snapshot, "find_chrome", lambda: "/c/chrome")
+    monkeypatch.setattr(view_browser.tempfile, "mkdtemp", lambda prefix: str(tmp_path))
+    monkeypatch.setattr(view_browser.subprocess, "Popen", popen)
+    opened = view_browser.launch("http://x/")
+    assert seen["stderr"] == opened.log == tmp_path / view_browser.CHROME_LOG
+
+
 class _SlowChrome:
     """Writes into its profile while shutting down, like Chrome writing Local State."""
 

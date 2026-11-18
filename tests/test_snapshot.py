@@ -169,33 +169,56 @@ def test_find_chrome_prefers_install_path_over_path(monkeypatch):
     assert snapshot.find_chrome() == str(mac)
 
 
-def _playwright_chromium(root: Path, revision: int, rel: str) -> Path:
+def _playwright_chromium(root: Path, revision: int, rel: str, *, complete: bool = True) -> Path:
     exe = root / f"chromium-{revision}" / rel
     exe.parent.mkdir(parents=True)
     exe.write_text("")
+    if complete:
+        (root / f"chromium-{revision}" / snapshot.PLAYWRIGHT_COMPLETE).write_text("")
     return exe
 
 
 def test_find_chrome_falls_back_to_playwright_newest_revision(monkeypatch, tmp_path):
     _no_chrome_anywhere(monkeypatch)
+    monkeypatch.setattr(snapshot.sys, "platform", "linux")
     monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
     _playwright_chromium(tmp_path, 1200, "chrome-linux/chrome")
     newest = _playwright_chromium(tmp_path, 1248, "chrome-linux-arm64/chrome")
-    _playwright_chromium(tmp_path, 999, "chrome-win/chrome.exe")
+    _playwright_chromium(tmp_path, 999, "chrome-linux64/chrome")
     assert snapshot.find_chrome() == str(newest)
 
 
-@pytest.mark.parametrize("rel", [
-    "chrome-linux64/chrome",
-    "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
-    "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-    "chrome-win64/chrome.exe",
+@pytest.mark.parametrize(("platform", "rel"), [
+    ("linux", "chrome-linux64/chrome"),
+    ("darwin", "chrome-mac/Chromium.app/Contents/MacOS/Chromium"),
+    ("darwin", "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"),
+    ("win32", "chrome-win64/chrome.exe"),
 ])
-def test_find_chrome_knows_every_playwright_layout(monkeypatch, tmp_path, rel):
+def test_find_chrome_knows_every_playwright_layout(monkeypatch, tmp_path, platform, rel):
     _no_chrome_anywhere(monkeypatch)
+    monkeypatch.setattr(snapshot.sys, "platform", platform)
     monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
     exe = _playwright_chromium(tmp_path, 1248, rel)
     assert snapshot.find_chrome() == str(exe)
+
+
+def test_find_chrome_ignores_another_platforms_playwright_build(monkeypatch, tmp_path):
+    """A newer build for another OS, on a shared PLAYWRIGHT_BROWSERS_PATH, cannot run here."""
+    _no_chrome_anywhere(monkeypatch)
+    monkeypatch.setattr(snapshot.sys, "platform", "linux")
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+    linux = _playwright_chromium(tmp_path, 1200, "chrome-linux/chrome")
+    _playwright_chromium(tmp_path, 1248, "chrome-win64/chrome.exe")
+    assert snapshot.find_chrome() == str(linux)
+
+
+def test_find_chrome_skips_a_playwright_download_that_did_not_finish(monkeypatch, tmp_path):
+    _no_chrome_anywhere(monkeypatch)
+    monkeypatch.setattr(snapshot.sys, "platform", "linux")
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+    complete = _playwright_chromium(tmp_path, 1200, "chrome-linux/chrome")
+    _playwright_chromium(tmp_path, 1248, "chrome-linux/chrome", complete=False)
+    assert snapshot.find_chrome() == str(complete)
 
 
 def test_find_chrome_ignores_playwrights_headless_shell(monkeypatch, tmp_path):
@@ -211,6 +234,7 @@ def test_find_chrome_ignores_playwrights_headless_shell(monkeypatch, tmp_path):
 
 def test_find_chrome_prefers_a_system_install_over_playwright(monkeypatch, tmp_path):
     _no_chrome_anywhere(monkeypatch)
+    monkeypatch.setattr(snapshot.sys, "platform", "linux")
     monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
     _playwright_chromium(tmp_path, 1248, "chrome-linux/chrome")
     monkeypatch.setattr(snapshot.shutil, "which", lambda n: "/usr/bin/chromium" if n == "chromium" else None)
@@ -233,7 +257,11 @@ def test_playwright_root_follows_playwrights_defaults(monkeypatch, platform, env
 
 
 def test_chrome_not_found_names_playwright():
-    assert "playwright install chromium" in snapshot.CHROME_HINT
+    assert "uvx playwright install chromium" in snapshot.CHROME_HINT
+
+
+def test_both_playwright_hints_use_the_same_command_form():
+    assert "uvx playwright install-deps chromium" in snapshot.MISSING_LIBRARIES
 
 
 def test_a_chrome_without_its_system_libraries_says_so(tmp_path, monkeypatch):
@@ -263,6 +291,15 @@ def test_a_chrome_without_a_usable_sandbox_says_how_to_run_it():
     assert message.startswith("No usable sandbox!")
     assert snapshot.NO_SANDBOX_ENV in message
     assert "#39" not in message, "the stack trace is noise once the cause is known"
+
+
+def test_chrome_run_as_root_says_how_to_run_it():
+    stderr = ("[0:0:ERROR:zygote_host_impl_linux.cc:101] Running as root without --no-sandbox is not supported. "
+              "See https://crbug.com/638180.")
+    message = snapshot.chrome_failure(stderr)
+    assert message.startswith("Running as root without --no-sandbox")
+    assert snapshot.AS_ROOT in message
+    assert snapshot.NO_SANDBOX_ENV in message
 
 
 def test_other_chrome_failures_carry_no_library_hint():

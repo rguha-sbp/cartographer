@@ -163,6 +163,8 @@ def _edit(drawio: Path) -> None:
         except KeyboardInterrupt:
             pass
         finally:
+            if reason := view_browser.failure(opened):
+                print(f"Chrome failed: {reason}", file=sys.stderr, flush=True)
             view_browser.cleanup(opened)
         with session.busy:
             pass

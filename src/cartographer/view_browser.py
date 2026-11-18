@@ -10,6 +10,7 @@ from typing import NamedTuple
 from cartographer import snapshot
 
 CHROME_EXIT_TIMEOUT_SECONDS = 5
+CHROME_LOG = "cartographer-chrome-stderr.log"
 NO_CHROME = "No Chrome found: opened your default browser."
 
 
@@ -17,6 +18,7 @@ class Launch(NamedTuple):
     process: subprocess.Popen | None
     profile: Path | None
     note: str
+    log: Path | None = None
 
 
 def chrome_argv(chrome: str, profile: Path, url: str) -> list[str]:
@@ -33,8 +35,23 @@ def launch(url: str) -> Launch:
         webbrowser.open(url)
         return Launch(None, None, NO_CHROME)
     profile = Path(tempfile.mkdtemp(prefix="cartographer-chrome-"))
-    process = subprocess.Popen(chrome_argv(chrome, profile, url), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return Launch(process, profile, "")
+    # Chrome's stderr goes to a file, not a pipe: a long session writes more than a pipe holds, and nobody reads it
+    # until Chrome has exited.
+    log = profile / CHROME_LOG
+    with log.open("wb") as stderr:
+        process = subprocess.Popen(chrome_argv(chrome, profile, url), stdout=subprocess.DEVNULL, stderr=stderr)
+    return Launch(process, profile, "", log)
+
+
+def failure(opened: Launch) -> str:
+    """Why Chrome stopped, when it exited with an error by itself; empty while it runs or after a clean exit."""
+    if opened.process is None or opened.log is None or opened.process.poll() in (None, 0):
+        return ""
+    try:
+        stderr = opened.log.read_text(errors="replace")
+    except OSError:
+        return ""
+    return snapshot.chrome_failure(stderr) or f"exit code {opened.process.returncode}"
 
 
 def cleanup(opened: Launch) -> None:
