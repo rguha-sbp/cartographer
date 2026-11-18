@@ -40,7 +40,10 @@ Ask the user, or derive from the repo, the diagram name (lowercase kebab-case `<
 - Nothing else runs: cartographer serves its own pinned draw.io on 127.0.0.1 while a command needs it. The first
   command downloads it once (about 49 MB, checked against a pinned sha256). If that download is blocked, tell the
   user and stop. Never use a public draw.io host: the diagram must not leave the machine.
-- Chrome or Chromium is installed.
+- Chrome or Chromium is installed. Without one, and without admin rights (a dev container), a Chromium installed by
+  Playwright (`playwright install chromium`) is found by itself. If Chrome then fails with "No usable sandbox" or
+  "Running as root without --no-sandbox", tell the user; only they decide to set `CARTOGRAPHER_CHROME_NO_SANDBOX=1`,
+  which runs Chrome without its sandbox.
 
 ## 3. Extract
 
